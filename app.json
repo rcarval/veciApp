@@ -8,22 +8,52 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Permitimos el acceso a tu galería para que puedas seleccionar imágenes para tu emprendimiento",
+        "NSCameraUsageDescription": "Permitimos el acceso a tu cámara para que puedas tomar fotos para tu emprendimiento",
+        "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar tu dirección en el mapa",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar tu dirección en el mapa",
+      },
+      "supportsTablet": true,
+      "usesIcloudStorage": false
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.racarvallog.veciApp",
+      "permissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC7UNb-61Xv8cAd_020VrzG7ccvXpTrJg4"
+        }
+      }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/icon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dc4ef154-4467-4c4c-b3df-d293ee763768"
+      }
+    },
+    "plugins": [
+      "expo-location"
+    ]
   }
 }
