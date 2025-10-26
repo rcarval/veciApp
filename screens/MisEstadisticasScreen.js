@@ -241,18 +241,44 @@ const MisEstadisticasScreen = () => {
         <View style={styles.chartContainer}>
           <Text style={styles.sectionTitle}>Evolución de interacciones</Text>
           {visualizaciones.length > 0 && contactos.length > 0 && (
-            <LineChart
-              data={chartData}
-              width={width - 70}
-              height={220}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chart}
-              withVerticalLines={periodo !== "dia"}
-              withHorizontalLines={true}
-              segments={4}
-              fromZero
-            />
+            <>
+              {(() => {
+                try {
+                  return (
+                    <LineChart
+                      data={chartData}
+                      width={width - 70}
+                      height={220}
+                      chartConfig={chartConfig}
+                      bezier
+                      style={styles.chart}
+                      withVerticalLines={periodo !== "dia"}
+                      withHorizontalLines={true}
+                      segments={4}
+                      fromZero
+                    />
+                  );
+                } catch (error) {
+                  console.log("Error en gráfico:", error);
+                  return (
+                    <View style={additionalStyles.simpleChart}>
+                      <Text style={additionalStyles.chartTitle}>Gráfico no disponible</Text>
+                      <Text style={additionalStyles.chartSubtitle}>Datos: {visualizaciones.reduce((a, b) => a + b, 0)} visualizaciones</Text>
+                      <View style={additionalStyles.statsGrid}>
+                        <View style={additionalStyles.statItem}>
+                          <Text style={additionalStyles.statNumber}>{visualizaciones.reduce((a, b) => a + b, 0)}</Text>
+                          <Text style={additionalStyles.statLabel}>Visualizaciones</Text>
+                        </View>
+                        <View style={additionalStyles.statItem}>
+                          <Text style={additionalStyles.statNumber}>{contactos.reduce((a, b) => a + b, 0)}</Text>
+                          <Text style={additionalStyles.statLabel}>Contactos</Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+              })()}
+            </>
           )}
         </View>
 
@@ -591,5 +617,49 @@ const MisEstadisticasScreen = () => {
   // ... resto del render igual pero usando handleCambioPeriodo en los botones ...
 
  */
+
+// Estilos adicionales para gráfico simplificado
+const additionalStyles = StyleSheet.create({
+  simpleChart: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    padding: 20,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  chartTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2A9D8F",
+    marginBottom: 5,
+  },
+  chartSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+  },
+  statsGrid: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    width: "100%",
+  },
+  statItem: {
+    alignItems: "center",
+  },
+  statNumber: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#2A9D8F",
+  },
+  statLabel: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 5,
+  },
+});
 
 export default MisEstadisticasScreen;

@@ -14,7 +14,6 @@ import {
   Switch,
   Platform
 } from "react-native";
-import * as Notifications from 'expo-notifications';
 import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
@@ -164,19 +163,10 @@ const EmprendimientoScreen = () => {
     { id: "2", nombre: "Talagante" },
   ];
 
+  // Función de notificaciones eliminada
   async function registerForPushNotificationsAsync() {
-    let { status } = await Notifications.getPermissionsAsync();
-    if (status !== 'granted') {
-      const { status: newStatus } = await Notifications.requestPermissionsAsync();
-      if (newStatus !== 'granted') {
-        alert('Permisos de notificación no concedidos.');
-        return;
-      }
-    }
-  
-    const token = await Notifications.getExpoPushTokenAsync();
-    console.log('Push Token:', token);
-    return token;
+    console.log('Notificaciones no disponibles');
+    return null;
   }
 
   useEffect(() => {
@@ -1291,14 +1281,8 @@ const EmprendimientoScreen = () => {
         setIsActive(true);
         await actualizarEstadoEmprendimiento(item.id, true);
     
-        // Enviar notificación push
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: "Estado actualizado",
-            body: "Tu emprendimiento ya se encuentra activo",
-          },
-          trigger: null, // Se envía inmediatamente
-        });
+        // Notificaciones no disponibles
+        console.log("Estado actualizado - Tu emprendimiento ya se encuentra activo");
       }
     };
   

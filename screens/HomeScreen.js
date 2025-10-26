@@ -21,9 +21,43 @@ import { Ionicons } from "@expo/vector-icons";
 
 const HomeScreen = ({ navigation }) => {
   const [usuario, setUsuario] = useState(null);
+  const [direcciones, setDirecciones] = useState([]);
+  const [direccionSeleccionada, setDireccionSeleccionada] = useState(null);
   const [activeSection, setActiveSection] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [modalObligatorioVisible, setModalObligatorioVisible] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
+
+  // Helper para obtener el nombre de la comuna
+  const obtenerNombreComuna = (comunaId) => {
+    const comunas = [
+      { id: "1", nombre: "Isla de Maipo" },
+      { id: "2", nombre: "Talagante" },
+      { id: "3", nombre: "El Monte" },
+      { id: "4", nombre: "Peñaflor" },
+      { id: "5", nombre: "Melipilla" },
+    ];
+    const comunaEncontrada = comunas.find(c => c.id === comunaId);
+    return comunaEncontrada ? comunaEncontrada.nombre : comunaId;
+  };
+
+  // Helper para formatear la dirección mostrada
+  const formatearDireccionMostrada = (direccionCompleta) => {
+    if (!direccionCompleta) return 'Selecciona una dirección';
+    
+    // Dividir por comas para obtener las partes
+    const partes = direccionCompleta.split(',').map(parte => parte.trim());
+    
+    if (partes.length >= 2) {
+      // Tomar solo la primera parte (calle + número) y la segunda parte (comuna)
+      return `${partes[0]}, ${partes[1]}`;
+    }
+    
+    // Si no tiene el formato esperado, mostrar la dirección completa truncada
+    return direccionCompleta.length > 50 
+      ? `${direccionCompleta.substring(0, 50)}...` 
+      : direccionCompleta;
+  };
   const verificarToken = async (navigation) => {
     try {
       const token = await AsyncStorage.getItem("token");
@@ -80,6 +114,91 @@ const HomeScreen = ({ navigation }) => {
     };
     cargarUsuario();
   }, []);
+
+  useEffect(() => {
+    const cargarDirecciones = async () => {
+      try {
+        const direccionesGuardadas = await AsyncStorage.getItem('direcciones');
+        if (direccionesGuardadas) {
+          const direccionesData = JSON.parse(direccionesGuardadas);
+          setDirecciones(direccionesData);
+          
+          // Si no hay direcciones, mostrar modal obligatorio
+          if (direccionesData.length === 0) {
+            setModalObligatorioVisible(true);
+            return;
+          }
+          
+          // Seleccionar la dirección principal por defecto
+          const direccionPrincipal = direccionesData.find(dir => dir.esPrincipal);
+          if (direccionPrincipal) {
+            setDireccionSeleccionada(direccionPrincipal.id);
+          } else if (direccionesData.length > 0) {
+            setDireccionSeleccionada(direccionesData[0].id);
+          }
+        } else {
+          // No hay direcciones guardadas, mostrar modal obligatorio
+          setModalObligatorioVisible(true);
+        }
+      } catch (error) {
+        console.log('Error al cargar direcciones:', error);
+        setModalObligatorioVisible(true);
+      }
+    };
+    cargarDirecciones();
+  }, []);
+
+  // Recargar direcciones cuando se regrese a la pantalla
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      const cargarDirecciones = async () => {
+        try {
+          const direccionesGuardadas = await AsyncStorage.getItem('direcciones');
+          if (direccionesGuardadas) {
+            const direccionesData = JSON.parse(direccionesGuardadas);
+            setDirecciones(direccionesData);
+            
+            // Si no hay direcciones, mostrar modal obligatorio SIEMPRE
+            if (direccionesData.length === 0) {
+              setModalObligatorioVisible(true);
+              return;
+            } else {
+              // Si hay direcciones, ocultar el modal
+              setModalObligatorioVisible(false);
+            }
+            
+            // Mantener la selección actual o seleccionar la principal
+            if (!direccionSeleccionada || !direccionesData.find(dir => dir.id === direccionSeleccionada)) {
+              const direccionPrincipal = direccionesData.find(dir => dir.esPrincipal);
+              if (direccionPrincipal) {
+                setDireccionSeleccionada(direccionPrincipal.id);
+              } else if (direccionesData.length > 0) {
+                setDireccionSeleccionada(direccionesData[0].id);
+              }
+            }
+          } else {
+            // No hay direcciones guardadas, mostrar modal obligatorio
+            setModalObligatorioVisible(true);
+          }
+        } catch (error) {
+          console.log('Error al cargar direcciones:', error);
+          setModalObligatorioVisible(true);
+        }
+      };
+      cargarDirecciones();
+    });
+
+    return unsubscribe;
+  }, [navigation]);
+
+  // Verificar constantemente si hay direcciones y mostrar/ocultar modal
+  useEffect(() => {
+    if (direcciones.length === 0) {
+      setModalObligatorioVisible(true);
+    } else {
+      setModalObligatorioVisible(false);
+    }
+  }, [direcciones]);
   // ✅ Interceptar botón "Atrás"
   /*useEffect(() => {
     const handleBackPress = () => {
@@ -97,12 +216,7 @@ const HomeScreen = ({ navigation }) => {
   }, []);*/
 
   const handleSeleccionDireccion = (id) => {
-    const updatedUsuario = {
-      ...usuario,
-      direccionSeleccionada: id,
-    };
-    setUsuario(updatedUsuario);
-    AsyncStorage.setItem("usuario", JSON.stringify(updatedUsuario));
+    setDireccionSeleccionada(id);
   };
 
   if (!usuario) {
@@ -113,8 +227,8 @@ const HomeScreen = ({ navigation }) => {
     );
   }
 
-  const direccionActual = usuario.direcciones.find(
-    (dir) => dir.id === usuario.direccionSeleccionada
+  const direccionActual = direcciones.find(
+    (dir) => dir.id === direccionSeleccionada
   );
 
   const toggleSection = (index) => {
@@ -518,7 +632,7 @@ const getIconForCategory = (categoria) => {
               <MaterialIcons name="location-on" size={20} color="white" />
               <View style={styles.direccionTextContainer}>
                 <Text style={styles.direccionTexto} numberOfLines={1}>
-                  {direccionActual.direccion}
+                  {direccionActual ? formatearDireccionMostrada(direccionActual.direccion) : 'Selecciona una dirección'}
                 </Text>
               </View>
               <MaterialIcons name="arrow-drop-down" size={24} color="white" />
@@ -562,12 +676,12 @@ const getIconForCategory = (categoria) => {
               </View>
 
               <ScrollView>
-                {usuario.direcciones.map((direccion) => (
+                {direcciones.map((direccion) => (
                   <TouchableOpacity
                     key={direccion.id}
                     style={[
                       styles.direccionOption,
-                      direccion.id === usuario.direccionSeleccionada &&
+                      direccion.id === direccionSeleccionada &&
                         styles.direccionSelected,
                     ]}
                     onPress={() => {
@@ -589,13 +703,13 @@ const getIconForCategory = (categoria) => {
                         {direccion.nombre}
                       </Text>
                       <Text style={styles.direccionOptionDireccion}>
-                        {direccion.direccion}
+                        {formatearDireccionMostrada(direccion.direccion)}
                       </Text>
                       <Text style={styles.direccionOptionDetalles}>
-                        {direccion.comuna}, {direccion.region}
+                        {direccion.referencia ? `Ref: ${direccion.referencia}` : ''}
                       </Text>
                     </View>
-                    {direccion.id === usuario.direccionSeleccionada && (
+                    {direccion.id === direccionSeleccionada && (
                       <MaterialIcons name="check" size={24} color="#0b8e0d" />
                     )}
                   </TouchableOpacity>
@@ -605,7 +719,7 @@ const getIconForCategory = (categoria) => {
                   style={styles.agregarDireccion}
                   onPress={() => {
                     setModalVisible(false);
-                    navigation.navigate("Direcciones");
+                    navigation.navigate("MisDirecciones");
                   }}
                 >
                   <MaterialIcons name="add" size={24} color="#0b8e0d" />
@@ -970,7 +1084,7 @@ const getIconForCategory = (categoria) => {
       <LinearGradient  colors={['#2A9D8F', '#1D7874']} style={styles.tabBar}>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => navigation.navigate('HomeDrawer')}
+          onPress={() => navigation.navigate('Home')}
         >
           <Ionicons name="home" size={24} color="#0b5b52" />
           <Text style={styles.tabText}>Inicio</Text>
@@ -1000,6 +1114,47 @@ const getIconForCategory = (categoria) => {
           <Text style={styles.tabText}>Perfil</Text>
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* Modal obligatorio para agregar dirección */}
+      <Modal
+        visible={modalObligatorioVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => {
+          // No permitir cerrar el modal hasta tener al menos una dirección
+          // No hacer nada si no hay direcciones
+        }}
+      >
+        <View style={styles.modalObligatorioOverlay}>
+          <View style={styles.modalObligatorioContainer}>
+            <View style={styles.modalObligatorioHeader}>
+              <Ionicons name="location" size={32} color="#2A9D8F" />
+              <Text style={styles.modalObligatorioTitle}>
+                ¡Necesitas una dirección!
+              </Text>
+            </View>
+            
+            <Text style={styles.modalObligatorioMessage}>
+              Para poder recibir pedidos y servicios, necesitas agregar al menos una dirección de entrega.
+            </Text>
+            
+            <View style={styles.modalObligatorioActions}>
+              <TouchableOpacity
+                style={styles.modalObligatorioButton}
+                onPress={() => {
+                  setModalObligatorioVisible(false);
+                  navigation.navigate('MisDirecciones');
+                }}
+              >
+                <Ionicons name="add" size={20} color="white" />
+                <Text style={styles.modalObligatorioButtonText}>
+                  Agregar mi primera dirección
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1495,6 +1650,66 @@ const styles = StyleSheet.create({
     marginTop: 20,
     paddingHorizontal: 10,
     marginBottom: 20,
+  },
+  // Estilos para modal obligatorio
+  modalObligatorioOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalObligatorioContainer: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalObligatorioHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalObligatorioTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  modalObligatorioMessage: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 24,
+  },
+  modalObligatorioActions: {
+    gap: 12,
+  },
+  modalObligatorioButton: {
+    backgroundColor: '#2A9D8F',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    shadowColor: '#2A9D8F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  modalObligatorioButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
   },
 });
 

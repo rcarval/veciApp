@@ -98,6 +98,10 @@ const LoginScreen = ({ navigation }) => {
           onChangeText={setCorreo}
           placeholder="Correo Electrónico"
           style={styles.input}
+          keyboardType="email-address"
+          autoCompleteType="email"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
       </View>
 
@@ -109,6 +113,9 @@ const LoginScreen = ({ navigation }) => {
           onChangeText={setContrasena}
           placeholder="Contraseña"
           secureTextEntry={!verPassword}
+          autoCompleteType="password"
+          autoCapitalize="none"
+          autoCorrect={false}
         />
         <TouchableOpacity onPress={() => setVerPassword(!verPassword)}>
           <FontAwesome

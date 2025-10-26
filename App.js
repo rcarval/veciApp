@@ -24,6 +24,7 @@ import InformacionPersonalScreen from "./screens/InformacionPersonalScreen";
 import EmprendimientoScreen from "./screens/EmprendimientoScreen";
 import ProductosEmprendimientoScreen from "./screens/ProductosEmprendimientoScreen";
 import MisEstadisticasScreen from "./screens/MisEstadisticasScreen";
+import MisDireccionesScreen from "./screens/MisDireccionesScreen";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -321,6 +322,15 @@ export default function App() {
                   cardStyleInterpolator: forFade,
                 }}
               />
+              <Stack.Screen
+                name="MisDirecciones"
+                component={MisDireccionesScreen}
+                options={{
+                  title: "Mis Direcciones",
+                  headerShown: false,
+                  cardStyleInterpolator: forFade,
+                }}
+              />
                       <Stack.Screen
           name="Perfil"
           options={{
@@ -358,6 +368,11 @@ export default function App() {
                 name="Emprendimiento"
                 component={EmprendimientoScreen}
                 initialParams={{ usuario }}
+                options={{ headerShown: false, cardStyleInterpolator: forFade }}
+              />
+              <Stack.Screen
+                name="MisDirecciones"
+                component={MisDireccionesScreen}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
               </Stack.Navigator>

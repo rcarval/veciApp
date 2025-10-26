@@ -20,7 +20,7 @@ const PerfilScreen = () => {
 
   const opciones = [
     { nombre: "Información Personal", icono: "user-circle", screen: "InformacionPersonal" },
-    { nombre: "Mis Direcciones", icono: "map-pin", screen: "DireccionScreen" },
+    { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones" },
     { nombre: "Mis Emprendimientos", icono: "briefcase", screen: "Emprendimiento", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
     { nombre: "Solicitudes", icono: "list-alt", screen: "VitrinaScreen", mostrar: usuario.tipo_usuario === "admin" },
     { nombre: "Mi Plan", icono: "star", screen: "PlanScreen" },
