@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, memo, useCallback } from "react";
+import React, { useState, useEffect, useRef, memo, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -15,6 +15,105 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+// Componente ItemGaleria completamente separado
+const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito }) => {
+  return (
+    <View style={styles.itemGaleria}>
+      <TouchableOpacity
+        onPress={() => onImagenPress(item)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.imagenContainer}>
+          <Image
+            source={item.imagen}
+            style={styles.imagenGaleria}
+            resizeMode="cover"
+            cache="force-cache"
+          />
+          {/* Etiqueta de categoría */}
+          <View
+            style={[
+              styles.etiquetaCategoria,
+              item.categoria === "oferta" && styles.etiquetaOferta,
+              item.categoria === "principal" && styles.etiquetaPrincipal,
+              item.categoria === "secundario" && styles.etiquetaSecundario,
+            ]}
+          >
+            <Text style={styles.etiquetaTexto}>
+              {item.categoria === "oferta"
+                ? "OFERTA"
+                : item.categoria === "principal"
+                ? "DESTACADO"
+                : "ADICIONAL"}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.infoGaleria}>
+          <Text style={styles.nombreGaleria} numberOfLines={2}>
+            {item.nombre}
+          </Text>
+          <Text style={styles.descripcionGaleria} numberOfLines={2}>
+            {item.descripcion}
+          </Text>
+          <View style={styles.precioContainer}>
+            {item.categoria === "oferta" ? (
+              <View style={styles.precioOfertaContainer}>
+                <Text style={styles.precioOferta}>
+                  {item.precio
+                    ? `$${item.precio.toLocaleString("es-CL")}`
+                    : "Consulte"}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.precioNormal}>
+                {item.precio
+                  ? `$${item.precio.toLocaleString("es-CL")}`
+                  : "Consulte"}
+              </Text>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+
+      {/* Controles del carrito */}
+      <View style={styles.carritoControls}>
+        {cantidadEnCarrito > 0 ? (
+          <View style={styles.cantidadContainer}>
+            <TouchableOpacity
+              style={styles.botonCantidad}
+              onPress={() => onQuitar(index, categoria)}
+            >
+              <FontAwesome name="minus" size={12} color="#2A9D8F" />
+            </TouchableOpacity>
+            <Text style={styles.cantidadTexto}>{cantidadEnCarrito}</Text>
+            <TouchableOpacity
+              style={styles.botonCantidad}
+              onPress={() => onAgregar(item, index, categoria)}
+            >
+              <FontAwesome name="plus" size={12} color="#2A9D8F" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.botonEliminar}
+              onPress={() => onEliminar(index, categoria)}
+            >
+              <FontAwesome name="trash" size={12} color="#e74c3c" />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.botonAgregarCarrito}
+            onPress={() => onAgregar(item, index, categoria)}
+          >
+            <FontAwesome name="plus" size={14} color="white" />
+            <Text style={styles.botonAgregarTexto}>Agregar</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+});
+
 const PedidoDetalleScreen = ({ route, navigation }) => {
   const { producto } = route.params;
   const [modalVisible, setModalVisible] = useState(false);
@@ -27,9 +126,11 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [usuario, setUsuario] = useState(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState(null);
-  const [carrito, setCarrito] = useState([]);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
+  const [confirmacionVisible, setConfirmacionVisible] = useState(false);
+  const carritoRef = useRef([]);
+  const [, forceUpdate] = useState({});
 
 // Opciones de reporte
 const reportReasons = [
@@ -46,66 +147,67 @@ const reportReasons = [
     producto.metodosEntrega.delivery ? "delivery" : "retiro"
   );
 
-  const imagenesPorCategoria = {
+  const imagenesPorCategoria = useMemo(() => ({
     principal:
       producto.galeria?.filter((item) => item.categoria === "principal") || [],
     oferta:
       producto.galeria?.filter((item) => item.categoria === "oferta") || [],
     secundario:
       producto.galeria?.filter((item) => item.categoria === "secundario") || [],
-  };
+  }), [producto.galeria]);
 
   const cambiarModoEntrega = useCallback((modo) => {
     setModoEntrega(modo);
   }, []);
 
-  // Funciones del carrito optimizadas
+  // Funciones del carrito que NO causan re-renders del componente padre
   const agregarAlCarrito = useCallback((item) => {
-    setCarrito(prevCarrito => {
-      const existe = prevCarrito.find(carritoItem => carritoItem.id === item.id);
-      if (existe) {
-        return prevCarrito.map(carritoItem =>
-          carritoItem.id === item.id
-            ? { ...carritoItem, cantidad: carritoItem.cantidad + 1 }
-            : carritoItem
-        );
-      } else {
-        return [...prevCarrito, { ...item, cantidad: 1 }];
-      }
-    });
+    const existe = carritoRef.current.find(carritoItem => carritoItem.id === item.id);
+    if (existe) {
+      carritoRef.current = carritoRef.current.map(carritoItem =>
+        carritoItem.id === item.id
+          ? { ...carritoItem, cantidad: carritoItem.cantidad + 1 }
+          : carritoItem
+      );
+    } else {
+      carritoRef.current = [...carritoRef.current, { ...item, cantidad: 1 }];
+    }
+    // Forzar actualización solo de los componentes que necesitan saber del cambio
+    forceUpdate({});
   }, []);
 
   const quitarDelCarrito = useCallback((itemId) => {
-    setCarrito(prevCarrito => {
-      const item = prevCarrito.find(carritoItem => carritoItem.id === itemId);
-      if (item && item.cantidad > 1) {
-        return prevCarrito.map(carritoItem =>
-          carritoItem.id === itemId
-            ? { ...carritoItem, cantidad: carritoItem.cantidad - 1 }
-            : carritoItem
-        );
-      } else {
-        return prevCarrito.filter(carritoItem => carritoItem.id !== itemId);
-      }
-    });
+    const item = carritoRef.current.find(carritoItem => carritoItem.id === itemId);
+    if (item && item.cantidad > 1) {
+      carritoRef.current = carritoRef.current.map(carritoItem =>
+        carritoItem.id === itemId
+          ? { ...carritoItem, cantidad: carritoItem.cantidad - 1 }
+          : carritoItem
+      );
+    } else {
+      carritoRef.current = carritoRef.current.filter(carritoItem => carritoItem.id !== itemId);
+    }
+    forceUpdate({});
   }, []);
 
   const eliminarDelCarrito = useCallback((itemId) => {
-    setCarrito(prevCarrito => prevCarrito.filter(carritoItem => carritoItem.id !== itemId));
+    carritoRef.current = carritoRef.current.filter(carritoItem => carritoItem.id !== itemId);
+    forceUpdate({});
   }, []);
 
   const obtenerCantidadEnCarrito = useCallback((itemId) => {
-    const item = carrito.find(carritoItem => carritoItem.id === itemId);
+    const item = carritoRef.current.find(carritoItem => carritoItem.id === itemId);
     return item ? item.cantidad : 0;
-  }, [carrito]);
+  }, []);
 
   const obtenerTotalCarrito = useCallback(() => {
-    return carrito.reduce((total, item) => total + (item.precio * item.cantidad), 0);
-  }, [carrito]);
+    return carritoRef.current.reduce((total, item) => total + (item.precio * item.cantidad), 0);
+  }, []);
 
   const obtenerCantidadTotalItems = useCallback(() => {
-    return carrito.reduce((total, item) => total + item.cantidad, 0);
-  }, [carrito]);
+    return carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
+  }, []);
+
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -183,30 +285,53 @@ const reportReasons = [
     Linking.openURL(url);
   };
 
+  const mostrarConfirmacionPedido = () => {
+    if (carritoRef.current.length === 0) {
+      Alert.alert(
+        "Carrito vacío",
+        "Agrega productos al carrito antes de enviar el pedido.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
+    setConfirmacionVisible(true);
+  };
+
+  const confirmarEnvioPedido = () => {
+    setConfirmacionVisible(false);
+    abrirWhatsApp();
+  };
+
   const abrirWhatsApp = () => {
     const numero = "+56994908047"; // 🔥 Número de WhatsApp del negocio (con código país)
-    const destino =
-      modoEntrega == "delivery" ? ` para *${direccionUsuario}*` : "";
     
-    let mensaje = `Hola ${
-      producto.nombre
-    }, quiero realizar un pedido con opción de *${modoEntrega}*${destino} a nombre de *${usuario.nombre.trim()}*.`;
+    let mensaje = `🛍️ *NUEVO PEDIDO*\n\n`;
+    mensaje += `👋 Hola ${producto.nombre}!\n\n`;
+    mensaje += `👤 Cliente: *${usuario.nombre.trim()}*\n`;
+    mensaje += `🚚 Entrega: *${modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}*\n`;
     
-    // Agregar detalle del carrito si hay items
-    if (carrito.length > 0) {
-      mensaje += `\n\n*Detalle del pedido:*`;
-      carrito.forEach(item => {
-        mensaje += `\n• ${item.nombre || item.descripcion} - Cantidad: ${item.cantidad}`;
-        if (item.precio) {
-          mensaje += ` - $${item.precio.toLocaleString("es-CL")} c/u`;
-        }
-      });
-      mensaje += `\n\n*Total: $${obtenerTotalCarrito().toLocaleString("es-CL")}*`;
+    if (modoEntrega === "delivery" && direccionUsuario) {
+      mensaje += `📍 Dirección: *${direccionUsuario}*\n`;
     }
     
-    mensaje += `\n\n¿Está disponible?`;
+    // Agregar detalle del carrito si hay items
+    if (carritoRef.current.length > 0) {
+      mensaje += `\n🛒 *Productos solicitados:*\n`;
+      carritoRef.current.forEach((item, index) => {
+        const subtotal = item.precio ? item.precio * item.cantidad : 0;
+        mensaje += `${index + 1}. ${item.nombre || item.descripcion} (x${item.cantidad}) - $${subtotal.toLocaleString("es-CL")}\n`;
+      });
+      
+      const total = obtenerTotalCarrito();
+      mensaje += `\n💰 *TOTAL: $${total.toLocaleString("es-CL")}*`;
+    }
     
     const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+    
+    // Limpiar el carrito después de enviar el pedido
+    carritoRef.current = [];
+    forceUpdate({});
+    
     Linking.openURL(url);
   };
 
@@ -235,14 +360,14 @@ const reportReasons = [
   // Interceptar navegación hacia atrás si hay items en el carrito
   useEffect(() => {
     const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-      if (carrito.length > 0) {
+      if (carritoRef.current.length > 0) {
         e.preventDefault();
         setAdvertenciaVisible(true);
       }
     });
 
     return unsubscribe;
-  }, [navigation, carrito]);
+  }, [navigation]);
 
   // ✅ Horarios estáticos si no existen
   const horarios = producto.horarios ?? [
@@ -252,134 +377,34 @@ const reportReasons = [
   ];
   const isOpen = producto.estado;
 
-  const ItemGaleria = memo(({ item, index, categoria }) => {
-    // Crear un ID único combinando categoría, índice y nombre
+  // Funciones callback para ItemGaleria
+  const handleImagenPress = useCallback((item) => {
+    setImagenSeleccionada(item);
+    setModalImagenVisible(true);
+  }, []);
+
+  const handleAgregarItem = useCallback((item, index, categoria) => {
     const itemId = `${categoria}-${index}-${item.nombre || item.descripcion}`;
-    const cantidadEnCarrito = obtenerCantidadEnCarrito(itemId);
-    
-    const handleImagenPress = () => {
-      setImagenSeleccionada(item);
-      setModalImagenVisible(true);
-    };
+    agregarAlCarrito({...item, id: itemId});
+  }, []);
 
-    const handleAgregar = () => {
-      agregarAlCarrito({...item, id: itemId});
-    };
+  const handleQuitarItem = useCallback((index, categoria) => {
+    const item = imagenesPorCategoria[categoria][index];
+    const itemId = `${categoria}-${index}-${item.nombre || item.descripcion}`;
+    quitarDelCarrito(itemId);
+  }, [imagenesPorCategoria]);
 
-    const handleQuitar = () => {
-      quitarDelCarrito(itemId);
-    };
+  const handleEliminarItem = useCallback((index, categoria) => {
+    const item = imagenesPorCategoria[categoria][index];
+    const itemId = `${categoria}-${index}-${item.nombre || item.descripcion}`;
+    eliminarDelCarrito(itemId);
+  }, [imagenesPorCategoria]);
 
-    const handleEliminar = () => {
-      eliminarDelCarrito(itemId);
-    };
-    
-    return (
-      <View style={styles.itemGaleria}>
-        <TouchableOpacity
-          onPress={handleImagenPress}
-          activeOpacity={0.8}
-        >
-          <View style={styles.imagenContainer}>
-            <Image
-              source={item.imagen}
-              style={styles.imagenGaleria}
-              resizeMode="cover"
-              cache="force-cache"
-            />
-            {/* Etiqueta de categoría */}
-            <View
-              style={[
-                styles.etiquetaCategoria,
-                item.categoria === "oferta" && styles.etiquetaOferta,
-                item.categoria === "principal" && styles.etiquetaPrincipal,
-                item.categoria === "secundario" && styles.etiquetaSecundario,
-              ]}
-            >
-              <Text style={styles.etiquetaTexto}>
-                {item.categoria === "oferta"
-                  ? "OFERTA"
-                  : item.categoria === "principal"
-                  ? "DESTACADO"
-                  : "ADICIONAL"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.infoGaleria}>
-            <Text style={styles.nombreGaleria} numberOfLines={2}>
-              {item.nombre}
-            </Text>
-            <Text style={styles.descripcionGaleria} numberOfLines={2}>
-              {item.descripcion}
-            </Text>
-            <View style={styles.precioContainer}>
-              {item.categoria === "oferta" ? (
-                <View style={styles.precioOfertaContainer}>
-                  <Text style={styles.precioOferta}>
-                    {item.precio
-                      ? `$${item.precio.toLocaleString("es-CL")}`
-                      : "Consulte"}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.precioNormal}>
-                  {item.precio
-                    ? `$${item.precio.toLocaleString("es-CL")}`
-                    : "Consulte"}
-                </Text>
-              )}
-            </View>
-          </View>
-        </TouchableOpacity>
-
-        {/* Controles del carrito */}
-        <View style={styles.carritoControls}>
-          {cantidadEnCarrito > 0 ? (
-            <View style={styles.cantidadContainer}>
-              <TouchableOpacity
-                style={styles.botonCantidad}
-                onPress={handleQuitar}
-              >
-                <FontAwesome name="minus" size={12} color="#2A9D8F" />
-              </TouchableOpacity>
-              <Text style={styles.cantidadTexto}>{cantidadEnCarrito}</Text>
-              <TouchableOpacity
-                style={styles.botonCantidad}
-                onPress={handleAgregar}
-              >
-                <FontAwesome name="plus" size={12} color="#2A9D8F" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.botonEliminar}
-                onPress={handleEliminar}
-              >
-                <FontAwesome name="trash" size={12} color="#e74c3c" />
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.botonAgregarCarrito}
-              onPress={handleAgregar}
-            >
-              <FontAwesome name="plus" size={14} color="white" />
-              <Text style={styles.botonAgregarTexto}>Agregar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-    );
-  }, (prevProps, nextProps) => {
-    // Solo re-renderizar si cambian las props relevantes
-    return (
-      prevProps.item.nombre === nextProps.item.nombre &&
-      prevProps.item.descripcion === nextProps.item.descripcion &&
-      prevProps.item.precio === nextProps.item.precio &&
-      prevProps.item.imagen === nextProps.item.imagen &&
-      prevProps.index === nextProps.index &&
-      prevProps.categoria === nextProps.categoria
-    );
-  });
+  const obtenerCantidadItem = useCallback((index, categoria) => {
+    const item = imagenesPorCategoria[categoria][index];
+    const itemId = `${categoria}-${index}-${item.nombre || item.descripcion}`;
+    return obtenerCantidadEnCarrito(itemId);
+  }, [imagenesPorCategoria]);
 
   const renderHorarios = () => {
     if (!producto.horarios) return <Text style={styles.textoNoInfo}>Horario no disponible</Text>;
@@ -531,12 +556,62 @@ const reportReasons = [
               <TouchableOpacity
                 style={styles.advertenciaSalir}
                 onPress={() => {
-                  setCarrito([]);
+                  carritoRef.current = [];
+                  forceUpdate({});
                   setAdvertenciaVisible(false);
                   navigation.goBack();
                 }}
               >
                 <Text style={styles.advertenciaSalirTexto}>Salir sin guardar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de Confirmación de Pedido */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={confirmacionVisible}
+        onRequestClose={() => setConfirmacionVisible(false)}
+      >
+        <View style={styles.confirmacionModalContainer}>
+          <View style={styles.confirmacionModalContent}>
+            <View style={styles.confirmacionHeader}>
+              <FontAwesome name="check-circle" size={32} color="#2A9D8F" />
+              <Text style={styles.confirmacionTitulo}>Confirmar Pedido</Text>
+            </View>
+            
+            <Text style={styles.confirmacionMensaje}>
+              ¿Está seguro que su pedido está completo?
+            </Text>
+            
+            <View style={styles.confirmacionResumen}>
+              <Text style={styles.confirmacionResumenTitulo}>Resumen del pedido:</Text>
+              {carritoRef.current.map((item, index) => (
+                <Text key={index} style={styles.confirmacionItem}>
+                  • {item.nombre || item.descripcion} (x{item.cantidad})
+                </Text>
+              ))}
+              <Text style={styles.confirmacionTotal}>
+                Total: ${obtenerTotalCarrito().toLocaleString("es-CL")}
+              </Text>
+            </View>
+            
+            <View style={styles.confirmacionButtons}>
+              <TouchableOpacity
+                style={styles.confirmacionCancelar}
+                onPress={() => setConfirmacionVisible(false)}
+              >
+                <Text style={styles.confirmacionCancelarTexto}>Revisar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.confirmacionEnviar}
+                onPress={confirmarEnvioPedido}
+              >
+                <Text style={styles.confirmacionEnviarTexto}>Enviar Pedido</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -563,14 +638,14 @@ const reportReasons = [
             </View>
 
             <ScrollView style={styles.carritoLista}>
-              {carrito.length === 0 ? (
+              {carritoRef.current.length === 0 ? (
                 <View style={styles.carritoVacio}>
                   <FontAwesome name="shopping-cart" size={48} color="#ccc" />
                   <Text style={styles.carritoVacioTexto}>Tu carrito está vacío</Text>
                   <Text style={styles.carritoVacioSubtexto}>Agrega productos para comenzar tu pedido</Text>
                 </View>
               ) : (
-                carrito.map((item) => (
+                carritoRef.current.map((item) => (
                   <View key={item.id} style={styles.carritoItem}>
                     <View style={styles.carritoItemInfo}>
                       <Text style={styles.carritoItemNombre}>{item.nombre || item.descripcion}</Text>
@@ -605,7 +680,7 @@ const reportReasons = [
               )}
             </ScrollView>
 
-            {carrito.length > 0 && (
+            {carritoRef.current.length > 0 && (
               <View style={styles.carritoFooter}>
                 <View style={styles.carritoTotal}>
                   <Text style={styles.carritoTotalTexto}>
@@ -617,7 +692,7 @@ const reportReasons = [
                   style={styles.carritoBotonPedido}
                   onPress={() => {
                     setMostrarCarrito(false);
-                    abrirWhatsApp();
+                    mostrarConfirmacionPedido();
                   }}
                 >
                   <FontAwesome name="whatsapp" size={20} color="white" />
@@ -1046,7 +1121,17 @@ const reportReasons = [
                     contentContainerStyle={styles.galeriaScroll}
                   >
                     {imagenesPorCategoria.principal.map((item, index) => (
-                      <ItemGaleria key={`principal-${index}`} item={item} index={index} categoria="principal" />
+                      <ItemGaleria 
+                        key={`principal-${index}`} 
+                        item={item} 
+                        index={index} 
+                        categoria="principal"
+                        onImagenPress={handleImagenPress}
+                        onAgregar={handleAgregarItem}
+                        onQuitar={handleQuitarItem}
+                        onEliminar={handleEliminarItem}
+                        cantidadEnCarrito={obtenerCantidadItem(index, "principal")}
+                      />
                     ))}
                   </ScrollView>
                 </>
@@ -1079,7 +1164,17 @@ const reportReasons = [
                     contentContainerStyle={styles.galeriaScroll}
                   >
                     {imagenesPorCategoria.oferta.map((item, index) => (
-                      <ItemGaleria key={`oferta-${index}`} item={item} index={index} categoria="oferta" />
+                      <ItemGaleria 
+                        key={`oferta-${index}`} 
+                        item={item} 
+                        index={index} 
+                        categoria="oferta"
+                        onImagenPress={handleImagenPress}
+                        onAgregar={handleAgregarItem}
+                        onQuitar={handleQuitarItem}
+                        onEliminar={handleEliminarItem}
+                        cantidadEnCarrito={obtenerCantidadItem(index, "oferta")}
+                      />
                     ))}
                   </ScrollView>
                 </>
@@ -1112,7 +1207,17 @@ const reportReasons = [
                   </View>
                   <View style={styles.galeriaGrid}>
                     {imagenesPorCategoria.secundario.map((item, index) => (
-                      <ItemGaleria key={`secundario-${index}`} item={item} index={index} categoria="secundario" />
+                      <ItemGaleria 
+                        key={`secundario-${index}`} 
+                        item={item} 
+                        index={index} 
+                        categoria="secundario"
+                        onImagenPress={handleImagenPress}
+                        onAgregar={handleAgregarItem}
+                        onQuitar={handleQuitarItem}
+                        onEliminar={handleEliminarItem}
+                        cantidadEnCarrito={obtenerCantidadItem(index, "secundario")}
+                      />
                     ))}
                   </View>
                 </>
@@ -2126,6 +2231,99 @@ carritoBotonPedidoTexto: {
   fontSize: 16,
   fontWeight: 'bold',
   marginLeft: 8,
+},
+// Estilos del modal de confirmación
+confirmacionModalContainer: {
+  flex: 1,
+  justifyContent: 'center',
+  alignItems: 'center',
+  backgroundColor: 'rgba(0,0,0,0.5)',
+  padding: 20,
+},
+confirmacionModalContent: {
+  backgroundColor: '#FFF',
+  borderRadius: 16,
+  padding: 24,
+  width: '100%',
+  maxWidth: 400,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.25,
+  shadowRadius: 8,
+  elevation: 8,
+},
+confirmacionHeader: {
+  alignItems: 'center',
+  marginBottom: 20,
+},
+confirmacionTitulo: {
+  fontSize: 20,
+  fontWeight: 'bold',
+  color: '#2c3e50',
+  marginTop: 12,
+  textAlign: 'center',
+},
+confirmacionMensaje: {
+  fontSize: 16,
+  color: '#7f8c8d',
+  textAlign: 'center',
+  lineHeight: 22,
+  marginBottom: 20,
+},
+confirmacionResumen: {
+  backgroundColor: '#f8f9fa',
+  padding: 15,
+  borderRadius: 10,
+  marginBottom: 20,
+},
+confirmacionResumenTitulo: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#333',
+  marginBottom: 10,
+},
+confirmacionItem: {
+  fontSize: 14,
+  color: '#666',
+  marginBottom: 5,
+},
+confirmacionTotal: {
+  fontSize: 16,
+  fontWeight: 'bold',
+  color: '#2A9D8F',
+  marginTop: 10,
+  borderTopWidth: 1,
+  borderTopColor: '#ddd',
+  paddingTop: 10,
+},
+confirmacionButtons: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  gap: 12,
+},
+confirmacionCancelar: {
+  flex: 1,
+  backgroundColor: '#6c757d',
+  padding: 15,
+  borderRadius: 12,
+  alignItems: 'center',
+},
+confirmacionCancelarTexto: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 16,
+},
+confirmacionEnviar: {
+  flex: 1,
+  backgroundColor: '#25D366',
+  padding: 15,
+  borderRadius: 12,
+  alignItems: 'center',
+},
+confirmacionEnviarTexto: {
+  color: 'white',
+  fontWeight: 'bold',
+  fontSize: 16,
 },
 });
 
