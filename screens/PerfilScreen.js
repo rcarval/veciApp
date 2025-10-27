@@ -175,7 +175,16 @@ const PerfilScreen = () => {
               <TouchableOpacity 
                 key={opcion.nombre} 
                 style={styles.opcionCard}
-                onPress={() => navigation.navigate(opcion.screen)}
+                onPress={() => {
+                  // Navegar según el tipo de screen
+                  if (opcion.screen === 'InformacionPersonal' || opcion.screen === 'MisDirecciones' || opcion.screen === 'MisPedidos' || opcion.screen === 'PlanScreen' || opcion.screen === 'HelpScreen') {
+                    // Screens dentro del stack Perfil
+                    navigation.navigate(opcion.screen);
+                  } else if (opcion.screen === 'Emprendimiento' || opcion.screen === 'PedidosRecibidos') {
+                    // Screens principales
+                    navigation.navigate(opcion.screen);
+                  }
+                }}
               >
                 <View style={styles.opcionIconoContainer}>
                   <FontAwesome name={opcion.icono} size={24} color="#2A9D8F" />
@@ -186,40 +195,6 @@ const PerfilScreen = () => {
           </View>
         </View>
       </ScrollView>
-
-      {/* Barra de navegación inferior */}
-      <LinearGradient  colors={['#2A9D8F', '#1D7874']} style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Home')}
-        >
-          <Ionicons name="home" size={24} color="white" />
-          <Text style={styles.tabText}>Inicio</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Ofertas')}
-        >
-          <Ionicons name="pricetag" size={24} color="white" />
-          <Text style={styles.tabText}>Ofertas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Favoritos')}
-        >
-          <Ionicons name="heart" size={24} color="white" />
-          <Text style={styles.tabText}>Favoritos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-        >
-          <Ionicons name="person" size={24} color="#0b5b52" />
-          <Text style={styles.tabText}>Perfil</Text>
-        </TouchableOpacity>
-      </LinearGradient>
     </View>
   );
 };
@@ -234,7 +209,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAF9",
   },
   scrollContainer: {
-    paddingBottom: 20,
+    paddingBottom: 150, // Espacio para la barra inferior
   },
   headerGradient: {
     paddingTop: 50,
@@ -423,27 +398,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#333',
     textAlign: 'center',
-  },
-  tabBar: {
-    flexDirection: "row",
-    height: 120,
-    width: "100%",
-    marginBottom: 0,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    borderTopColor: "#e1e1e1",
-    backgroundColor: "#2A9D8F",
-  },
-  tabItem: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingBottom: 40
-  },
-  tabText: {
-    fontSize: 12,
-    marginTop: 4,
-    color: "white",
   },
 });
 

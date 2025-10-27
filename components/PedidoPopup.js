@@ -19,7 +19,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
   const [visible, setVisible] = useState(false);
   const [hasLoggedIn, setHasLoggedIn] = useState(false);
   const [position, setPosition] = useState({ 
-    x: screenWidth * 0.80,  // 80% del ancho (esquina derecha)
+    x: screenWidth * 0.02,  // 80% del ancho (esquina derecha)
     y: screenHeight * 0.78  // 78% de la altura (parte inferior)
   });
   const translateX = useRef(new Animated.Value(0)).current;
@@ -180,7 +180,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
   };
 
   const handlePress = () => {
-    navigation.navigate('HomeDrawer', { screen: 'MisPedidos' });
+    navigation.navigate('MisPedidos');
   };
 
   if (!visible) return null;

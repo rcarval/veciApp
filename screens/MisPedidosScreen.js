@@ -6,16 +6,27 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
-const MisPedidosScreen = ({ navigation }) => {
+const MisPedidosScreen = () => {
+  const navigation = useNavigation();
   const [pedidos, setPedidos] = useState([]);
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
   const [tabActivo, setTabActivo] = useState('pendientes');
+  const [modalCalificacionVisible, setModalCalificacionVisible] = useState(false);
+  const [pedidoParaCalificar, setPedidoParaCalificar] = useState(null);
+  const [calificacionesUsuario, setCalificacionesUsuario] = useState({
+    precio: 0,
+    calidad: 0,
+    servicio: 0,
+    tiempoEntrega: 0
+  });
 
   useEffect(() => {
     cargarPedidos();
@@ -71,10 +82,14 @@ const MisPedidosScreen = ({ navigation }) => {
       setPedidosPendientes(pedidosActualizados);
       await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
       
-      // Si se marca como entregado, mover a historial
+      // Si se marca como entregado, mostrar modal de calificación
       if (nuevoEstado === 'entregado') {
         const pedidoCompletado = pedidosActualizados.find(p => p.id === pedidoId);
         if (pedidoCompletado) {
+          setPedidoParaCalificar(pedidoCompletado);
+          setModalCalificacionVisible(true);
+          
+          // Mover a historial después de calificar
           const historialActualizado = [...pedidosCompletados, pedidoCompletado];
           setPedidosCompletados(historialActualizado);
           await AsyncStorage.setItem('historialPedidos', JSON.stringify(historialActualizado));
@@ -84,9 +99,132 @@ const MisPedidosScreen = ({ navigation }) => {
           setPedidosPendientes(pendientesActualizados);
           await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pendientesActualizados));
         }
+      } else {
+        // Para otros estados, mostrar mensaje
+        Alert.alert('Estado actualizado', `El pedido ha sido marcado como ${nuevoEstado}`);
       }
     } catch (error) {
       console.log('Error al cambiar estado:', error);
+    }
+  };
+
+  // Función para manejar calificación de criterio
+  const manejarCalificacionCriterio = (criterio, valor) => {
+    setCalificacionesUsuario(prev => ({
+      ...prev,
+      [criterio]: valor
+    }));
+  };
+
+  // Función para renderizar estrellas interactivas
+  const renderEstrellasInteractivas = (criterio, valorActual) => {
+    return (
+      <View style={styles.estrellasInteractivas}>
+        {[1, 2, 3, 4, 5].map((star) => (
+          <TouchableOpacity
+            key={star}
+            onPress={() => manejarCalificacionCriterio(criterio, star)}
+            style={styles.estrellaInteractiva}
+          >
+            <FontAwesome
+              name={star <= valorActual ? "star" : "star-o"}
+              size={24}
+              color={star <= valorActual ? "#FFD700" : "#DDD"}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  // Función para enviar calificación
+  const enviarCalificacion = async () => {
+    try {
+      // Verificar que todos los criterios estén calificados
+      const criteriosCalificados = Object.values(calificacionesUsuario).every(valor => valor > 0);
+      
+      if (!criteriosCalificados) {
+        Alert.alert(
+          "Calificación incompleta",
+          "Por favor califica todos los criterios antes de enviar.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      // Calcular promedio general
+      const promedioGeneral = Object.values(calificacionesUsuario).reduce((sum, valor) => sum + valor, 0) / 4;
+
+      // Obtener calificaciones existentes o crear nuevas
+      const calificacionesExistentes = await AsyncStorage.getItem(`calificaciones_${pedidoParaCalificar.negocioId || '1'}`);
+      let calificacionesData;
+      
+      if (calificacionesExistentes) {
+        calificacionesData = JSON.parse(calificacionesExistentes);
+      } else {
+        calificacionesData = {
+          totalVotantes: 0,
+          calificacionGeneral: 0,
+          criterios: {
+            precio: { promedio: 0, votantes: 0 },
+            calidad: { promedio: 0, votantes: 0 },
+            servicio: { promedio: 0, votantes: 0 },
+            tiempoEntrega: { promedio: 0, votantes: 0 }
+          }
+        };
+      }
+
+      // Actualizar calificaciones
+      const nuevasCalificaciones = {
+        ...calificacionesData,
+        totalVotantes: calificacionesData.totalVotantes + 1,
+        calificacionGeneral: ((calificacionesData.calificacionGeneral * calificacionesData.totalVotantes) + promedioGeneral) / (calificacionesData.totalVotantes + 1),
+        criterios: {
+          precio: {
+            promedio: ((calificacionesData.criterios.precio.promedio * calificacionesData.criterios.precio.votantes) + calificacionesUsuario.precio) / (calificacionesData.criterios.precio.votantes + 1),
+            votantes: calificacionesData.criterios.precio.votantes + 1
+          },
+          calidad: {
+            promedio: ((calificacionesData.criterios.calidad.promedio * calificacionesData.criterios.calidad.votantes) + calificacionesUsuario.calidad) / (calificacionesData.criterios.calidad.votantes + 1),
+            votantes: calificacionesData.criterios.calidad.votantes + 1
+          },
+          servicio: {
+            promedio: ((calificacionesData.criterios.servicio.promedio * calificacionesData.criterios.servicio.votantes) + calificacionesUsuario.servicio) / (calificacionesData.criterios.servicio.votantes + 1),
+            votantes: calificacionesData.criterios.servicio.votantes + 1
+          },
+          tiempoEntrega: {
+            promedio: ((calificacionesData.criterios.tiempoEntrega.promedio * calificacionesData.criterios.tiempoEntrega.votantes) + calificacionesUsuario.tiempoEntrega) / (calificacionesData.criterios.tiempoEntrega.votantes + 1),
+            votantes: calificacionesData.criterios.tiempoEntrega.votantes + 1
+          }
+        }
+      };
+
+      // Guardar en AsyncStorage
+      await AsyncStorage.setItem(`calificaciones_${pedidoParaCalificar.negocioId || '1'}`, JSON.stringify(nuevasCalificaciones));
+      
+      // Cerrar modal y resetear estados
+      setModalCalificacionVisible(false);
+      setPedidoParaCalificar(null);
+      setCalificacionesUsuario({
+        precio: 0,
+        calidad: 0,
+        servicio: 0,
+        tiempoEntrega: 0
+      });
+
+      Alert.alert(
+        "¡Gracias!",
+        "Tu calificación ha sido registrada exitosamente.",
+        [{ text: "OK" }]
+      );
+
+    } catch (error) {
+      console.log('Error al guardar calificación:', error);
+      Alert.alert(
+        "Error",
+        "No se pudo guardar tu calificación. Inténtalo de nuevo.",
+        [{ text: "OK" }]
+      );
     }
   };
 
@@ -154,11 +292,76 @@ const MisPedidosScreen = ({ navigation }) => {
   );
 
   return (
-    <View style={styles.containerMaster}>
-      <LinearGradient
-        colors={['#2A9D8F', '#1D7874']}
-        style={styles.headerGradient}
+    <>
+      {/* Modal de Calificación */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalCalificacionVisible}
+        onRequestClose={() => setModalCalificacionVisible(false)}
       >
+        <View style={styles.modalCalificacionContainer}>
+          <View style={styles.modalCalificacionContent}>
+            <View style={styles.modalCalificacionHeader}>
+              <FontAwesome name="star" size={32} color="#FFD700" />
+              <Text style={styles.modalCalificacionTitulo}>Califica tu experiencia</Text>
+              <Text style={styles.modalCalificacionSubtitulo}>
+                Ayúdanos a mejorar evaluando {pedidoParaCalificar?.negocio}
+              </Text>
+            </View>
+
+            <ScrollView style={styles.modalCalificacionBody}>
+              <View style={styles.criterioCalificacion}>
+                <Text style={styles.criterioCalificacionLabel}>💰 Precio</Text>
+                <Text style={styles.criterioCalificacionDescripcion}>
+                  ¿Qué tan justo consideras el precio?
+                </Text>
+                {renderEstrellasInteractivas('precio', calificacionesUsuario.precio)}
+              </View>
+
+              <View style={styles.criterioCalificacion}>
+                <Text style={styles.criterioCalificacionLabel}>⭐ Calidad</Text>
+                <Text style={styles.criterioCalificacionDescripcion}>
+                  ¿Cómo calificarías la calidad del producto/servicio?
+                </Text>
+                {renderEstrellasInteractivas('calidad', calificacionesUsuario.calidad)}
+              </View>
+
+              <View style={styles.criterioCalificacion}>
+                <Text style={styles.criterioCalificacionLabel}>👥 Servicio al Cliente</Text>
+                <Text style={styles.criterioCalificacionDescripcion}>
+                  ¿Cómo fue la atención y comunicación?
+                </Text>
+                {renderEstrellasInteractivas('servicio', calificacionesUsuario.servicio)}
+              </View>
+
+              <View style={styles.criterioCalificacion}>
+                <Text style={styles.criterioCalificacionLabel}>⏰ Tiempo de Entrega</Text>
+                <Text style={styles.criterioCalificacionDescripcion}>
+                  ¿Qué tan rápido fue el servicio?
+                </Text>
+                {renderEstrellasInteractivas('tiempoEntrega', calificacionesUsuario.tiempoEntrega)}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalCalificacionFooter}>
+              <TouchableOpacity
+                style={styles.modalCalificacionEnviar}
+                onPress={enviarCalificacion}
+              >
+                <FontAwesome name="check" size={16} color="white" />
+                <Text style={styles.modalCalificacionEnviarTexto}>Enviar Calificación</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <View style={styles.containerMaster}>
+        <LinearGradient
+          colors={['#2A9D8F', '#1D7874']}
+          style={styles.headerGradient}
+        >
         <View style={styles.headerTitleContainer}>
           <Ionicons name="list" size={24} color="white" />
           <Text style={styles.tituloPrincipal}>Mis Pedidos</Text>
@@ -208,41 +411,8 @@ const MisPedidosScreen = ({ navigation }) => {
           )
         )}
       </ScrollView>
-
-      <LinearGradient colors={['#2A9D8F', '#1D7874']} style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Home')}
-        >
-          <Ionicons name="home" size={24} color="white" />
-          <Text style={styles.tabText}>Inicio</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Ofertas')}
-        >
-          <Ionicons name="pricetag" size={24} color="white" />
-          <Text style={styles.tabText}>Ofertas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Favoritos')}
-        >
-          <Ionicons name="heart" size={24} color="white" />
-          <Text style={styles.tabText}>Favoritos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Perfil')}
-        >
-          <Ionicons name="person" size={24} color="white" />
-          <Text style={styles.tabText}>Perfil</Text>
-        </TouchableOpacity>
-      </LinearGradient>
-    </View>
+      </View>
+    </>
   );
 };
 
@@ -250,6 +420,7 @@ const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
     backgroundColor: '#FAFAF9',
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   headerGradient: {
     paddingTop: 50,
@@ -431,26 +602,109 @@ const styles = StyleSheet.create({
     marginTop: 16,
     textAlign: 'center',
   },
-  tabBar: {
-    flexDirection: 'row',
-    height: 120,
-    width: '100%',
-    marginBottom: 0,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    borderTopColor: '#e1e1e1',
-    backgroundColor: '#2A9D8F',
-  },
-  tabItem: {
+  // Estilos del modal de calificación
+  modalCalificacionContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingBottom: 40,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    padding: 20,
   },
-  tabText: {
-    fontSize: 12,
-    marginTop: 4,
+  modalCalificacionContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalCalificacionHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalCalificacionTitulo: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  modalCalificacionSubtitulo: {
+    fontSize: 16,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  modalCalificacionBody: {
+    marginBottom: 24,
+  },
+  modalCalificacionDescripcion: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  modalCalificacionFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  modalCalificacionCancelar: {
+    flex: 1,
+    backgroundColor: '#6c757d',
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCalificacionCancelarTexto: {
     color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  modalCalificacionEnviar: {
+    flex: 1,
+    backgroundColor: '#2A9D8F',
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  modalCalificacionEnviarTexto: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  // Estilos adicionales para el modal de calificación
+  criterioCalificacion: {
+    marginBottom: 20,
+    padding: 15,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+  },
+  criterioCalificacionLabel: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  criterioCalificacionDescripcion: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  estrellasInteractivas: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
+  estrellaInteractiva: {
+    marginHorizontal: 4,
+    padding: 4,
   },
 });
 

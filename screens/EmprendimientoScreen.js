@@ -18,7 +18,7 @@ import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
@@ -26,6 +26,8 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
+  const usuario = route.params?.usuario ?? {};
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -1602,7 +1604,7 @@ const EmprendimientoScreen = () => {
         },
       };
 
-      navigation.navigate("PedidoDetalle", { producto: emprendimientoPreview });
+        navigation.navigate("PedidoDetalle", { producto: emprendimientoPreview });
     } catch (error) {
       console.error("Error al preparar previsualización:", error);
       Alert.alert("Error", "No se pudo cargar la previsualización");
@@ -2095,40 +2097,6 @@ const EmprendimientoScreen = () => {
         </ScrollView>
       </Modal>
 
-      {/* Barra de navegación inferior */}
-      <LinearGradient colors={["#2A9D8F", "#1D7874"]} style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace("Home")}
-        >
-          <Ionicons name="home" size={24} color="white" />
-          <Text style={styles.tabText}>Inicio</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace("Ofertas")}
-        >
-          <Ionicons name="pricetag" size={24} color="white" />
-          <Text style={styles.tabText}>Ofertas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace("Favoritos")}
-        >
-          <Ionicons name="heart" size={24} color="white" />
-          <Text style={styles.tabText}>Favoritos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace("Perfil")}
-        >
-          <Ionicons name="person" size={24} color="#0b5b52" />
-          <Text style={styles.tabText}>Perfil</Text>
-        </TouchableOpacity>
-      </LinearGradient>
       {renderMapModal()}
     </View>
   );
@@ -2303,7 +2271,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FAFAF9",
-    paddingBottom: 60,
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   headerGradient: {
     paddingTop: 50,
@@ -2436,8 +2404,8 @@ const styles = StyleSheet.create({
   },
   addButton: {
     position: "absolute",
-    bottom: 30,
-    right: 30,
+    bottom: 140,
+    right: 20,
     width: 60,
     height: 60,
     borderRadius: 30,
@@ -2547,27 +2515,6 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
-  },
-  tabBar: {
-    flexDirection: "row",
-    height: 120,
-    width: "100%",
-    marginBottom: 0,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    borderTopColor: "#e1e1e0",
-    backgroundColor: "#2A9D8F",
-  },
-  tabItem: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingBottom: 40,
-  },
-  tabText: {
-    fontSize: 12,
-    marginTop: 4,
-    color: "white",
   },
   mapContainer: {
     flex: 1,

@@ -416,9 +416,11 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 150, // Espacio para la barra inferior + margen extra
   },
   resumenContainer: {
     marginBottom: 30,

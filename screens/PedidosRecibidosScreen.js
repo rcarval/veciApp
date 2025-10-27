@@ -584,6 +584,7 @@ const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   headerGradient: {
     paddingTop: 50,

@@ -30,7 +30,9 @@ import MisDireccionesScreen from "./screens/MisDireccionesScreen";
 import MisPedidosScreen from "./screens/MisPedidosScreen";
 import PedidosRecibidosScreen from "./screens/PedidosRecibidosScreen";
 import PlanScreen from "./screens/PlanScreen";
+import HelpScreen from "./screens/HelpScreen";
 import PedidoPopup from "./components/PedidoPopup";
+import AppWithBottomBar from "./components/AppWithBottomBar";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -38,7 +40,19 @@ const Drawer = createDrawerNavigator();
 // Configuración de transiciones personalizadas
 const forFade = ({ current }) => ({
   cardStyle: {
-    opacity: current.progress,
+    opacity: current.progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 1],
+    }),
+  },
+});
+
+const fadeIn = ({ current }) => ({
+  cardStyle: {
+    opacity: current.progress.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.3, 1],
+    }),
   },
 });
 
@@ -145,205 +159,181 @@ function AppNavigator({ usuario }) {
           }}
         />
 
+        {/* Pantallas principales - accesibles desde cualquier nivel */}
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: forFade,
+            transitionSpec: {
+              open: {
+                animation: 'timing',
+                config: {
+                  duration: 300,
+                },
+              },
+              close: {
+                animation: 'timing',
+                config: {
+                  duration: 300,
+                },
+              },
+            }
+          }}
+        />
+
         <Stack.Screen
           name="Ofertas"
           component={OfertasScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Ofertas",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
+
         <Stack.Screen
           name="Favoritos"
           component={FavoritosScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Favoritos",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
+
         <Stack.Screen
           name="Busqueda"
           component={BusquedaScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Busqueda",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
-        <Stack.Screen
-          name="Perfil"
-          component={PerfilScreen}
-          options={{
-            title: "Perfil",
-            headerShown: false,
-            cardStyleInterpolator: forFade,
-          }}
-        />
+
         <Stack.Screen
           name="Comida"
           component={ComidaScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Comida",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
+
         <Stack.Screen
           name="Servicios"
           component={ServiciosScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Servicios",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
+
+        <Stack.Screen
+          name="Negocios"
+          component={NegocioScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{
+            title: "Negocios",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+          }}
+        />
+
+        <Stack.Screen
+          name="Belleza"
+          component={BellezaScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{
+            title: "Belleza",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+          }}
+        />
+
         <Stack.Screen
           name="ProductosEmprendimiento"
           component={ProductosEmprendimientoScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Productos",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
+
         <Stack.Screen
           name="MisEstadisticas"
           component={MisEstadisticasScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Estadisticas",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
         />
-        
-        {/* Drawer con transición personalizada */}
+
         <Stack.Screen
-          name="HomeDrawer"
+          name="Emprendimiento"
+          component={EmprendimientoScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
+            title: "Mi Emprendimiento",
             headerShown: false,
             cardStyleInterpolator: forFade,
           }}
-        >
-          {() => (
-            <Stack.Navigator
-              screenOptions={{
-                drawerType: "slide",
-                overlayColor: "transparent",
-                drawerStyle: {
-                  backgroundColor: "#f5f5f5",
-                  width: "70%",
-                },
-                sceneContainerStyle: {
-                  backgroundColor: "#ffffff",
-                },
-              }}
-            >
-              <Stack.Screen
-                name="Home"
-                component={HomeScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-              <Stack.Screen
-                name="Ofertas"
-                component={OfertasScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Ofertas",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="Favoritos"
-                component={FavoritosScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Ofertas",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="Busqueda"
-                component={BusquedaScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Busqueda",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="Comida"
-                component={ComidaScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Comida",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="Servicios"
-                component={ServiciosScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Servicios",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-                            <Stack.Screen
-                name="Negocios"
-                component={NegocioScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Negocios",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-                            <Stack.Screen
-                name="Belleza"
-                component={BellezaScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{
-                  title: "Belleza",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="MisDirecciones"
-                component={MisDireccionesScreen}
-                options={{
-                  title: "Mis Direcciones",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="MisPedidos"
-                component={MisPedidosScreen}
-                options={{
-                  title: "Mis Pedidos",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-              <Stack.Screen
-                name="PedidosRecibidos"
-                component={PedidosRecibidosScreen}
-                options={{
-                  title: "Pedidos Recibidos",
-                  headerShown: false,
-                  cardStyleInterpolator: forFade,
-                }}
-              />
-                      <Stack.Screen
+        />
+
+        <Stack.Screen
+          name="MisDirecciones"
+          component={MisDireccionesScreen}
+          options={{
+            title: "Mis Direcciones",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+          }}
+        />
+
+        <Stack.Screen
+          name="MisPedidos"
+          component={MisPedidosScreen}
+          options={{
+            title: "Mis Pedidos",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+          }}
+        />
+
+        <Stack.Screen
+          name="PedidosRecibidos"
+          component={PedidosRecibidosScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{
+            title: "Pedidos Recibidos",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+          }}
+        />
+
+        <Stack.Screen
+          name="PlanScreen"
+          component={PlanScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ headerShown: false, cardStyleInterpolator: forFade }}
+        />
+
+        {/* Stack anidado solo para Perfil */}
+        <Stack.Screen
           name="Perfil"
           options={{
             headerShown: false,
@@ -364,49 +354,24 @@ function AppNavigator({ usuario }) {
                 },
               }}
             >
-                              <Stack.Screen
+              <Stack.Screen
                 name="Perfil"
                 component={PerfilScreen}
                 initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
-                <Stack.Screen
+              <Stack.Screen
                 name="InformacionPersonal"
                 component={InformacionPersonalScreen}
                 initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
-                              <Stack.Screen
-                name="Emprendimiento"
-                component={EmprendimientoScreen}
+              <Stack.Screen
+                name="HelpScreen"
+                component={HelpScreen}
                 initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
-              <Stack.Screen
-                name="MisDirecciones"
-                component={MisDireccionesScreen}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-              <Stack.Screen
-                name="MisPedidos"
-                component={MisPedidosScreen}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-        <Stack.Screen
-          name="PlanScreen"
-          component={PlanScreen}
-          initialParams={usuario ? { usuario } : {}}
-          options={{ headerShown: false, cardStyleInterpolator: forFade }}
-        />
-        <Stack.Screen
-          name="PedidosRecibidos"
-          component={PedidosRecibidosScreen}
-          initialParams={usuario ? { usuario } : {}}
-          options={{ headerShown: false, cardStyleInterpolator: forFade }}
-        />
-              </Stack.Navigator>
-          )}
-        </Stack.Screen>
             </Stack.Navigator>
           )}
         </Stack.Screen>
@@ -439,7 +404,9 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <NavigationContainer>
-        <AppNavigator usuario={usuario} />
+        <AppWithBottomBar>
+          <AppNavigator usuario={usuario} />
+        </AppWithBottomBar>
       </NavigationContainer>
     </GestureHandlerRootView>
   );

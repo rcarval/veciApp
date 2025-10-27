@@ -129,6 +129,7 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
+  const [calificacionesData, setCalificacionesData] = useState(null);
   const carritoRef = useRef([]);
   const [, forceUpdate] = useState({});
 
@@ -208,6 +209,94 @@ const reportReasons = [
     return carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
   }, []);
 
+  // Función para cargar calificaciones del emprendimiento
+  const cargarCalificaciones = useCallback(async () => {
+    try {
+      const calificacionesGuardadas = await AsyncStorage.getItem(`calificaciones_${producto.id}`);
+      if (calificacionesGuardadas) {
+        const data = JSON.parse(calificacionesGuardadas);
+        setCalificacionesData(data);
+      } else {
+        // Datos por defecto si no existen calificaciones
+        const calificacionesDefault = {
+          totalVotantes: 0,
+          calificacionGeneral: 0,
+          criterios: {
+            precio: { promedio: 0, votantes: 0 },
+            calidad: { promedio: 0, votantes: 0 },
+            servicio: { promedio: 0, votantes: 0 },
+            tiempoEntrega: { promedio: 0, votantes: 0 }
+          }
+        };
+        setCalificacionesData(calificacionesDefault);
+      }
+    } catch (error) {
+      console.log('Error al cargar calificaciones:', error);
+    }
+  }, [producto.id]);
+
+  // Función para renderizar estrellas con número de votantes
+  const renderEstrellasConVotantes = () => {
+    if (!calificacionesData) return null;
+
+    const { calificacionGeneral, totalVotantes } = calificacionesData;
+    
+    return (
+      <View style={styles.estrellasContainer}>
+        <View style={styles.estrellasWrapper}>
+          {[1, 2, 3, 4, 5].map((star) => {
+            // Redondeo especial: 4.2 → 4, 4.3 → 4.5
+            let rating = calificacionGeneral;
+            const decimal = rating - Math.floor(rating);
+            if (decimal >= 0.3 && decimal < 0.7) {
+              rating = Math.floor(rating) + 0.5;
+            } else if (decimal < 0.3) {
+              rating = Math.floor(rating);
+            } else {
+              rating = Math.ceil(rating);
+            }
+
+            if (star <= Math.floor(rating)) {
+              // Estrella completa
+              return (
+                <FontAwesome
+                  key={star}
+                  name="star"
+                  size={20}
+                  color="#FFD700"
+                />
+              );
+            } else if (star - 0.5 <= rating && rating < star) {
+              // Media estrella
+              return (
+                <FontAwesome
+                  key={star}
+                  name="star-half-o"
+                  size={20}
+                  color="#FFD700"
+                />
+              );
+            } else {
+              // Estrella vacía
+              return (
+                <FontAwesome
+                  key={star}
+                  name="star-o"
+                  size={20}
+                  color="#FFD700"
+                />
+              );
+            }
+          })}
+        </View>
+        <View style={styles.ratingInfo}>
+          <Text style={styles.ratingText}>{calificacionGeneral.toFixed(1)}</Text>
+          <Text style={styles.votantesText}>({totalVotantes} votos)</Text>
+        </View>
+      </View>
+    );
+  };
+
   const animatedValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -232,7 +321,8 @@ const reportReasons = [
     };
 
     cargarDireccionUsuario();
-  }, []);
+    cargarCalificaciones(); // Cargar calificaciones al iniciar
+  }, [cargarCalificaciones, route.params]);
 
   useEffect(() => {
     if (direccionUsuario) {
@@ -648,6 +738,7 @@ const reportReasons = [
         </View>
       </Modal>
 
+
       {/* Modal del Carrito */}
       <Modal
         animationType="slide"
@@ -879,58 +970,13 @@ const reportReasons = [
             <View style={styles.infoContainer}>
               <Text style={styles.nombreEmpresa}>{producto.nombre}</Text>
 
-              {/* ✅ Evaluación con estrellas */}
-              <View style={styles.estrellasContainer}>
-                {[1, 2, 3, 4, 5].map((star) => {
-                  // Redondeo especial: 4.2 → 4, 4.3 → 4.5
-                  let rating = producto.rating;
-                  const decimal = rating - Math.floor(rating);
-                  if (decimal >= 0.3 && decimal < 0.7) {
-                    rating = Math.floor(rating) + 0.5;
-                  } else if (decimal < 0.3) {
-                    rating = Math.floor(rating);
-                  } else {
-                    rating = Math.ceil(rating);
-                  }
-
-                  if (star <= Math.floor(rating)) {
-                    // Estrella completa
-                    return (
-                      <FontAwesome
-                        key={star}
-                        name="star"
-                        size={20}
-                        color="#FFD700"
-                      />
-                    );
-                  } else if (star - 0.5 <= rating && rating < star) {
-                    // Media estrella
-                    return (
-                      <FontAwesome
-                        key={star}
-                        name="star-half-o"
-                        size={20}
-                        color="#FFD700"
-                      />
-                    );
-                  } else {
-                    // Estrella vacía
-                    return (
-                      <FontAwesome
-                        key={star}
-                        name="star-o"
-                        size={20}
-                        color="#FFD700"
-                      />
-                    );
-                  }
-                })}
-                <Text style={styles.ratingText}>{producto.rating}</Text>
-              </View>
+              {/* ✅ Evaluación con estrellas mejorada */}
+              {renderEstrellasConVotantes()}
             </View>
           </View>
 
           <Text style={styles.descripcion}>{producto.descripcion}</Text>
+          
           {/* ✅ Precio y estado */}
           <View style={styles.productoEstadoContainer}>
             <Animated.View
@@ -1492,12 +1538,67 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 5, // 🔥 Espacio entre nombre y estrellas
   },
-
+  estrellasWrapper: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  ratingInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 8,
+  },
   ratingText: {
     fontSize: 16,
     fontWeight: "bold",
-    marginLeft: 8,
     color: "#555",
+  },
+  votantesText: {
+    fontSize: 14,
+    color: "#999",
+    marginLeft: 4,
+  },
+  criteriosContainer: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    padding: 15,
+    marginVertical: 15,
+  },
+  criteriosTitulo: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 12,
+  },
+  criterioItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  criterioLabel: {
+    fontSize: 14,
+    color: "#666",
+    flex: 1,
+  },
+  criterioEstrellas: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  criterioPromedio: {
+    fontSize: 12,
+    color: "#666",
+    marginLeft: 6,
+    fontWeight: "bold",
+  },
+  sinCalificaciones: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  sinCalificacionesTexto: {
+    fontSize: 14,
+    color: "#999",
+    marginTop: 8,
+    textAlign: "center",
   },
   metodosPagoContainer: {
     flexDirection: "row",
@@ -1608,7 +1709,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 160, // Espacio para la barra inferior + margen extra
   },
   contenedorInferior: {
     flexGrow: 1, // 🔥 Se expande hacia abajo

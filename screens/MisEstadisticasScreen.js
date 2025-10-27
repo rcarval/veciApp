@@ -25,6 +25,53 @@ const MisEstadisticasScreen = () => {
   const [labels, setLabels] = useState([]);
   const [visualizaciones, setVisualizaciones] = useState([0]);
   const [contactos, setContactos] = useState([0]);
+  
+  // Estados para datos dinámicos
+  const [datosPedidos, setDatosPedidos] = useState({});
+
+  // Calificaciones fijas (de todos los tiempos)
+  const datosCalificaciones = {
+    calificacionGeneral: 4.3,
+    totalVotantes: 28,
+    criterios: {
+      precio: { promedio: 4.1},
+      calidad: { promedio: 4.5},
+      servicio: { promedio: 4.2},
+      tiempoEntrega: { promedio: 4.4}
+    }
+  };
+
+  // Datos de pedidos organizados por período
+  const datosPedidosPorPeriodo = {
+    año: {
+      totalPedidos: 45,
+      montoTotal: 1250000,
+      promedioPedido: 27778,
+      pedidosPeriodo: 45,
+      montoPeriodo: 1250000
+    },
+    mes: {
+      totalPedidos: 45,
+      montoTotal: 1250000,
+      promedioPedido: 27778,
+      pedidosPeriodo: 12,
+      montoPeriodo: 340000
+    },
+    semana: {
+      totalPedidos: 45,
+      montoTotal: 1250000,
+      promedioPedido: 27778,
+      pedidosPeriodo: 3,
+      montoPeriodo: 85000
+    },
+    dia: {
+      totalPedidos: 45,
+      montoTotal: 1250000,
+      promedioPedido: 27778,
+      pedidosPeriodo: 1,
+      montoPeriodo: 25000
+    }
+  };
 
   // Función para generar datos de prueba seguros
   const generarDatos = (labels, periodo) => {
@@ -120,6 +167,9 @@ const MisEstadisticasScreen = () => {
     const { visualizaciones, contactos } = generarDatos(nuevosLabels, periodo);
     setVisualizaciones(visualizaciones);
     setContactos(contactos);
+    
+    // Actualizar solo datos de pedidos según el período
+    setDatosPedidos(datosPedidosPorPeriodo[periodo]);
   }, [periodo]);
 
   // Configuración segura del gráfico
@@ -181,6 +231,38 @@ const MisEstadisticasScreen = () => {
     } catch {
       return "";
     }
+  };
+
+  // Función para formatear montos
+  const formatearMonto = (monto) => {
+    return `$${monto.toLocaleString('es-CL')}`;
+  };
+
+  // Función para renderizar estrellas
+  const renderEstrellas = (calificacion) => {
+    const estrellas = [];
+    const calificacionRedondeada = Math.round(calificacion * 2) / 2; // Redondear a 0.5
+    
+    for (let i = 1; i <= 5; i++) {
+      if (i <= Math.floor(calificacionRedondeada)) {
+        // Estrella completa
+        estrellas.push(
+          <FontAwesome key={i} name="star" size={16} color="#FFD700" />
+        );
+      } else if (i - 0.5 <= calificacionRedondeada && calificacionRedondeada < i) {
+        // Media estrella
+        estrellas.push(
+          <FontAwesome key={i} name="star-half-o" size={16} color="#FFD700" />
+        );
+      } else {
+        // Estrella vacía
+        estrellas.push(
+          <FontAwesome key={i} name="star-o" size={16} color="#DDD" />
+        );
+      }
+    }
+    
+    return estrellas;
   };
 
   return (
@@ -306,9 +388,133 @@ const MisEstadisticasScreen = () => {
           </View>
         </View>
 
+        {/* Sección de Pedidos */}
+        <View style={styles.pedidosContainer}>
+          <Text style={styles.sectionTitle}>💰 Información de Pedidos</Text>
+          <View style={styles.pedidosGrid}>
+            <View style={styles.pedidoCard}>
+              <FontAwesome name="shopping-cart" size={24} color="#2A9D8F" style={styles.pedidoIcon} />
+              <Text style={styles.pedidoValue}>{datosPedidos.totalPedidos || 0}</Text>
+              <Text style={styles.pedidoLabel}>Total Pedidos</Text>
+            </View>
+            <View style={styles.pedidoCard}>
+              <FontAwesome name="dollar" size={24} color="#F4A261" style={styles.pedidoIcon} />
+              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.montoTotal || 0)}</Text>
+              <Text style={styles.pedidoLabel}>Monto Total</Text>
+            </View>
+          </View>
+          <View style={styles.pedidosGrid}>
+            <View style={styles.pedidoCard}>
+              <FontAwesome name="calculator" size={24} color="#E76F51" style={styles.pedidoIcon} />
+              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.promedioPedido || 0)}</Text>
+              <Text style={styles.pedidoLabel}>Promedio por Pedido</Text>
+            </View>
+            <View style={styles.pedidoCard}>
+              <FontAwesome name="calendar" size={24} color="#9C27B0" style={styles.pedidoIcon} />
+              <Text style={styles.pedidoValue}>{datosPedidos.pedidosPeriodo || 0}</Text>
+              <Text style={styles.pedidoLabel}>
+                Pedidos este {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.pedidosGrid}>
+            <View style={[styles.pedidoCard, { flex: 1 }]}>
+              <FontAwesome name="line-chart" size={24} color="#4CAF50" style={styles.pedidoIcon} />
+              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.montoPeriodo || 0)}</Text>
+              <Text style={styles.pedidoLabel}>
+                Monto del {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Sección de Calificaciones */}
+        <View style={styles.calificacionesContainer}>
+          <Text style={styles.sectionTitle}>⭐ Calificaciones de Clientes</Text>
+          
+          {/* Calificación General */}
+          <View style={styles.calificacionGeneralCard}>
+            <View style={styles.calificacionGeneralHeader}>
+              <Text style={styles.calificacionGeneralTitulo}>Calificación General</Text>
+              <Text style={styles.calificacionGeneralVotantes}>({datosCalificaciones.totalVotantes} votos)</Text>
+            </View>
+            <View style={styles.calificacionGeneralContent}>
+              <View style={styles.estrellasContainer}>
+                {renderEstrellas(datosCalificaciones.calificacionGeneral)}
+              </View>
+              <Text style={styles.calificacionGeneralNumero}>
+                {datosCalificaciones.calificacionGeneral.toFixed(1)}
+              </Text>
+            </View>
+          </View>
+
+          {/* Criterios Individuales */}
+          <View style={styles.criteriosContainer}>
+            <Text style={styles.criteriosTitulo}>Calificación por Criterios</Text>
+            
+            <View style={styles.criterioItem}>
+              <View style={styles.criterioInfo}>
+                <Text style={styles.criterioLabel}>💰 Precio</Text>
+              </View>
+              <View style={styles.criterioCalificacion}>
+                <View style={styles.estrellasContainer}>
+                  {renderEstrellas(datosCalificaciones.criterios.precio.promedio)}
+                </View>
+                <Text style={styles.criterioNumero}>
+                  {datosCalificaciones.criterios.precio.promedio.toFixed(1)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.criterioItem}>
+              <View style={styles.criterioInfo}>
+                <Text style={styles.criterioLabel}>⭐ Calidad</Text>
+              </View>
+              <View style={styles.criterioCalificacion}>
+                <View style={styles.estrellasContainer}>
+                  {renderEstrellas(datosCalificaciones.criterios.calidad.promedio)}
+                </View>
+                <Text style={styles.criterioNumero}>
+                  {datosCalificaciones.criterios.calidad.promedio.toFixed(1)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.criterioItem}>
+              <View style={styles.criterioInfo}>
+                <Text style={styles.criterioLabel}>👥 Servicio al Cliente</Text>
+              </View>
+              <View style={styles.criterioCalificacion}>
+                <View style={styles.estrellasContainer}>
+                  {renderEstrellas(datosCalificaciones.criterios.servicio.promedio)}
+                </View>
+                <Text style={styles.criterioNumero}>
+                  {datosCalificaciones.criterios.servicio.promedio.toFixed(1)}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.criterioItem}>
+              <View style={styles.criterioInfo}>
+                <Text style={styles.criterioLabel}>⏰ Tiempo de Entrega</Text>
+              </View>
+              <View style={styles.criterioCalificacion}>
+                <View style={styles.estrellasContainer}>
+                  {renderEstrellas(datosCalificaciones.criterios.tiempoEntrega.promedio)}
+                </View>
+                <Text style={styles.criterioNumero}>
+                  {datosCalificaciones.criterios.tiempoEntrega.promedio.toFixed(1)}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
         {/* Consejos basados en estadísticas */}
         <View style={styles.tipsContainer}>
           <Text style={styles.sectionTitle}>Consejos para mejorar</Text>
+          
+          {/* Consejos basados en tasa de conversión */}
           {parseFloat(tasaConversion) < 5 ? (
             <View style={styles.tipCard}>
               <FontAwesome name="exclamation-circle" size={20} color="#E76F51" style={styles.tipIcon} />
@@ -325,6 +531,7 @@ const MisEstadisticasScreen = () => {
             </View>
           )}
           
+          {/* Consejos basados en horarios */}
           {periodo === "dia" && visualizaciones.slice(6, 8).some(v => v > 0) && (
             <View style={styles.tipCard}>
               <FontAwesome name="lightbulb-o" size={20} color="#F4A261" style={styles.tipIcon} />
@@ -333,6 +540,104 @@ const MisEstadisticasScreen = () => {
               </Text>
             </View>
           )}
+
+          {/* Consejos inteligentes basados en calificaciones */}
+          {(() => {
+            const calGeneral = datosCalificaciones.calificacionGeneral;
+            const criterios = datosCalificaciones.criterios;
+            
+            // Encontrar el criterio más bajo y más alto
+            const criteriosArray = Object.entries(criterios);
+            const criterioMasBajo = criteriosArray.reduce((min, [key, value]) => 
+              value.promedio < min.promedio ? { key, ...value } : min, 
+              { promedio: 5, key: '' }
+            );
+            const criterioMasAlto = criteriosArray.reduce((max, [key, value]) => 
+              value.promedio > max.promedio ? { key, ...value } : max, 
+              { promedio: 0, key: '' }
+            );
+            
+            const consejos = [];
+            
+            // Rango 1-2: Muy malo
+            if (calGeneral >= 1 && calGeneral < 2.5) {
+              consejos.push({
+                icon: "exclamation-triangle",
+                color: "#E76F51",
+                text: `Tu calificación general es muy baja (${calGeneral.toFixed(1)}/5). Necesitas una revisión completa de todos los aspectos de tu negocio. Enfócate especialmente en ${criterioMasBajo.key === 'precio' ? 'precios más competitivos' : criterioMasBajo.key === 'calidad' ? 'mejorar la calidad de tus productos/servicios' : criterioMasBajo.key === 'servicio' ? 'mejorar la atención al cliente' : 'optimizar los tiempos de entrega'}.`
+              });
+            }
+            
+            // Rango 2.5-3.5: Malo
+            else if (calGeneral >= 2.5 && calGeneral < 3.5) {
+              consejos.push({
+                icon: "warning",
+                color: "#F4A261",
+                text: `Tu calificación general necesita mejoras (${calGeneral.toFixed(1)}/5). Trabaja en mejorar la experiencia general del cliente. Tu punto más débil es ${criterioMasBajo.key === 'precio' ? 'el precio' : criterioMasBajo.key === 'calidad' ? 'la calidad' : criterioMasBajo.key === 'servicio' ? 'el servicio al cliente' : 'el tiempo de entrega'}.`
+              });
+            }
+            
+            // Rango 3.5-4.0: Regular
+            else if (calGeneral >= 3.5 && calGeneral < 4.0) {
+              consejos.push({
+                icon: "info-circle",
+                color: "#2A9D8F",
+                text: `Tienes una calificación decente (${calGeneral.toFixed(1)}/5). Estás en el camino correcto, pero hay espacio para mejorar. Enfócate en ${criterioMasBajo.key === 'precio' ? 'comunicar mejor el valor de tus productos' : criterioMasBajo.key === 'calidad' ? 'mantener la consistencia en la calidad' : criterioMasBajo.key === 'servicio' ? 'ser más proactivo en la atención' : 'optimizar tus procesos de entrega'}.`
+              });
+            }
+            
+            // Rango 4.0-4.3: Bueno
+            else if (calGeneral >= 4.0 && calGeneral < 4.3) {
+              consejos.push({
+                icon: "thumbs-up",
+                color: "#2A9D8F",
+                text: `Tienes buenas calificaciones (${calGeneral.toFixed(1)}/5). Sigue manteniendo la calidad y considera pequeñas mejoras para llegar al siguiente nivel.`
+              });
+            }
+            
+            // Rango 4.3-4.7: Muy bueno
+            else if (calGeneral >= 4.3 && calGeneral < 4.7) {
+              consejos.push({
+                icon: "star",
+                color: "#4CAF50",
+                text: `¡Excelente trabajo! Tu calificación es muy buena (${calGeneral.toFixed(1)}/5). Mantén este nivel y considera usar tus fortalezas en marketing.`
+              });
+              
+              // Destacar fortaleza específica si es notablemente alta
+              if (criterioMasAlto.promedio >= 4.5 && criterioMasAlto.promedio > calGeneral + 0.3) {
+                consejos.push({
+                  icon: "trophy",
+                  color: "#FFD700",
+                  text: `Tu punto fuerte es ${criterioMasAlto.key === 'precio' ? 'los precios competitivos' : criterioMasAlto.key === 'calidad' ? 'la calidad excepcional' : criterioMasAlto.key === 'servicio' ? 'el servicio al cliente' : 'la puntualidad en entregas'} (${criterioMasAlto.promedio.toFixed(1)}/5). Úsalo como diferenciador.`
+                });
+              }
+            }
+            
+            // Rango 4.7-5.0: Excepcional
+            else if (calGeneral >= 4.7) {
+              consejos.push({
+                icon: "star",
+                color: "#FFD700",
+                text: `¡Felicitaciones! Tienes calificaciones excepcionales (${calGeneral.toFixed(1)}/5). Eres un ejemplo a seguir. Considera pedir a tus clientes satisfechos que te recomienden.`
+              });
+            }
+            
+            // Destacar debilidad específica si es notablemente baja
+            if (criterioMasBajo.promedio < calGeneral - 0.5 && criterioMasBajo.promedio < 4.0) {
+              consejos.push({
+                icon: "exclamation-circle",
+                color: "#E76F51",
+                text: `Atención especial: Tu ${criterioMasBajo.key === 'precio' ? 'precio' : criterioMasBajo.key === 'calidad' ? 'calidad' : criterioMasBajo.key === 'servicio' ? 'servicio al cliente' : 'tiempo de entrega'} está por debajo del promedio (${criterioMasBajo.promedio.toFixed(1)}/5). Enfócate en mejorar este aspecto específico.`
+              });
+            }
+            
+            return consejos.map((consejo, index) => (
+              <View key={index} style={styles.tipCard}>
+                <FontAwesome name={consejo.icon} size={20} color={consejo.color} style={styles.tipIcon} />
+                <Text style={styles.tipText}>{consejo.text}</Text>
+              </View>
+            ));
+          })()}
         </View>
       </ScrollView>
     </View>
@@ -367,9 +672,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FAFAF9",
     paddingHorizontal: 20,
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   scrollContent: {
-    paddingBottom: 30,
+    paddingBottom: 150, // Espacio para la barra inferior + margen extra
   },
   sectionTitle: {
     fontSize: 18,
@@ -482,6 +788,134 @@ const styles = StyleSheet.create({
   tipText: {
     flex: 1,
     color: "#555",
+  },
+  // Estilos para la sección de pedidos
+  pedidosContainer: {
+    marginBottom: 20,
+  },
+  pedidosGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 15,
+  },
+  pedidoCard: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 15,
+    marginHorizontal: 5,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  pedidoIcon: {
+    marginBottom: 8,
+  },
+  pedidoValue: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#2A9D8F",
+    marginBottom: 4,
+  },
+  pedidoLabel: {
+    fontSize: 12,
+    color: "#666",
+    textAlign: "center",
+  },
+  // Estilos para la sección de calificaciones
+  calificacionesContainer: {
+    marginBottom: 20,
+  },
+  calificacionGeneralCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  calificacionGeneralHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  calificacionGeneralTitulo: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  calificacionGeneralVotantes: {
+    fontSize: 14,
+    color: "#666",
+  },
+  calificacionGeneralContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  estrellasContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  calificacionGeneralNumero: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#2A9D8F",
+  },
+  criteriosContainer: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  criteriosTitulo: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 15,
+  },
+  criterioItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  criterioInfo: {
+    flex: 1,
+  },
+  criterioLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 2,
+  },
+  criterioVotantes: {
+    fontSize: 12,
+    color: "#666",
+  },
+  criterioCalificacion: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  criterioNumero: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#2A9D8F",
+    marginLeft: 8,
   },
 });
 

@@ -35,7 +35,7 @@ const LoginScreen = ({ navigation }) => {
             nombre: "Rodrigo Alonso Carvallo González ",
             correo: "rodrigocarvallog@gmail.com",
             telefono: "+56994908047",
-            tipo_usuario: "admin",
+            tipo_usuario: "emprendedor",
             estado_cuenta: "activa",
             recovery_code: "895920",
             recovery_expiration: "2025-05-14T01:45:08.000Z",
@@ -56,7 +56,7 @@ const LoginScreen = ({ navigation }) => {
       await AsyncStorage.setItem("token", jsonUser.token);
       await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
       console.log("✅ Login exitoso - sesionActiva marcada como true");
-      navigation.navigate("HomeDrawer");
+      navigation.navigate("Home");
     }else{
       try {
         const response = await fetch("http://192.168.18.58:3000/api/auth/login", {
@@ -70,7 +70,7 @@ const LoginScreen = ({ navigation }) => {
           await AsyncStorage.setItem("token", data.token);
           await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
           console.log("✅ Login exitoso (API) - sesionActiva marcada como true");
-          navigation.navigate("HomeDrawer");
+          navigation.navigate("Home");
         } else {
           Alert.alert("Error", data.mensaje || "Credenciales incorrectas");
         }

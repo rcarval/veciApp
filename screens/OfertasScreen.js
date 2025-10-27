@@ -723,39 +723,6 @@ const getIconForCategory = (categoria) => {
 </View>
         </ScrollView>
       </View>
-      <LinearGradient  colors={['#2A9D8F', '#1D7874']} style={styles.tabBar}>
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="home" size={24} color="white" />
-          <Text style={styles.tabText}>Inicio</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          //onPress={() => navigation.navigate('Ofertas')}
-        >
-          <Ionicons name="pricetag" size={24} color="#0b5b52" />
-          <Text style={styles.tabText}>Ofertas</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Favoritos')}
-        >
-          <Ionicons name="heart" size={24} color="white" />
-          <Text style={styles.tabText}>Favoritos</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => navigation.replace('Perfil')}
-        >
-          <Ionicons name="person" size={24} color="white" />
-          <Text style={styles.tabText}>Perfil</Text>
-        </TouchableOpacity>
-      </LinearGradient>
     </View>
   );
 };
@@ -770,6 +737,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAF9",
     paddingHorizontal: 10,
     paddingTop: 10,
+    paddingBottom: 130, // Espacio para la barra inferior
   },
   headerGradient: {
     paddingTop: 50,
@@ -1135,27 +1103,6 @@ const styles = StyleSheet.create({
     color: "#333",
     textAlign: "center",
     marginTop: 5,
-  },
-  tabBar: {
-    flexDirection: "row",
-    height: 120,
-    width: "100%",
-    marginBottom: 0,
-    borderTopLeftRadius: 40,
-    borderTopRightRadius: 40,
-    borderTopColor: "#e1e1e1",
-    backgroundColor: "#2A9D8F",
-  },
-  tabItem: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingBottom: 40
-  },
-  tabText: {
-    fontSize: 12,
-    marginTop: 4,
-    color: "white",
   },
   // Agrega estos estilos al final de tu StyleSheet
   seccionProductos: {
