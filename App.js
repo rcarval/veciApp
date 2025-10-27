@@ -28,6 +28,8 @@ import ProductosEmprendimientoScreen from "./screens/ProductosEmprendimientoScre
 import MisEstadisticasScreen from "./screens/MisEstadisticasScreen";
 import MisDireccionesScreen from "./screens/MisDireccionesScreen";
 import MisPedidosScreen from "./screens/MisPedidosScreen";
+import PedidosRecibidosScreen from "./screens/PedidosRecibidosScreen";
+import PlanScreen from "./screens/PlanScreen";
 import PedidoPopup from "./components/PedidoPopup";
 
 const Stack = createStackNavigator();
@@ -332,6 +334,15 @@ function AppNavigator({ usuario }) {
                   cardStyleInterpolator: forFade,
                 }}
               />
+              <Stack.Screen
+                name="PedidosRecibidos"
+                component={PedidosRecibidosScreen}
+                options={{
+                  title: "Pedidos Recibidos",
+                  headerShown: false,
+                  cardStyleInterpolator: forFade,
+                }}
+              />
                       <Stack.Screen
           name="Perfil"
           options={{
@@ -381,6 +392,18 @@ function AppNavigator({ usuario }) {
                 component={MisPedidosScreen}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
+        <Stack.Screen
+          name="PlanScreen"
+          component={PlanScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ headerShown: false, cardStyleInterpolator: forFade }}
+        />
+        <Stack.Screen
+          name="PedidosRecibidos"
+          component={PedidosRecibidosScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ headerShown: false, cardStyleInterpolator: forFade }}
+        />
               </Stack.Navigator>
           )}
         </Stack.Screen>

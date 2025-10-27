@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   View, 
   Text, 
@@ -6,24 +6,128 @@ import {
   TouchableOpacity, 
   StyleSheet, 
   ScrollView,
-  Image 
+  Image,
+  Alert 
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
+import * as ImagePicker from "expo-image-picker";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PerfilScreen = () => {
   const route = useRoute();
   const navigation = useNavigation();
   const usuario = route.params?.usuario ?? {};
+  const [imagenPerfil, setImagenPerfil] = useState(null);
+
+  // Cargar imagen del perfil al iniciar
+  useEffect(() => {
+    cargarImagenPerfil();
+  }, []);
+
+  const cargarImagenPerfil = async () => {
+    try {
+      const imagenGuardada = await AsyncStorage.getItem('imagenPerfil');
+      if (imagenGuardada) {
+        setImagenPerfil(imagenGuardada);
+      }
+    } catch (error) {
+      console.log('Error al cargar imagen del perfil:', error);
+    }
+  };
+
+  const guardarImagenPerfil = async (uri) => {
+    try {
+      await AsyncStorage.setItem('imagenPerfil', uri);
+      setImagenPerfil(uri);
+    } catch (error) {
+      console.log('Error al guardar imagen del perfil:', error);
+    }
+  };
+
+  const seleccionarImagenPerfil = async () => {
+    try {
+      // Solicitar permisos
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permisos requeridos',
+          'Necesitamos acceso a tus fotos para cambiar la imagen del perfil.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+
+      // Mostrar opciones
+      Alert.alert(
+        'Cambiar foto de perfil',
+        '¿Cómo quieres cambiar tu foto?',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { text: 'Tomar foto', onPress: () => abrirCamara() },
+          { text: 'Elegir de galería', onPress: () => abrirGaleria() },
+        ]
+      );
+    } catch (error) {
+      console.log('Error al seleccionar imagen:', error);
+      Alert.alert('Error', 'No se pudo acceder a las imágenes');
+    }
+  };
+
+  const abrirCamara = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      
+      if (status !== 'granted') {
+        Alert.alert('Permisos requeridos', 'Necesitamos acceso a la cámara para tomar una foto.');
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await guardarImagenPerfil(result.assets[0].uri);
+        Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
+      }
+    } catch (error) {
+      console.log('Error al tomar foto:', error);
+      Alert.alert('Error', 'No se pudo tomar la foto');
+    }
+  };
+
+  const abrirGaleria = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await guardarImagenPerfil(result.assets[0].uri);
+        Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
+      }
+    } catch (error) {
+      console.log('Error al seleccionar imagen:', error);
+      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+    }
+  };
 
   const opciones = [
     { nombre: "Información Personal", icono: "user-circle", screen: "InformacionPersonal" },
     { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones" },
     { nombre: "Mis Pedidos", icono: "shopping-bag", screen: "MisPedidos" },
     { nombre: "Mis Emprendimientos", icono: "briefcase", screen: "Emprendimiento", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
-    { nombre: "Solicitudes", icono: "list-alt", screen: "VitrinaScreen", mostrar: usuario.tipo_usuario === "admin" },
+    { nombre: "Pedidos Recibidos", icono: "shopping-cart", screen: "PedidosRecibidos", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
     { nombre: "Mi Plan", icono: "star", screen: "PlanScreen" },
     { nombre: "Necesito Ayuda", icono: "question-circle", screen: "HelpScreen" },
   ].filter(op => op.mostrar !== false);
@@ -44,10 +148,19 @@ const PerfilScreen = () => {
         {/* Tarjeta de perfil */}
         <View style={styles.perfilCard}>
           <View style={styles.avatarContainer}>
-            <Image 
-              source={require('../assets/favicon.png')} 
-              style={styles.avatarImage}
-            />
+            <TouchableOpacity 
+              style={styles.avatarTouchable}
+              onPress={seleccionarImagenPerfil}
+              activeOpacity={0.8}
+            >
+              <Image 
+                source={imagenPerfil ? { uri: imagenPerfil } : require('../assets/favicon.png')} 
+                style={styles.avatarImage}
+              />
+              <View style={styles.cameraIconContainer}>
+                <Ionicons name="camera" size={16} color="white" />
+              </View>
+            </TouchableOpacity>
             <Text style={styles.nombreUsuario}>{usuario.nombre}</Text>
             <Text style={styles.tipoUsuario}>{usuario.tipo_usuario === "emprendedor" ? "Emprendedor" : "Cliente"}</Text>
             <Text style={styles.tipoPlan}>{usuario.plan_id?"Plan Premium":"Plan Básico"}</Text>
@@ -161,12 +274,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20,
   },
+  avatarTouchable: {
+    position: 'relative',
+  },
   avatarImage: {
     width: 100,
     height: 100,
     borderRadius: 50,
     borderWidth: 3,
     borderColor: '#2A9D8F',
+  },
+  cameraIconContainer: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: '#2A9D8F',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
   nombreUsuario: {
     fontSize: 22,

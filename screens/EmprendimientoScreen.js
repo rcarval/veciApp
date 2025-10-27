@@ -53,6 +53,16 @@ const EmprendimientoScreen = () => {
     []
   );
   
+  // Estados adicionales para validación con mapa
+  const [region, setRegion] = useState({
+    latitude: -33.4489,
+    longitude: -70.6693,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
+  const [direccionValidada, setDireccionValidada] = useState(null);
+  const [buscandoDireccion, setBuscandoDireccion] = useState(false);
+  
   // Definición de categorías y subcategorías
   const categorias = [
     {
@@ -583,79 +593,29 @@ const EmprendimientoScreen = () => {
     cargarEmprendimientos();
   }, []);
 
-  const openMapPicker = () => {
-    // Si estamos editando y ya hay una ubicación, usamos esa
-    if (isEditing && currentEmprendimiento?.ubicacion) {
-      setSelectedLocation(currentEmprendimiento.ubicacion);
-      setCurrentAddress(currentEmprendimiento.direccion);
-    }
-    setMapModalVisible(true);
-  };
-
-  // Función para manejar el press en el mapa
-  const handleMapPress = async (e) => {
-    const { latitude, longitude } = e.nativeEvent.coordinate;
-    setSelectedLocation({ latitude, longitude });
-
-    try {
-      const addressResponse = await Location.reverseGeocodeAsync({
-        latitude,
-        longitude,
-      });
-
-      if (addressResponse.length > 0) {
-        const address = addressResponse[0];
-        const formattedAddress = [
-          address.street,
-          address.streetNumber,
-          address.subregion,
-          address.city,
-        ]
-          .filter(Boolean)
-          .join(", ");
-
-        setCurrentAddress(formattedAddress);
-
-        // Actualizar comuna si coincide
-        const comunaEncontrada = comunas.find(
-          (c) => c.nombre.toLowerCase() === address.subregion?.toLowerCase()
-        );
-
-        if (comunaEncontrada) {
-          setComuna(comunaEncontrada.id);
-        }
-      }
-    } catch (error) {
-      console.error("Error al obtener dirección:", error);
-      Alert.alert("Error", "No se pudo obtener la dirección de esta ubicación");
-    }
-  };
-
-  // Función para confirmar la ubicación seleccionada
-  const confirmLocation = () => {
-    if (selectedLocation && currentAddress) {
-      setDireccion(currentAddress);
-      setMapModalVisible(false);
-    } else {
-      Alert.alert("Error", "Por favor selecciona una ubicación en el mapa");
-    }
-  };
 
   // Modificar el campo de dirección en el modal:
   const renderAddressField = () => (
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>Dirección*</Text>
-      <View style={styles.inputGroup}>
-        <TouchableOpacity
-          style={styles.inputField}
-          onPress={() => setMapModalVisible(true)}
-        >
-          <Text style={{ color: direccion ? "#000" : "#888" }}>
+      <TouchableOpacity
+        style={styles.direccionButton}
+        onPress={openMapPicker}
+      >
+        <View style={styles.direccionButtonContent}>
+          <Ionicons name="map" size={20} color="#2A9D8F" />
+          <Text style={[styles.direccionButtonText, direccion && styles.direccionButtonTextFilled]}>
             {direccion || "Selecciona en el mapa"}
           </Text>
-        </TouchableOpacity>
-      </View>
-
+          <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
+        </View>
+      </TouchableOpacity>
+      {direccionValidada && (
+        <View style={styles.validacionContainer}>
+          <Ionicons name="checkmark-circle" size={16} color="#27ae60" />
+          <Text style={styles.validacionText}>Dirección validada</Text>
+        </View>
+      )}
       {validandoDireccion && (
         <View style={styles.validandoContainer}>
           <ActivityIndicator size="small" color="#2A9D8F" />
@@ -665,7 +625,7 @@ const EmprendimientoScreen = () => {
     </View>
   );
 
-  // Modal del mapa
+  // Modal del mapa mejorado
   const renderMapModal = () => (
     <Modal
       animationType="slide"
@@ -677,7 +637,7 @@ const EmprendimientoScreen = () => {
         {/* Encabezado */}
         <LinearGradient
           colors={["#2A9D8F", "#1D7874"]}
-          style={styles.mapHeader}
+          style={styles.mapModalHeader}
         >
           <TouchableOpacity
             style={styles.mapBackButton}
@@ -685,104 +645,77 @@ const EmprendimientoScreen = () => {
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.mapTitle}>Seleccionar ubicación</Text>
+          <Text style={styles.mapModalTitle}>Seleccionar ubicación</Text>
         </LinearGradient>
 
         {/* Contenedor principal del mapa */}
-        <View style={styles.mapMainContainer}>
-          {/* Barra de búsqueda */}
-          <View style={styles.searchContainer}>
-            <View style={styles.searchInputContainer}>
-              <Ionicons
-                name="search"
-                size={20}
-                color="#888"
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Buscar dirección..."
-                placeholderTextColor="#888"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                onSubmitEditing={buscarDireccion}
-                returnKeyType="search"
-              />
-              {searchQuery ? (
-                <TouchableOpacity
-                  style={styles.clearButton}
-                  onPress={() => setSearchQuery("")}
-                >
-                  <Ionicons name="close-circle" size={20} color="#888" />
-                </TouchableOpacity>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              style={styles.searchActionButton}
-              onPress={buscarDireccion}
-              disabled={isSearching}
-            >
-              {isSearching ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text style={styles.searchButtonText}>Buscar</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Mapa */}
+        <View style={styles.mapContainer}>
           <MapView
             style={styles.map}
-            region={userLocation}
+            region={region}
             onPress={handleMapPress}
             showsUserLocation={true}
-            showsMyLocationButton={false}
-            customMapStyle={mapStyle}
+            showsMyLocationButton={true}
           >
             {selectedLocation && (
-              <Marker coordinate={selectedLocation}>
+              <Marker
+                coordinate={selectedLocation}
+                title="Ubicación seleccionada"
+              >
                 <View style={styles.customMarker}>
-                  <View style={styles.markerPin} />
+                  <Ionicons name="location" size={30} color="#2A9D8F" />
                 </View>
               </Marker>
             )}
           </MapView>
 
-          {/* Botón de ubicación actual */}
-          <TouchableOpacity
-            style={styles.myLocationButton}
-            onPress={getCurrentLocation}
-          >
-            <Ionicons name="locate" size={20} color="#2A9D8F" />
-          </TouchableOpacity>
-        </View>
+          <View style={styles.mapBottomPanel}>
+            <View style={styles.locationInfo}>
+              <Ionicons name="location" size={18} color="#2A9D8F" />
+              <Text style={styles.locationLabel}>Dirección:</Text>
+            </View>
+            <View style={styles.searchContainer}>
+              <TextInput
+                style={styles.addressInput}
+                value={currentAddress}
+                onChangeText={setCurrentAddress}
+                placeholder="Escribe una dirección o selecciona en el mapa"
+                multiline={true}
+                numberOfLines={2}
+              />
+              <TouchableOpacity
+                style={[styles.searchButton, buscandoDireccion && styles.searchButtonDisabled]}
+                onPress={() => buscarDireccionEnMapa(currentAddress)}
+                disabled={buscandoDireccion}
+              >
+                {buscandoDireccion ? (
+                  <Ionicons name="hourglass" size={20} color="#bdc3c7" />
+                ) : (
+                  <Ionicons name="search" size={20} color="#2A9D8F" />
+                )}
+              </TouchableOpacity>
+            </View>
 
-        {/* Panel inferior */}
-        <View style={styles.mapFooter}>
-          <View style={styles.locationInfo}>
-            <Ionicons name="location" size={18} color="#2A9D8F" />
-            <Text style={styles.locationText} numberOfLines={2}>
-              {currentAddress || "Selecciona una ubicación en el mapa"}
-            </Text>
-          </View>
-
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.cancelActionButton}
-              onPress={() => setMapModalVisible(false)}
-            >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.confirmActionButton,
-                !selectedLocation && styles.disabledButton,
-              ]}
-              onPress={confirmLocation}
-              disabled={!selectedLocation}
-            >
-              <Text style={styles.confirmButtonText}>Seleccionar</Text>
-            </TouchableOpacity>
+            <View style={styles.mapActions}>
+              <TouchableOpacity
+                style={styles.cancelMapButton}
+                onPress={() => setMapModalVisible(false)}
+              >
+                <Text style={styles.cancelMapButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.confirmMapButton, validandoDireccion && styles.disabledButton]}
+                onPress={confirmMapLocation}
+                disabled={validandoDireccion}
+              >
+                {validandoDireccion ? (
+                  <Text style={styles.confirmMapButtonText}>Validando...</Text>
+                ) : (
+                  <Text style={styles.confirmMapButtonText}>Confirmar</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </View>
@@ -831,6 +764,186 @@ const EmprendimientoScreen = () => {
       Alert.alert("Error", "No se pudo completar la búsqueda");
     } finally {
       setIsSearching(false);
+    }
+  };
+
+  // Función para abrir el mapa (nueva función mejorada)
+  const openMapPicker = async () => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Error', 'Se necesitan permisos de ubicación para usar el mapa');
+        return;
+      }
+
+      // Obtener ubicación actual
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const newRegion = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+        latitudeDelta: 0.005, // Zoom más cercano
+        longitudeDelta: 0.005,
+      };
+
+      setRegion(newRegion);
+      setSelectedLocation({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      // Obtener dirección actual
+      const addressResponse = await Location.reverseGeocodeAsync({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+
+      if (addressResponse.length > 0) {
+        const address = addressResponse[0];
+        setCurrentAddress(`${address.street || ''} ${address.streetNumber || ''}, ${address.city || ''}`.trim());
+      }
+
+      setMapModalVisible(true);
+    } catch (error) {
+      console.log('Error al obtener ubicación:', error);
+      Alert.alert('Error', 'No se pudo obtener la ubicación actual');
+    }
+  };
+
+  // Función para manejar el press en el mapa (nueva función mejorada)
+  const handleMapPress = async (e) => {
+    const { latitude, longitude } = e.nativeEvent.coordinate;
+    setSelectedLocation({ latitude, longitude });
+
+    try {
+      const addressResponse = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      if (addressResponse.length > 0) {
+        const address = addressResponse[0];
+        const fullAddress = `${address.street || ''} ${address.streetNumber || ''}, ${address.city || ''}`.trim();
+        setCurrentAddress(fullAddress);
+      }
+    } catch (error) {
+      console.log('Error al obtener dirección:', error);
+    }
+  };
+
+  // Función para confirmar la ubicación del mapa (nueva función mejorada)
+  const confirmMapLocation = async () => {
+    if (!selectedLocation) {
+      Alert.alert("Error", "Por favor selecciona una ubicación en el mapa");
+      return;
+    }
+
+    setValidandoDireccion(true);
+    try {
+      // Validar dirección con Google Maps
+      const validationResult = await validarDireccionConGoogle(currentAddress, selectedLocation);
+      
+      if (validationResult.exacta) {
+        setDireccionValidada(validationResult);
+        setDireccion(validationResult.direccion);
+        setMapModalVisible(false);
+        Alert.alert("Éxito", "Dirección validada correctamente");
+      } else {
+        Alert.alert("Error", "La dirección no es lo suficientemente precisa. Por favor selecciona un punto más específico.");
+      }
+    } catch (error) {
+      console.log('Error al validar dirección:', error);
+      Alert.alert("Error", "No se pudo validar la dirección");
+    } finally {
+      setValidandoDireccion(false);
+    }
+  };
+
+  // Función para buscar dirección y mover el mapa (nueva función mejorada)
+  const buscarDireccionEnMapa = async (direccion) => {
+    if (!direccion.trim()) return;
+
+    setBuscandoDireccion(true);
+    try {
+      const API_KEY = "AIzaSyC7UNb-61Xv8cAd_020VrzG7ccvXpTrJg4";
+      const encodedAddress = encodeURIComponent(direccion.trim());
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${API_KEY}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === "OK" && data.results.length > 0) {
+        const resultado = data.results[0];
+        const location = resultado.geometry.location;
+        
+        const newRegion = {
+          latitude: location.lat,
+          longitude: location.lng,
+          latitudeDelta: 0.005, // Zoom más cercano
+          longitudeDelta: 0.005,
+        };
+
+        setRegion(newRegion);
+        setSelectedLocation({
+          latitude: location.lat,
+          longitude: location.lng,
+        });
+
+        // Actualizar la dirección mostrada con el formato completo
+        setCurrentAddress(resultado.formatted_address);
+      } else {
+        Alert.alert("Error", "No se encontró la dirección especificada");
+      }
+    } catch (error) {
+      console.log('Error al buscar dirección:', error);
+      Alert.alert("Error", "No se pudo buscar la dirección");
+    } finally {
+      setBuscandoDireccion(false);
+    }
+  };
+
+  // Función para validar dirección con Google Maps (nueva función mejorada)
+  const validarDireccionConGoogle = async (direccion, coordenadas) => {
+    try {
+      const API_KEY = "AIzaSyC7UNb-61Xv8cAd_020VrzG7ccvXpTrJg4";
+      const encodedAddress = encodeURIComponent(direccion);
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodedAddress}&key=${API_KEY}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (data.status === "OK" && data.results.length > 0) {
+        const resultado = data.results[0];
+        
+        // Validar precisión (ROOFTOP = máxima precisión)
+        if (resultado.geometry.location_type !== "ROOFTOP") {
+          return { exacta: false };
+        }
+
+        // Verificar que las coordenadas coincidan aproximadamente
+        const googleLat = resultado.geometry.location.lat;
+        const googleLng = resultado.geometry.location.lng;
+        const distancia = Math.sqrt(
+          Math.pow(googleLat - coordenadas.latitude, 2) + 
+          Math.pow(googleLng - coordenadas.longitude, 2)
+        );
+
+        // Si la distancia es menor a 0.001 grados (aproximadamente 100 metros)
+        if (distancia < 0.001) {
+          return {
+            exacta: true,
+            direccion: resultado.formatted_address,
+            coordenadas: resultado.geometry.location,
+          };
+        }
+      }
+
+      return { exacta: false };
+    } catch (error) {
+      console.log('Error en validación Google:', error);
+      return { exacta: false };
     }
   };
 
@@ -1233,6 +1346,11 @@ const EmprendimientoScreen = () => {
       delivery: false,
     });
     setCostoDelivery("");
+    // Limpiar estados del mapa
+    setDireccionValidada(null);
+    setCurrentAddress("");
+    setSelectedLocation(null);
+    setMapModalVisible(false);
   };
 
   const actualizarEstadoEmprendimiento = async (id, isActive) => {
@@ -3263,6 +3381,148 @@ const styles = StyleSheet.create({
   radioButtonText: {
     fontSize: 14,
     color: '#555',
+  },
+  // Estilos para el nuevo mapa mejorado
+  direccionButton: {
+    borderWidth: 1,
+    borderColor: "#bdc3c7",
+    borderRadius: 8,
+    backgroundColor: "#f8f9fa",
+    marginBottom: 8,
+  },
+  direccionButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+  },
+  direccionButtonText: {
+    flex: 1,
+    marginLeft: 10,
+    fontSize: 16,
+    color: "#888",
+  },
+  direccionButtonTextFilled: {
+    color: "#2c3e50",
+  },
+  validacionContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  validacionText: {
+    marginLeft: 5,
+    fontSize: 14,
+    color: "#27ae60",
+    fontWeight: "500",
+  },
+  mapModalContainer: {
+    flex: 1,
+    backgroundColor: "#fff",
+  },
+  mapModalHeader: {
+    paddingTop: 50,
+    paddingBottom: 15,
+    paddingHorizontal: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  mapModalTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "white",
+  },
+  mapContainer: {
+    flex: 1,
+  },
+  map: {
+    flex: 1,
+  },
+  customMarker: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  mapBottomPanel: {
+    backgroundColor: "white",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#f0f0f0",
+  },
+  locationInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  locationLabel: {
+    marginLeft: 10,
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2c3e50",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 15,
+  },
+  addressInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#bdc3c7",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: "#2c3e50",
+    backgroundColor: "#fff",
+    marginRight: 10,
+    textAlignVertical: "top",
+  },
+  searchButton: {
+    padding: 12,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2A9D8F",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchButtonDisabled: {
+    backgroundColor: "#ecf0f1",
+    borderColor: "#bdc3c7",
+  },
+  mapActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  cancelMapButton: {
+    backgroundColor: "#e0e0e0",
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 10,
+    alignItems: "center",
+  },
+  confirmMapButton: {
+    backgroundColor: "#2A9D8F",
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    alignItems: "center",
+  },
+  disabledButton: {
+    backgroundColor: "#bdc3c7",
+  },
+  cancelMapButtonText: {
+    color: "#333",
+    fontWeight: "bold",
+  },
+  confirmMapButtonText: {
+    color: "white",
+    fontWeight: "bold",
   },
 });
 
