@@ -12,13 +12,16 @@ import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
+  const route = useRoute();
   const [pedidos, setPedidos] = useState([]);
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
-  const [tabActivo, setTabActivo] = useState('pendientes');
+  const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
+  const [tabActivo, setTabActivo] = useState(route.params?.tabInicial || 'pendientes');
   const [modalCalificacionVisible, setModalCalificacionVisible] = useState(false);
   const [pedidoParaCalificar, setPedidoParaCalificar] = useState(null);
   const [calificacionesUsuario, setCalificacionesUsuario] = useState({
@@ -32,10 +35,24 @@ const MisPedidosScreen = () => {
     cargarPedidos();
   }, []);
 
+  // Recargar datos cuando la pantalla reciba el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 MisPedidosScreen recibió foco, recargando datos...');
+      cargarPedidos();
+    }, [])
+  );
+
   const cargarPedidos = async () => {
     try {
       const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
       const historialGuardado = await AsyncStorage.getItem('historialPedidos');
+      const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+      
+      console.log('🔍 DEBUG - Cargando pedidos:');
+      console.log('📦 Pedidos pendientes:', pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0);
+      console.log('📚 Historial:', historialGuardado ? JSON.parse(historialGuardado).length : 0);
+      console.log('❌ Rechazados pendientes:', pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
       
       if (pedidosGuardados) {
         const pedidosPend = JSON.parse(pedidosGuardados);
@@ -45,6 +62,12 @@ const MisPedidosScreen = () => {
       if (historialGuardado) {
         const pedidosHist = JSON.parse(historialGuardado);
         setPedidosCompletados(pedidosHist);
+      }
+      
+      if (pedidosRechazadosGuardados) {
+        const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
+        console.log('❌ DEBUG - Pedidos rechazados pendientes:', pedidosRechazados);
+        setPedidosRechazadosPendientes(pedidosRechazados);
       }
     } catch (error) {
       console.log('Error al cargar pedidos:', error);
@@ -57,6 +80,7 @@ const MisPedidosScreen = () => {
       case 'confirmado': return '#2196F3';
       case 'en_camino': return '#9C27B0';
       case 'entregado': return '#4CAF50';
+      case 'cerrado': return '#607D8B';
       case 'cancelado': return '#F44336';
       default: return '#757575';
     }
@@ -67,44 +91,27 @@ const MisPedidosScreen = () => {
       case 'pendiente': return 'clock-o';
       case 'confirmado': return 'check-circle';
       case 'en_camino': return 'truck';
-      case 'entregado': return 'check-circle';
+      case 'entregado': return 'gift';
+      case 'cerrado': return 'check-circle';
       case 'cancelado': return 'times-circle';
       default: return 'question-circle';
     }
   };
 
-  const cambiarEstadoPedido = async (pedidoId, nuevoEstado) => {
+  const marcarRecibido = async (pedidoId) => {
     try {
       const pedidosActualizados = pedidosPendientes.map(pedido => 
-        pedido.id === pedidoId ? { ...pedido, estado: nuevoEstado } : pedido
+        pedido.id === pedidoId ? { ...pedido, estado: 'cerrado' } : pedido
       );
       
-      setPedidosPendientes(pedidosActualizados);
-      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
-      
-      // Si se marca como entregado, mostrar modal de calificación
-      if (nuevoEstado === 'entregado') {
-        const pedidoCompletado = pedidosActualizados.find(p => p.id === pedidoId);
-        if (pedidoCompletado) {
-          setPedidoParaCalificar(pedidoCompletado);
-          setModalCalificacionVisible(true);
-          
-          // Mover a historial después de calificar
-          const historialActualizado = [...pedidosCompletados, pedidoCompletado];
-          setPedidosCompletados(historialActualizado);
-          await AsyncStorage.setItem('historialPedidos', JSON.stringify(historialActualizado));
-          
-          // Remover de pendientes
-          const pendientesActualizados = pedidosActualizados.filter(p => p.id !== pedidoId);
-          setPedidosPendientes(pendientesActualizados);
-          await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pendientesActualizados));
-        }
-      } else {
-        // Para otros estados, mostrar mensaje
-        Alert.alert('Estado actualizado', `El pedido ha sido marcado como ${nuevoEstado}`);
+      // Buscar el pedido a calificar (estado entregado)
+      const pedidoParaCalificarObj = pedidosPendientes.find(p => p.id === pedidoId);
+      if (pedidoParaCalificarObj && pedidoParaCalificarObj.estado === 'entregado') {
+        setPedidoParaCalificar(pedidoParaCalificarObj);
+        setModalCalificacionVisible(true);
       }
     } catch (error) {
-      console.log('Error al cambiar estado:', error);
+      console.log('Error al marcar recibido:', error);
     }
   };
 
@@ -202,6 +209,23 @@ const MisPedidosScreen = () => {
       // Guardar en AsyncStorage
       await AsyncStorage.setItem(`calificaciones_${pedidoParaCalificar.negocioId || '1'}`, JSON.stringify(nuevasCalificaciones));
       
+      // Mover el pedido a historial (pedido cerrado)
+      const pedidoCerrado = {
+        ...pedidoParaCalificar,
+        estado: 'cerrado',
+        fechaCalificacion: new Date().toISOString()
+      };
+      
+      // Agregar a completados
+      const historialActualizado = [...pedidosCompletados, pedidoCerrado];
+      setPedidosCompletados(historialActualizado);
+      await AsyncStorage.setItem('historialPedidos', JSON.stringify(historialActualizado));
+      
+      // Remover de pendientes
+      const pendientesActualizados = pedidosPendientes.filter(p => p.id !== pedidoParaCalificar.id);
+      setPedidosPendientes(pendientesActualizados);
+      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pendientesActualizados));
+      
       // Cerrar modal y resetear estados
       setModalCalificacionVisible(false);
       setPedidoParaCalificar(null);
@@ -228,12 +252,97 @@ const MisPedidosScreen = () => {
     }
   };
 
+  const confirmarRechazo = async (pedidoRechazado) => {
+    try {
+      // Mover pedido rechazado al historial del cliente
+      const pedidoConRechazo = { 
+        ...pedidoRechazado, 
+        estado: 'rechazado', 
+        fechaConfirmacionRechazo: new Date().toISOString() 
+      };
+      
+      // Remover de pedidos rechazados pendientes
+      const nuevosRechazadosPendientes = pedidosRechazadosPendientes.filter(p => p.id !== pedidoRechazado.id);
+      setPedidosRechazadosPendientes(nuevosRechazadosPendientes);
+      await AsyncStorage.setItem('pedidosRechazadosPendientes', JSON.stringify(nuevosRechazadosPendientes));
+      
+      // Agregar al historial del cliente (evitar duplicados)
+      const historialExistente = await AsyncStorage.getItem('historialPedidos');
+      const historial = historialExistente ? JSON.parse(historialExistente) : [];
+      
+      // Verificar que no esté ya en el historial
+      const yaExiste = historial.some(p => p.id === pedidoRechazado.id);
+      if (!yaExiste) {
+        historial.push(pedidoConRechazo);
+        await AsyncStorage.setItem('historialPedidos', JSON.stringify(historial));
+        setPedidosCompletados(historial);
+      }
+      
+      Alert.alert('Confirmado', 'Has confirmado el rechazo del pedido.');
+    } catch (error) {
+      console.log('Error al confirmar rechazo:', error);
+      Alert.alert('Error', 'No se pudo confirmar el rechazo.');
+    }
+  };
+
+  const renderPedidoRechazado = (pedido) => (
+    <View key={pedido.id} style={styles.pedidoCard}>
+      <View style={styles.pedidoHeader}>
+        <View style={styles.pedidoInfo}>
+          <Text style={styles.pedidoNegocio}>{pedido.negocio}</Text>
+          <Text style={styles.pedidoFecha}>
+            {pedido.fechaHoraReserva 
+              ? new Date(pedido.fechaHoraReserva).toLocaleDateString('es-CL') + ' ' + new Date(pedido.fechaHoraReserva).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+              : pedido.fecha
+            }
+          </Text>
+        </View>
+        <View style={[styles.estadoBadge, { backgroundColor: '#e74c3c' }]}>
+          <Text style={styles.estadoTexto}>Rechazado</Text>
+        </View>
+      </View>
+      
+      <View style={styles.pedidoDetalles}>
+        <Text style={styles.pedidoTotal}>Total: ${pedido.total.toLocaleString()}</Text>
+        <Text style={styles.motivoRechazo}>
+          <Text style={styles.motivoLabel}>Motivo: </Text>
+          {pedido.motivoRechazo}
+        </Text>
+        
+        {pedido.horaEntregaEstimada && (
+          <View style={styles.horaEntregaContainer}>
+            <FontAwesome name="clock-o" size={14} color="#27ae60" />
+            <Text style={styles.horaEntregaTexto}>
+              Entrega estimada: {new Date(pedido.horaEntregaEstimada).toLocaleTimeString('es-CL', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })} ({pedido.tiempoEntregaMinutos} min)
+            </Text>
+          </View>
+        )}
+      </View>
+      
+      <TouchableOpacity
+        style={styles.confirmarRechazoButton}
+        onPress={() => confirmarRechazo(pedido)}
+      >
+        <FontAwesome name="check" size={16} color="white" />
+        <Text style={styles.confirmarRechazoTexto}>Confirmar Rechazo</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
   const renderPedido = (pedido) => (
     <View key={pedido.id} style={styles.pedidoCard}>
       <View style={styles.pedidoHeader}>
         <View style={styles.pedidoInfo}>
           <Text style={styles.pedidoNegocio}>{pedido.negocio}</Text>
-          <Text style={styles.pedidoFecha}>{pedido.fecha}</Text>
+          <Text style={styles.pedidoFecha}>
+            {pedido.fechaHoraReserva 
+              ? new Date(pedido.fechaHoraReserva).toLocaleDateString('es-CL') + ' ' + new Date(pedido.fechaHoraReserva).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+              : pedido.fecha
+            }
+          </Text>
         </View>
         <View style={[styles.estadoBadge, { backgroundColor: obtenerEstadoColor(pedido.estado) }]}>
           <FontAwesome name={obtenerEstadoIcono(pedido.estado)} size={12} color="white" />
@@ -256,6 +365,18 @@ const MisPedidosScreen = () => {
             </Text>
           </View>
         )}
+
+        {pedido.estado === 'confirmado' && pedido.horaEntregaEstimada && (
+          <View style={styles.horaEntregaContainer}>
+            <FontAwesome name="clock-o" size={14} color="#27ae60" />
+            <Text style={styles.horaEntregaTexto}>
+              Entrega estimada: {new Date(pedido.horaEntregaEstimada).toLocaleTimeString('es-CL', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })} ({pedido.tiempoEntregaMinutos} min)
+            </Text>
+          </View>
+        )}
       </View>
       
       {pedido.productos && (
@@ -269,22 +390,14 @@ const MisPedidosScreen = () => {
         </View>
       )}
       
-      {tabActivo === 'pendientes' && pedido.estado !== 'entregado' && (
+      {tabActivo === 'pendientes' && pedido.estado === 'entregado' && (
         <View style={styles.accionesContainer}>
           <TouchableOpacity
             style={[styles.botonAccion, { backgroundColor: '#4CAF50' }]}
-            onPress={() => cambiarEstadoPedido(pedido.id, 'entregado')}
+            onPress={() => marcarRecibido(pedido.id)}
           >
             <FontAwesome name="check" size={16} color="white" />
             <Text style={styles.botonAccionTexto}>Marcar Recibido</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.botonAccion, { backgroundColor: '#F44336' }]}
-            onPress={() => cambiarEstadoPedido(pedido.id, 'cancelado')}
-          >
-            <FontAwesome name="times" size={16} color="white" />
-            <Text style={styles.botonAccionTexto}>Cancelar</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -380,6 +493,16 @@ const MisPedidosScreen = () => {
         </TouchableOpacity>
         
         <TouchableOpacity
+          style={[styles.tab, tabActivo === 'rechazados' && styles.tabActivo]}
+          onPress={() => setTabActivo('rechazados')}
+        >
+          <FontAwesome name="exclamation-triangle" size={16} color={tabActivo === 'rechazados' ? '#e74c3c' : '#666'} />
+          <Text style={[styles.tabTexto, tabActivo === 'rechazados' && styles.tabTextoActivo]}>
+            Rechazados ({pedidosRechazadosPendientes.length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
           style={[styles.tab, tabActivo === 'historial' && styles.tabActivo]}
           onPress={() => setTabActivo('historial')}
         >
@@ -391,6 +514,13 @@ const MisPedidosScreen = () => {
       </View>
 
       <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
+        {(() => {
+          console.log('🔍 DEBUG - Tab activo:', tabActivo);
+          console.log('🔍 DEBUG - pedidosRechazadosPendientes.length:', pedidosRechazadosPendientes.length);
+          console.log('🔍 DEBUG - pedidosCompletados.length:', pedidosCompletados.length);
+          return null;
+        })()}
+        
         {tabActivo === 'pendientes' ? (
           pedidosPendientes.length > 0 ? (
             pedidosPendientes.map(renderPedido)
@@ -398,6 +528,19 @@ const MisPedidosScreen = () => {
             <View style={styles.emptyState}>
               <FontAwesome name="shopping-cart" size={48} color="#ccc" />
               <Text style={styles.emptyStateTexto}>No tienes pedidos pendientes</Text>
+            </View>
+          )
+        ) : tabActivo === 'rechazados' ? (
+          pedidosRechazadosPendientes.length > 0 ? (
+            (() => {
+              console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosRechazadosPendientes.length, 'pedidos');
+              console.log('❌ DEBUG - Datos:', pedidosRechazadosPendientes);
+              return pedidosRechazadosPendientes.map(renderPedidoRechazado);
+            })()
+          ) : (
+            <View style={styles.emptyState}>
+              <FontAwesome name="check-circle" size={48} color="#27ae60" />
+              <Text style={styles.emptyStateTexto}>No tienes pedidos rechazados pendientes</Text>
             </View>
           )
         ) : (
@@ -556,6 +699,22 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
+  horaEntregaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    backgroundColor: '#E8F5E8',
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  horaEntregaTexto: {
+    fontSize: 12,
+    color: '#27ae60',
+    fontWeight: '600',
+    marginLeft: 6,
+  },
   productosContainer: {
     marginBottom: 12,
   },
@@ -705,6 +864,33 @@ const styles = StyleSheet.create({
   estrellaInteractiva: {
     marginHorizontal: 4,
     padding: 4,
+  },
+  // Estilos para pedidos rechazados
+  motivoRechazo: {
+    fontSize: 14,
+    color: '#e74c3c',
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  motivoLabel: {
+    fontWeight: 'bold',
+    color: '#c0392b',
+  },
+  confirmarRechazoButton: {
+    backgroundColor: '#27ae60',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    gap: 8,
+  },
+  confirmarRechazoTexto: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 

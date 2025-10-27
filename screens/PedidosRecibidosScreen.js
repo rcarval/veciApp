@@ -8,6 +8,7 @@ import {
   Alert,
   Modal,
   ActivityIndicator,
+  TextInput,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -15,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
+import { Picker } from '@react-native-picker/picker';
 
 const PedidosRecibidosScreen = () => {
   const navigation = useNavigation();
@@ -29,6 +31,24 @@ const PedidosRecibidosScreen = () => {
   const [mapaVisible, setMapaVisible] = useState(false);
   const [coordenadasDireccion, setCoordenadasDireccion] = useState(null);
   const [cargandoMapa, setCargandoMapa] = useState(false);
+  const [modalRechazoVisible, setModalRechazoVisible] = useState(false);
+  const [pedidoParaRechazar, setPedidoParaRechazar] = useState(null);
+  const [motivoRechazo, setMotivoRechazo] = useState('');
+  const [modalTiempoEntregaVisible, setModalTiempoEntregaVisible] = useState(false);
+  const [pedidoParaConfirmar, setPedidoParaConfirmar] = useState(null);
+  const [tiempoEntrega, setTiempoEntrega] = useState(30); // Valor por defecto: 30 minutos
+
+  // Opciones de tiempo de entrega
+  const opcionesTiempo = [
+    { label: '15 minutos', value: 15 },
+    { label: '30 minutos', value: 30 },
+    { label: '45 minutos', value: 45 },
+    { label: '1:00 hora', value: 60 },
+    { label: '1:15 horas', value: 75 },
+    { label: '1:30 horas', value: 90 },
+    { label: '1:45 horas', value: 105 },
+    { label: '2:00 horas', value: 120 },
+  ];
 
   useEffect(() => {
     cargarPedidosRecibidos();
@@ -127,8 +147,9 @@ const PedidosRecibidosScreen = () => {
         // Simulamos que estos son pedidos recibidos por el emprendedor
         const pedidosConEstados = pedidos.map(pedido => {
           const datosCliente = generarDatosCliente();
-          const fechaHoraReserva = new Date();
-          fechaHoraReserva.setHours(fechaHoraReserva.getHours() - Math.floor(Math.random() * 48)); // Últimas 48 horas
+          
+          // Usar la fechaHoraReserva original del pedido (ahora siempre existe)
+          const fechaHoraReserva = pedido.fechaHoraReserva ? new Date(pedido.fechaHoraReserva) : new Date();
           
           return {
             ...pedido,
@@ -158,7 +179,11 @@ const PedidosRecibidosScreen = () => {
           return {
             ...pedido,
             estado: nuevoEstado,
-            fechaActualizacion: new Date().toLocaleDateString('es-CL')
+            fechaActualizacion: new Date().toLocaleDateString('es-CL', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit'
+            })
           };
         }
         return pedido;
@@ -180,6 +205,13 @@ const PedidosRecibidosScreen = () => {
   };
 
   const confirmarCambioEstado = (pedido, nuevoEstado) => {
+    if (nuevoEstado === 'confirmado') {
+      // Abrir modal para ingresar tiempo de entrega
+      setPedidoParaConfirmar(pedido);
+      setModalTiempoEntregaVisible(true);
+      return;
+    }
+    
     const mensaje = nuevoEstado === 'entregado' 
       ? "¿Confirmas que el pedido ha sido entregado al cliente?"
       : `¿Cambiar el estado del pedido a "${getEstadoTexto(nuevoEstado)}"?`;
@@ -197,6 +229,45 @@ const PedidosRecibidosScreen = () => {
     );
   };
 
+  const confirmarTiempoEntrega = async () => {
+    if (!pedidoParaConfirmar) return;
+
+    try {
+      const tiempoEnMinutos = tiempoEntrega;
+      const fechaActual = new Date();
+      const horaEntregaEstimada = new Date(fechaActual.getTime() + (tiempoEnMinutos * 60000));
+      
+      const pedidoActualizado = {
+        ...pedidoParaConfirmar,
+        estado: 'confirmado',
+        tiempoEntregaMinutos: tiempoEnMinutos,
+        horaEntregaEstimada: horaEntregaEstimada.toISOString(),
+        fechaConfirmacion: fechaActual.toISOString()
+      };
+
+      const pedidosActualizados = pedidosRecibidos.map(p => 
+        p.id === pedidoParaConfirmar.id ? pedidoActualizado : p
+      );
+      
+      setPedidosRecibidos(pedidosActualizados);
+      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
+      
+      setModalTiempoEntregaVisible(false);
+      setPedidoParaConfirmar(null);
+      setTiempoEntrega(30); // Resetear al valor por defecto
+      
+      const tiempoSeleccionado = opcionesTiempo.find(op => op.value === tiempoEnMinutos)?.label || `${tiempoEnMinutos} minutos`;
+      
+      Alert.alert(
+        'Pedido confirmado', 
+        `Pedido confirmado exitosamente.\nTiempo estimado: ${tiempoSeleccionado}\nHora estimada: ${horaEntregaEstimada.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
+      );
+    } catch (error) {
+      console.log('Error al confirmar tiempo de entrega:', error);
+      Alert.alert('Error', 'No se pudo confirmar el pedido.');
+    }
+  };
+
   const getEstadoTexto = (estado) => {
     const estados = {
       'pendiente': 'Pendiente',
@@ -204,7 +275,8 @@ const PedidosRecibidosScreen = () => {
       'preparando': 'En Preparación',
       'listo': 'Listo para Entrega',
       'entregado': 'Entregado',
-      'cancelado': 'Cancelado'
+      'cancelado': 'Cancelado',
+      'rechazado': 'Rechazado'
     };
     return estados[estado] || estado;
   };
@@ -216,9 +288,63 @@ const PedidosRecibidosScreen = () => {
       'preparando': '#9b59b6',
       'listo': '#2ecc71',
       'entregado': '#27ae60',
-      'cancelado': '#e74c3c'
+      'cancelado': '#e74c3c',
+      'rechazado': '#e74c3c'
     };
     return colores[estado] || '#95a5a6';
+  };
+
+  const abrirModalRechazo = (pedido) => {
+    setPedidoParaRechazar(pedido);
+    setModalRechazoVisible(true);
+  };
+
+  const confirmarRechazo = async () => {
+    if (!motivoRechazo.trim()) {
+      Alert.alert('Motivo requerido', 'Por favor indica un motivo para rechazar el pedido.');
+      return;
+    }
+
+    if (!pedidoParaRechazar) return;
+
+    try {
+      const pedidoRechazado = { 
+        ...pedidoParaRechazar, 
+        estado: 'rechazado', 
+        motivoRechazo, 
+        fechaRechazo: new Date().toISOString() 
+      };
+
+      const pedidosActualizados = pedidosRecibidos.map(p => 
+        p.id === pedidoParaRechazar.id ? pedidoRechazado : p
+      );
+      
+      setPedidosRecibidos(pedidosActualizados);
+      
+      // Guardar pedidos pendientes (sin los rechazados)
+      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados.filter(p => p.estado !== 'rechazado')));
+      
+      // Guardar pedido rechazado en historial del emprendedor
+      const historialExistente = await AsyncStorage.getItem('historialPedidosRecibidos');
+      const historial = historialExistente ? JSON.parse(historialExistente) : [];
+      historial.push(pedidoRechazado);
+      await AsyncStorage.setItem('historialPedidosRecibidos', JSON.stringify(historial));
+      
+      // Notificar al cliente: guardar en pedidos rechazados pendientes de confirmación
+      const pedidosRechazadosPendientes = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+      const rechazadosPendientes = pedidosRechazadosPendientes ? JSON.parse(pedidosRechazadosPendientes) : [];
+      rechazadosPendientes.push(pedidoRechazado);
+      await AsyncStorage.setItem('pedidosRechazadosPendientes', JSON.stringify(rechazadosPendientes));
+      
+      setModalRechazoVisible(false);
+      setPedidoParaRechazar(null);
+      setMotivoRechazo('');
+      
+      Alert.alert('Pedido rechazado', 'El pedido ha sido rechazado exitosamente.');
+    } catch (error) {
+      console.log('Error al rechazar pedido:', error);
+      Alert.alert('Error', 'No se pudo rechazar el pedido.');
+    }
   };
 
   const getSiguienteEstado = (estadoActual) => {
@@ -238,7 +364,7 @@ const PedidosRecibidosScreen = () => {
       );
     } else {
       return pedidosRecibidos.filter(pedido => 
-        ['entregado', 'cancelado'].includes(pedido.estado)
+        ['entregado', 'cancelado', 'rechazado'].includes(pedido.estado)
       );
     }
   };
@@ -247,16 +373,23 @@ const PedidosRecibidosScreen = () => {
     const fechaReserva = new Date(pedido.fechaHoraReserva);
     const tiempoTranscurrido = calcularTiempoTranscurrido(pedido.fechaHoraReserva);
     
+    // Formatear fecha y hora usando el timestamp local
+    const dia = fechaReserva.getDate();
+    const mes = fechaReserva.getMonth() + 1;
+    const año = fechaReserva.getFullYear();
+    const horas = fechaReserva.getHours();
+    const minutos = fechaReserva.getMinutes();
+    
+    const fechaFormateada = `${dia.toString().padStart(2, '0')}-${mes.toString().padStart(2, '0')}-${año}`;
+    const horaFormateada = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
+    
     return (
       <View key={pedido.id} style={styles.pedidoCard}>
         <View style={styles.pedidoHeader}>
           <View style={styles.pedidoInfo}>
             <Text style={styles.pedidoNegocio}>{pedido.negocio}</Text>
             <Text style={styles.pedidoFecha}>
-              {fechaReserva.toLocaleDateString('es-CL')} - {fechaReserva.toLocaleTimeString('es-CL', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              })}
+              {fechaFormateada} - {horaFormateada}
             </Text>
             <View style={styles.tiempoContainer}>
               <FontAwesome name="clock-o" size={12} color="#e74c3c" />
@@ -296,6 +429,18 @@ const PedidosRecibidosScreen = () => {
             </Text>
           </View>
         )}
+
+        {pedido.estado === 'confirmado' && pedido.horaEntregaEstimada && (
+          <View style={styles.detalleItem}>
+            <FontAwesome name="clock-o" size={14} color="#27ae60" />
+            <Text style={styles.detalleTexto}>
+              Entrega estimada: {new Date(pedido.horaEntregaEstimada).toLocaleTimeString('es-CL', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              })} ({pedido.tiempoEntregaMinutos} min)
+            </Text>
+          </View>
+        )}
       </View>
 
       <View style={styles.productosContainer}>
@@ -324,6 +469,14 @@ const PedidosRecibidosScreen = () => {
                 </Text>
               </TouchableOpacity>
             )}
+            
+            <TouchableOpacity
+              style={[styles.accionButton, { backgroundColor: '#e74c3c' }]}
+              onPress={() => abrirModalRechazo(pedido)}
+            >
+              <FontAwesome name="times" size={14} color="white" />
+              <Text style={styles.accionTexto}>Rechazar</Text>
+            </TouchableOpacity>
             
             <TouchableOpacity
               style={styles.detalleButton}
@@ -440,8 +593,23 @@ const PedidosRecibidosScreen = () => {
               {/* Información del Pedido */}
               <View style={styles.modalInfo}>
                 <Text style={styles.modalInfoTitulo}>Detalles del Pedido</Text>
-                <Text style={styles.modalInfoTexto}>Fecha: {new Date(pedidoSeleccionado.fechaHoraReserva).toLocaleDateString('es-CL')}</Text>
-                <Text style={styles.modalInfoTexto}>Hora: {new Date(pedidoSeleccionado.fechaHoraReserva).toLocaleTimeString('es-CL')}</Text>
+                {(() => {
+                  const fechaModal = new Date(pedidoSeleccionado.fechaHoraReserva);
+                  const diaModal = fechaModal.getDate();
+                  const mesModal = fechaModal.getMonth() + 1;
+                  const añoModal = fechaModal.getFullYear();
+                  const horasModal = fechaModal.getHours();
+                  const minutosModal = fechaModal.getMinutes();
+                  const fechaFormateadaModal = `${diaModal.toString().padStart(2, '0')}-${mesModal.toString().padStart(2, '0')}-${añoModal}`;
+                  const horaFormateadaModal = `${horasModal.toString().padStart(2, '0')}:${minutosModal.toString().padStart(2, '0')}`;
+                  
+                  return (
+                    <>
+                      <Text style={styles.modalInfoTexto}>Fecha: {fechaFormateadaModal}</Text>
+                      <Text style={styles.modalInfoTexto}>Hora: {horaFormateadaModal}</Text>
+                    </>
+                  );
+                })()}
                 <Text style={styles.modalInfoTexto}>Estado: {getEstadoTexto(pedidoSeleccionado.estado)}</Text>
                 <Text style={styles.modalInfoTexto}>Dirección: {pedidoSeleccionado.direccion}</Text>
                 <Text style={styles.modalInfoTexto}>Modo: {pedidoSeleccionado.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}</Text>
@@ -546,7 +714,7 @@ const PedidosRecibidosScreen = () => {
           onPress={() => setTabActivo("historial")}
         >
           <Text style={[styles.tabTexto, tabActivo === "historial" && styles.tabTextoActivo]}>
-            Historial ({pedidosRecibidos.filter(p => ['entregado', 'cancelado'].includes(p.estado)).length})
+            Historial ({pedidosRecibidos.filter(p => ['entregado', 'cancelado', 'rechazado'].includes(p.estado)).length})
           </Text>
         </TouchableOpacity>
       </View>
@@ -576,6 +744,120 @@ const PedidosRecibidosScreen = () => {
       </ScrollView>
 
       {renderModalDetalle()}
+      
+      {/* Modal de Tiempo de Entrega */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalTiempoEntregaVisible}
+        onRequestClose={() => setModalTiempoEntregaVisible(false)}
+      >
+        <View style={styles.modalTiempoEntregaContainer}>
+          <View style={styles.modalTiempoEntregaContent}>
+            <View style={styles.modalTiempoEntregaHeader}>
+              <FontAwesome name="clock-o" size={32} color="#2A9D8F" />
+              <Text style={styles.modalTiempoEntregaTitulo}>Confirmar Pedido</Text>
+              <Text style={styles.modalTiempoEntregaSubtitulo}>
+                Ingresa el tiempo estimado de entrega en minutos
+              </Text>
+            </View>
+            
+            <View style={styles.modalTiempoEntregaBody}>
+              <Text style={styles.tiempoLabel}>Tiempo de entrega:</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={tiempoEntrega}
+                  onValueChange={(itemValue) => setTiempoEntrega(itemValue)}
+                  style={styles.picker}
+                >
+                  {opcionesTiempo.map((opcion) => (
+                    <Picker.Item 
+                      key={opcion.value} 
+                      label={opcion.label} 
+                      value={opcion.value} 
+                    />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={styles.modalTiempoEntregaFooter}>
+              <TouchableOpacity
+                style={styles.modalTiempoEntregaCancelar}
+                onPress={() => {
+                  setModalTiempoEntregaVisible(false);
+                  setTiempoEntrega(30); // Resetear al valor por defecto
+                  setPedidoParaConfirmar(null);
+                }}
+              >
+                <Text style={styles.modalTiempoEntregaCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalTiempoEntregaConfirmar}
+                onPress={confirmarTiempoEntrega}
+              >
+                <FontAwesome name="check" size={16} color="white" />
+                <Text style={styles.modalTiempoEntregaConfirmarTexto}>Confirmar Pedido</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Modal de Rechazo */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalRechazoVisible}
+        onRequestClose={() => setModalRechazoVisible(false)}
+      >
+        <View style={styles.modalRechazoContainer}>
+          <View style={styles.modalRechazoContent}>
+            <View style={styles.modalRechazoHeader}>
+              <FontAwesome name="exclamation-triangle" size={32} color="#e74c3c" />
+              <Text style={styles.modalRechazoTitulo}>Rechazar Pedido</Text>
+              <Text style={styles.modalRechazoSubtitulo}>
+                ¿Estás seguro de que deseas rechazar este pedido?
+              </Text>
+            </View>
+            
+            <ScrollView style={styles.modalRechazoBody}>
+              <Text style={styles.motivoLabel}>Motivo del rechazo:</Text>
+              <TextInput
+                style={styles.motivoInput}
+                multiline
+                numberOfLines={5}
+                placeholder="Ej: No tengo el producto en stock, Fuera del área de cobertura, etc."
+                placeholderTextColor="#999"
+                onChangeText={setMotivoRechazo}
+                value={motivoRechazo}
+              />
+            </ScrollView>
+
+            <View style={styles.modalRechazoFooter}>
+              <TouchableOpacity
+                style={styles.modalRechazoCancelar}
+                onPress={() => {
+                  setModalRechazoVisible(false);
+                  setMotivoRechazo('');
+                  setPedidoParaRechazar(null);
+                }}
+              >
+                <Text style={styles.modalRechazoCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.modalRechazoConfirmar}
+                onPress={confirmarRechazo}
+              >
+                <FontAwesome name="times" size={16} color="white" />
+                <Text style={styles.modalRechazoConfirmarTexto}>Rechazar Pedido</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -978,6 +1260,186 @@ const styles = StyleSheet.create({
     color: "#2c3e50",
     fontWeight: "500",
     textAlign: "center",
+  },
+  // Estilos del Modal de Tiempo de Entrega
+  modalTiempoEntregaContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalTiempoEntregaContent: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    width: "100%",
+    maxHeight: "80%",
+    overflow: "hidden",
+  },
+  modalTiempoEntregaHeader: {
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  modalTiempoEntregaTitulo: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  modalTiempoEntregaSubtitulo: {
+    fontSize: 14,
+    color: "#7f8c8d",
+    textAlign: "center",
+  },
+  modalTiempoEntregaBody: {
+    padding: 20,
+  },
+  tiempoLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginBottom: 10,
+  },
+  pickerContainer: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    backgroundColor: "#f8f9fa",
+    marginBottom: 10,
+  },
+  picker: {
+    height: 50,
+  },
+  modalTiempoEntregaFooter: {
+    flexDirection: "row",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    gap: 10,
+  },
+  modalTiempoEntregaCancelar: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+  },
+  modalTiempoEntregaCancelarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#7f8c8d",
+  },
+  modalTiempoEntregaConfirmar: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#2A9D8F",
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  modalTiempoEntregaConfirmarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+  },
+  // Estilos del Modal de Rechazo
+  modalRechazoContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalRechazoContent: {
+    backgroundColor: "white",
+    borderRadius: 15,
+    width: "100%",
+    maxHeight: "80%",
+    overflow: "hidden",
+  },
+  modalRechazoHeader: {
+    alignItems: "center",
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  modalRechazoTitulo: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  modalRechazoSubtitulo: {
+    fontSize: 14,
+    color: "#7f8c8d",
+    textAlign: "center",
+  },
+  modalRechazoBody: {
+    padding: 20,
+    maxHeight: 200,
+  },
+  motivoLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginBottom: 10,
+  },
+  motivoInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: "#2c3e50",
+    textAlignVertical: "top",
+    minHeight: 100,
+    backgroundColor: "#f8f9fa",
+  },
+  modalRechazoFooter: {
+    flexDirection: "row",
+    padding: 20,
+    borderTopWidth: 1,
+    borderTopColor: "#e0e0e0",
+    gap: 10,
+  },
+  modalRechazoCancelar: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    alignItems: "center",
+  },
+  modalRechazoCancelarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#7f8c8d",
+  },
+  modalRechazoConfirmar: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: "#e74c3c",
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  modalRechazoConfirmarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
   },
 });
 

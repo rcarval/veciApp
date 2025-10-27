@@ -395,10 +395,12 @@ const reportReasons = [
 
   const guardarPedido = async () => {
     try {
+      const fechaCreacion = new Date();
       const pedido = {
         id: Date.now().toString(),
         negocio: producto.nombre,
-        fecha: new Date().toLocaleDateString('es-CL'),
+        fecha: fechaCreacion.toLocaleDateString('es-CL'),
+        fechaHoraReserva: fechaCreacion.toISOString(),
         estado: 'pendiente',
         total: obtenerTotalCarrito(),
         direccion: direccionUsuario || 'Retiro en local',

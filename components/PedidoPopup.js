@@ -16,6 +16,7 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const PedidoPopup = ({ navigation, usuario }) => {
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
+  const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
   const [visible, setVisible] = useState(false);
   const [hasLoggedIn, setHasLoggedIn] = useState(false);
   const [position, setPosition] = useState({ 
@@ -99,15 +100,26 @@ const PedidoPopup = ({ navigation, usuario }) => {
     const cargarPedidos = async () => {
       try {
         const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
+        const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
         console.log('📦 Pedidos guardados:', pedidosGuardados ? 'EXISTEN' : 'NO EXISTEN');
+        console.log('❌ Pedidos rechazados:', pedidosRechazadosGuardados ? 'EXISTEN' : 'NO EXISTEN');
         
         if (pedidosGuardados) {
           const pedidos = JSON.parse(pedidosGuardados);
           console.log('📦 Cantidad de pedidos:', pedidos.length);
           setPedidosPendientes(pedidos);
-          setVisible(pedidos.length > 0);
-          console.log('👁️ Popup visible:', pedidos.length > 0);
         }
+        
+        if (pedidosRechazadosGuardados) {
+          const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
+          console.log('❌ Cantidad de pedidos rechazados:', pedidosRechazados.length);
+          setPedidosRechazadosPendientes(pedidosRechazados);
+        }
+        
+        const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
+                               (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+        setVisible(totalPendientes > 0);
+        console.log('👁️ Popup visible:', totalPendientes > 0);
       } catch (error) {
         console.log('Error al cargar pedidos:', error);
       }
@@ -180,7 +192,12 @@ const PedidoPopup = ({ navigation, usuario }) => {
   };
 
   const handlePress = () => {
-    navigation.navigate('MisPedidos');
+    // Si hay pedidos rechazados pendientes, ir al tab rechazados
+    if (pedidosRechazadosPendientes.length > 0) {
+      navigation.navigate('MisPedidos', { tabInicial: 'rechazados' });
+    } else {
+      navigation.navigate('MisPedidos');
+    }
   };
 
   if (!visible) return null;
@@ -210,10 +227,10 @@ const PedidoPopup = ({ navigation, usuario }) => {
           activeOpacity={0.8}
         >
           <FontAwesome name="truck" size={24} color="white" />
-          {pedidosPendientes.length > 0 && (
+          {(pedidosPendientes.length + pedidosRechazadosPendientes.length) > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {pedidosPendientes.length > 99 ? '99+' : pedidosPendientes.length}
+                {(pedidosPendientes.length + pedidosRechazadosPendientes.length) > 99 ? '99+' : (pedidosPendientes.length + pedidosRechazadosPendientes.length)}
               </Text>
             </View>
           )}
