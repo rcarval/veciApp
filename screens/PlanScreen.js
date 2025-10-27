@@ -78,37 +78,56 @@ const PlanScreen = () => {
   const confirmarSuscripcion = async () => {
     setCargando(true);
     try {
-      // Simular proceso de suscripción
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Actualizar el usuario con plan premium
-      const usuarioActualizado = {
-        ...usuario,
-        plan_id: "premium",
-        fecha_suscripcion: new Date().toISOString(),
-        estado_suscripcion: "activa"
-      };
-
-      // Guardar en AsyncStorage
-      await AsyncStorage.setItem("usuario", JSON.stringify(usuarioActualizado));
-      
-      setPlanActual("premium");
-      setModalVisible(false);
-      
+      // Simular proceso de pago con tarjeta de prueba
       Alert.alert(
-        "¡Felicidades! 🎉",
-        "Te has suscrito exitosamente al Plan Premium. Ahora tienes acceso a todas las funcionalidades avanzadas.",
+        "💳 Procesando Pago",
+        "Para pruebas, simula un pago con tarjeta de prueba:\n\nTarjeta: 4242 4242 4242 4242\nFecha: 12/25\nCVV: 123\n\nEste es un entorno de desarrollo.",
         [
           {
-            text: "Continuar",
-            onPress: () => navigation.goBack()
+            text: "Cancelar",
+            onPress: () => {
+              setCargando(false);
+              setModalVisible(false);
+            },
+            style: "cancel"
+          },
+          {
+            text: "Simular Pago Exitoso",
+            onPress: async () => {
+              // Simular delay de procesamiento
+              await new Promise(resolve => setTimeout(resolve, 1500));
+              
+              // Actualizar el usuario con plan premium
+              const usuarioActualizado = {
+                ...usuario,
+                plan_id: "premium",
+                fecha_suscripcion: new Date().toISOString(),
+                estado_suscripcion: "activa"
+              };
+
+              // Guardar en AsyncStorage
+              await AsyncStorage.setItem("usuario", JSON.stringify(usuarioActualizado));
+              
+              setPlanActual("premium");
+              setModalVisible(false);
+              setCargando(false);
+              
+              Alert.alert(
+                "¡Felicidades! 🎉",
+                "Te has suscrito exitosamente al Plan Premium. Ahora tienes acceso a todas las funcionalidades avanzadas.",
+                [
+                  {
+                    text: "Continuar"                    
+                  }
+                ]
+              );
+            }
           }
         ]
       );
     } catch (error) {
       console.log("Error al suscribirse:", error);
       Alert.alert("Error", "No se pudo procesar la suscripción. Inténtalo de nuevo.");
-    } finally {
       setCargando(false);
     }
   };
