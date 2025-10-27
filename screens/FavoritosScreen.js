@@ -575,7 +575,7 @@ const getIconForCategory = (categoria) => {
               <Image 
                 source={favorito.logo} 
                 style={styles.favoritoLogo}
-                resizeMode="contain"
+                contentFit="contain"
               />
             </View>
             <Text style={styles.favoritoNombre} numberOfLines={1}>
@@ -776,7 +776,7 @@ const getIconForCategory = (categoria) => {
                 <Image 
                   source={producto.galeria[0].imagen} 
                   style={styles.imagenGaleria}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
           <View style={[styles.etiquetaCategoria, {backgroundColor: 'yellow'}]}>
                                     <FontAwesome
@@ -806,7 +806,7 @@ const getIconForCategory = (categoria) => {
                   <Image 
                     source={producto.logo} 
                     style={styles.logoEmpresa}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                   <Text style={styles.nombreEmpresa} numberOfLines={1}>
                     {producto.nombre}

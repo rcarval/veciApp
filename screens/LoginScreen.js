@@ -54,6 +54,8 @@ const LoginScreen = ({ navigation }) => {
     };
       AsyncStorage.setItem("usuario", JSON.stringify(jsonUser.usuario));
       await AsyncStorage.setItem("token", jsonUser.token);
+      await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
+      console.log("✅ Login exitoso - sesionActiva marcada como true");
       navigation.navigate("HomeDrawer");
     }else{
       try {
@@ -66,6 +68,8 @@ const LoginScreen = ({ navigation }) => {
         if (response.ok) {
           await AsyncStorage.setItem("usuario", JSON.stringify(data.usuario));
           await AsyncStorage.setItem("token", data.token);
+          await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
+          console.log("✅ Login exitoso (API) - sesionActiva marcada como true");
           navigation.navigate("HomeDrawer");
         } else {
           Alert.alert("Error", data.mensaje || "Credenciales incorrectas");

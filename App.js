@@ -4,6 +4,8 @@ import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createDrawerNavigator } from "@react-navigation/drawer";
 import { Easing } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import LoginScreen from "./screens/LoginScreen";
 import RegisterScreen from "./screens/RegisterScreen";
 import HomeScreen from "./screens/HomeScreen";
@@ -25,6 +27,8 @@ import EmprendimientoScreen from "./screens/EmprendimientoScreen";
 import ProductosEmprendimientoScreen from "./screens/ProductosEmprendimientoScreen";
 import MisEstadisticasScreen from "./screens/MisEstadisticasScreen";
 import MisDireccionesScreen from "./screens/MisDireccionesScreen";
+import MisPedidosScreen from "./screens/MisPedidosScreen";
+import PedidoPopup from "./components/PedidoPopup";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
@@ -76,25 +80,13 @@ const zoomIn = ({ current }) => ({
   },
 });
 
-export default function App() {
-  const [usuario, setUsuario] = useState(null);
-
-  useEffect(() => {
-    const cargarUsuario = async () => {
-      try {
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          setUsuario(JSON.parse(usuarioGuardado));
-        }
-      } catch (error) {
-        console.log("Error al obtener el usuario:", error);
-      }
-    };
-    cargarUsuario();
-  }, []);
-
+// Componente wrapper para manejar la navegación
+function AppNavigator({ usuario }) {
+  const navigation = useNavigation();
+  
   return (
-    <NavigationContainer>
+    <>
+      <PedidoPopup navigation={navigation} usuario={usuario} />
       <Stack.Navigator initialRouteName="Login">
         <Stack.Screen
           name="Login"
@@ -249,13 +241,13 @@ export default function App() {
               <Stack.Screen
                 name="Home"
                 component={HomeScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
               <Stack.Screen
                 name="Ofertas"
                 component={OfertasScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Ofertas",
                   headerShown: false,
@@ -265,7 +257,7 @@ export default function App() {
               <Stack.Screen
                 name="Favoritos"
                 component={FavoritosScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Ofertas",
                   headerShown: false,
@@ -275,7 +267,7 @@ export default function App() {
               <Stack.Screen
                 name="Busqueda"
                 component={BusquedaScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Busqueda",
                   headerShown: false,
@@ -285,7 +277,7 @@ export default function App() {
               <Stack.Screen
                 name="Comida"
                 component={ComidaScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Comida",
                   headerShown: false,
@@ -295,7 +287,7 @@ export default function App() {
               <Stack.Screen
                 name="Servicios"
                 component={ServiciosScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Servicios",
                   headerShown: false,
@@ -305,7 +297,7 @@ export default function App() {
                             <Stack.Screen
                 name="Negocios"
                 component={NegocioScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Negocios",
                   headerShown: false,
@@ -315,7 +307,7 @@ export default function App() {
                             <Stack.Screen
                 name="Belleza"
                 component={BellezaScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{
                   title: "Belleza",
                   headerShown: false,
@@ -327,6 +319,15 @@ export default function App() {
                 component={MisDireccionesScreen}
                 options={{
                   title: "Mis Direcciones",
+                  headerShown: false,
+                  cardStyleInterpolator: forFade,
+                }}
+              />
+              <Stack.Screen
+                name="MisPedidos"
+                component={MisPedidosScreen}
+                options={{
+                  title: "Mis Pedidos",
                   headerShown: false,
                   cardStyleInterpolator: forFade,
                 }}
@@ -355,24 +356,29 @@ export default function App() {
                               <Stack.Screen
                 name="Perfil"
                 component={PerfilScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
                 <Stack.Screen
                 name="InformacionPersonal"
                 component={InformacionPersonalScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
                               <Stack.Screen
                 name="Emprendimiento"
                 component={EmprendimientoScreen}
-                initialParams={{ usuario }}
+                initialParams={usuario ? { usuario } : {}}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
               <Stack.Screen
                 name="MisDirecciones"
                 component={MisDireccionesScreen}
+                options={{ headerShown: false, cardStyleInterpolator: forFade }}
+              />
+              <Stack.Screen
+                name="MisPedidos"
+                component={MisPedidosScreen}
                 options={{ headerShown: false, cardStyleInterpolator: forFade }}
               />
               </Stack.Navigator>
@@ -382,6 +388,36 @@ export default function App() {
           )}
         </Stack.Screen>
       </Stack.Navigator>
-    </NavigationContainer>
+    </>
+  );
+}
+
+export default function App() {
+  const [usuario, setUsuario] = useState(null);
+
+  useEffect(() => {
+    const cargarUsuario = async () => {
+      try {
+        // Limpiar sesión activa al iniciar la app
+        await AsyncStorage.removeItem("sesionActiva");
+        console.log("🧹 Sesión activa limpiada al iniciar app");
+        
+        const usuarioGuardado = await AsyncStorage.getItem("usuario");
+        if (usuarioGuardado) {
+          setUsuario(JSON.parse(usuarioGuardado));
+        }
+      } catch (error) {
+        console.log("Error al obtener el usuario:", error);
+      }
+    };
+    cargarUsuario();
+  }, []);
+
+  return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer>
+        <AppNavigator usuario={usuario} />
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }

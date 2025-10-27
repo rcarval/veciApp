@@ -611,7 +611,7 @@ const BellezaScreen = ({ navigation }) => {
                           <Image
                             source={producto.galeria[0].imagen}
                             style={styles.imagenGaleria}
-                            resizeMode="cover"
+                            contentFit="cover"
                           />
                           <View style={styles.etiquetaCategoria}>
                             <Text style={styles.etiquetaTexto}>OFERTA</Text>
@@ -642,7 +642,7 @@ const BellezaScreen = ({ navigation }) => {
                             <Image
                               source={producto.logo}
                               style={styles.logoEmpresa}
-                              resizeMode="contain"
+                              contentFit="contain"
                             />
                             <Text
                               style={styles.nombreEmpresa}

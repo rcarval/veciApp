@@ -27,7 +27,7 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
           <Image
             source={item.imagen}
             style={styles.imagenGaleria}
-            resizeMode="cover"
+            contentFit="cover"
             cache="force-cache"
           />
           {/* Etiqueta de categoría */}
@@ -299,7 +299,37 @@ const reportReasons = [
 
   const confirmarEnvioPedido = () => {
     setConfirmacionVisible(false);
+    guardarPedido();
     abrirWhatsApp();
+  };
+
+  const guardarPedido = async () => {
+    try {
+      const pedido = {
+        id: Date.now().toString(),
+        negocio: producto.nombre,
+        fecha: new Date().toLocaleDateString('es-CL'),
+        estado: 'pendiente',
+        total: obtenerTotalCarrito(),
+        direccion: direccionUsuario || 'Retiro en local',
+        productos: carritoRef.current.map(item => ({
+          nombre: item.nombre || item.descripcion,
+          cantidad: item.cantidad,
+          precio: item.precio
+        })),
+        modoEntrega: modoEntrega
+      };
+
+      // Guardar en pedidos pendientes
+      const pedidosExistentes = await AsyncStorage.getItem('pedidosPendientes');
+      const pedidos = pedidosExistentes ? JSON.parse(pedidosExistentes) : [];
+      pedidos.push(pedido);
+      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidos));
+
+      console.log('Pedido guardado:', pedido);
+    } catch (error) {
+      console.log('Error al guardar pedido:', error);
+    }
   };
 
   const abrirWhatsApp = () => {
@@ -307,7 +337,7 @@ const reportReasons = [
     
     let mensaje = `🛍️ *NUEVO PEDIDO*\n\n`;
     mensaje += `👋 Hola ${producto.nombre}!\n\n`;
-    mensaje += `👤 Cliente: *${usuario.nombre.trim()}*\n`;
+    mensaje += `👤 Cliente: *${usuario?.nombre?.trim() || 'Usuario'}*\n`;
     mensaje += `🚚 Entrega: *${modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}*\n`;
     
     if (modoEntrega === "delivery" && direccionUsuario) {
@@ -722,7 +752,7 @@ const reportReasons = [
                   <Image
                     source={imagenSeleccionada.imagen}
                     style={styles.imagenExpandida}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                   <TouchableOpacity
                     style={styles.botonCerrarImagen}
@@ -769,7 +799,7 @@ const reportReasons = [
             producto.imagen
           }
           style={styles.imagenFondo}
-          resizeMode="cover"
+          contentFit="cover"
         />
         <LinearGradient
           colors={["rgba(255,255,255,0)", "rgba(255,255,255,0.8)", "white"]}

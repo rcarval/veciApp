@@ -604,7 +604,7 @@ const getIconForCategory = (categoria) => {
           <Image 
             source={producto.galeria[0].imagen} 
             style={styles.imagenGaleria}
-            resizeMode="cover"
+            contentFit="cover"
           />
           <View style={[styles.etiquetaCategoria, {backgroundColor: '#FF5252'}]}>
             <Text style={styles.etiquetaTextoOferta}>
@@ -632,7 +632,7 @@ const getIconForCategory = (categoria) => {
             <Image 
               source={producto.logo} 
               style={styles.logoEmpresa}
-              resizeMode="contain"
+              contentFit="contain"
             />
             <Text style={styles.nombreEmpresa} numberOfLines={1}>
               {producto.nombre}
@@ -679,7 +679,7 @@ const getIconForCategory = (categoria) => {
                 <Image 
                   source={producto.galeria[0].imagen} 
                   style={styles.imagenGaleria}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
                  <View style={styles.etiquetaCategoria}>
                  <Text style={styles.etiquetaTexto}>
@@ -707,7 +707,7 @@ const getIconForCategory = (categoria) => {
                   <Image 
                     source={producto.logo} 
                     style={styles.logoEmpresa}
-                    resizeMode="contain"
+                    contentFit="contain"
                   />
                   <Text style={styles.nombreEmpresa} numberOfLines={1}>
                     {producto.nombre}
