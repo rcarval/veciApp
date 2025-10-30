@@ -282,9 +282,9 @@ const InformacionPersonalScreen = () => {
           <View style={styles.formContainer}>
             {/* Campo Nombre */}
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Nombre Completo</Text>
+              <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Nombre Completo</Text>
               <TextInput
-                style={styles.inputField}
+                style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
                 value={nombre}
                 onChangeText={setNombre}
                 placeholder="Ingresa tu nombre completo"
@@ -318,7 +318,7 @@ const InformacionPersonalScreen = () => {
                   <Picker
                     selectedValue={comuna}
                     onValueChange={(itemValue) => setComuna(itemValue)}
-                    style={styles.picker}
+                    style={[styles.picker, { color: currentTheme.text }]}
                     enabled={!guardando}
                   >
                     <Picker.Item label="Selecciona una comuna" value="" />
@@ -338,6 +338,7 @@ const InformacionPersonalScreen = () => {
             <TouchableOpacity
               style={[
                 styles.botonGuardar,
+                { backgroundColor: currentTheme.primary },
                 (!hayCambios() || guardando) && styles.botonGuardarInactivo,
               ]}
               onPress={manejarGuardado}

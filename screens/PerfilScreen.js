@@ -26,47 +26,77 @@ const PerfilScreen = () => {
   const { currentTheme, changeTheme, getNextTheme, isChangingTheme } = useTheme();
   const [imagenPerfil, setImagenPerfil] = useState(null);
   const [subiendoAvatar, setSubiendoAvatar] = useState(false);
+  const [perfilCargado, setPerfilCargado] = useState(false);
 
-  // Cargar usuario al iniciar (solo si no está en cache o es antiguo)
+  // Cargar usuario solo una vez al montar (si no hay cache o es antiguo)
   useEffect(() => {
-    cargarUsuario(false); // false = no forzar, usar cache si es válido
-  }, []);
+    const cargarPerfilInicial = async () => {
+      // Solo cargar si no hay usuario en el contexto o si el cache está expirado
+      if (!usuario) {
+        console.log('🔄 PerfilScreen: No hay usuario, cargando desde backend...');
+        await cargarUsuario(false); // false = usar cache si es válido
+      } else {
+        console.log('✅ PerfilScreen: Usando usuario del contexto (cache)');
+        // Cargar imagen del usuario existente
+        cargarImagenPerfil();
+      }
+      setPerfilCargado(true);
+    };
+
+    cargarPerfilInicial();
+  }, []); // Solo ejecutar una vez al montar
 
   // Cargar imagen cuando el usuario cambie
   useEffect(() => {
-    cargarImagenPerfil();
-  }, [usuario]);
-
-  // Recargar usuario cuando se regrese a la pantalla (solo si es necesario)
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      cargarUsuario(false); // Usar cache si es válido, recargar si expiró
-    });
-
-    return unsubscribe;
-  }, [navigation]);
+    if (usuario) {
+      cargarImagenPerfil();
+    }
+  }, [usuario?.avatar_url]); // Solo cuando cambie el avatar_url
 
   const cargarImagenPerfil = async () => {
     try {
       console.log('🖼️ cargarImagenPerfil - usuario.avatar_url:', usuario?.avatar_url);
       
-      // Si el usuario tiene avatar_url del backend, usarlo
+      // Primero verificar si hay imagen en cache local
+      const cachedAvatarUrl = await AsyncStorage.getItem('cachedAvatarUrl');
+      const cachedAvatarTimestamp = await AsyncStorage.getItem('cachedAvatarTimestamp');
+      
+      // Si hay avatar_url del backend y coincide con el cache, usar cache
+      if (usuario?.avatar_url && cachedAvatarUrl === usuario.avatar_url) {
+        const timestamp = cachedAvatarTimestamp ? parseInt(cachedAvatarTimestamp) : 0;
+        const ahora = Date.now();
+        
+        // Cache válido si tiene menos de 1 día
+        if (ahora - timestamp < 24 * 60 * 60 * 1000) {
+          console.log('🖼️ Usando avatar del cache local:', cachedAvatarUrl);
+          setImagenPerfil(cachedAvatarUrl);
+          return;
+        }
+      }
+      
+      // Si el usuario tiene avatar_url del backend, usarlo y guardarlo en cache
       if (usuario?.avatar_url) {
         console.log('🖼️ Usando avatar del backend:', usuario.avatar_url);
         setImagenPerfil(usuario.avatar_url);
+        
+        // Guardar en cache local para futuras cargas
+        await AsyncStorage.setItem('cachedAvatarUrl', usuario.avatar_url);
+        await AsyncStorage.setItem('cachedAvatarTimestamp', Date.now().toString());
         return;
       }
       
-      // Fallback: cargar desde AsyncStorage (para compatibilidad)
+      // Fallback: cargar desde AsyncStorage (para compatibilidad con versión antigua)
       const imagenGuardada = await AsyncStorage.getItem('imagenPerfil');
       if (imagenGuardada) {
-        console.log('🖼️ Usando avatar de AsyncStorage:', imagenGuardada);
+        console.log('🖼️ Usando avatar de AsyncStorage (legacy):', imagenGuardada);
         setImagenPerfil(imagenGuardada);
       } else {
         console.log('🖼️ No hay avatar disponible');
+        setImagenPerfil(null);
       }
     } catch (error) {
       console.log('Error al cargar imagen del perfil:', error);
+      setImagenPerfil(null);
     }
   };
 
@@ -102,28 +132,33 @@ const PerfilScreen = () => {
       
       if (response.ok && data.ok) {
         console.log('✅ Avatar subido exitosamente:', data.avatar_url);
-        console.log('✅ Usuario actual antes:', usuario?.avatar_url);
         
-        // Actualizar el usuario en el contexto con la nueva URL
-        if (actualizarUsuarioLocal) {
+        // Actualizar el usuario en el contexto con la nueva URL (sin recargar desde backend)
+        if (actualizarUsuarioLocal && usuario) {
           const usuarioActualizado = {
             ...usuario,
             avatar_url: data.avatar_url
           };
-          console.log('✅ Actualizando usuario en contexto:', usuarioActualizado.avatar_url);
+          console.log('✅ Actualizando usuario en contexto local:', usuarioActualizado.avatar_url);
           actualizarUsuarioLocal(usuarioActualizado);
         }
         
-        // Forzar recarga del usuario desde el backend para obtener datos frescos
-        console.log('🔄 Recargando usuario desde backend...');
-        await cargarUsuario(true);
-        
-        // Actualizar estado local directamente
-        console.log('✅ Estableciendo imagen local:', data.avatar_url);
+        // Actualizar estado local directamente con la nueva URL
+        console.log('✅ Estableciendo nueva imagen:', data.avatar_url);
         setImagenPerfil(data.avatar_url);
         
-        // Limpiar AsyncStorage (ya no lo necesitamos)
-        await AsyncStorage.removeItem('imagenPerfil');
+        // Limpiar cache de avatar anterior y guardar el nuevo
+        await AsyncStorage.removeItem('cachedAvatarUrl');
+        await AsyncStorage.removeItem('cachedAvatarTimestamp');
+        await AsyncStorage.removeItem('imagenPerfil'); // Limpiar también el legacy
+        
+        // Guardar nueva imagen en cache
+        await AsyncStorage.setItem('cachedAvatarUrl', data.avatar_url);
+        await AsyncStorage.setItem('cachedAvatarTimestamp', Date.now().toString());
+        
+        // Invalidar cache del usuario para que se recargue en la próxima vez
+        // pero no forzar recarga inmediata (ya actualizamos localmente)
+        console.log('✅ Avatar actualizado, cache de imagen actualizado');
         
         Alert.alert('Éxito', 'Avatar actualizado correctamente');
       } else {
@@ -305,10 +340,16 @@ const PerfilScreen = () => {
                   onPress={seleccionarImagenPerfil}
                   activeOpacity={0.8}
                 >
-                  <Image 
-                    source={imagenPerfil ? { uri: imagenPerfil } : require('../assets/favicon.png')} 
-                    style={[styles.avatarImage, { borderColor: currentTheme.primary }]}
-                  />
+                  {imagenPerfil ? (
+                    <Image 
+                      source={{ uri: imagenPerfil }} 
+                      style={[styles.avatarImage, { borderColor: currentTheme.primary }]}
+                    />
+                  ) : (
+                    <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20', borderColor: currentTheme.primary }]}>
+                      <Ionicons name="person" size={40} color={currentTheme.primary} />
+                    </View>
+                  )}
                   {subiendoAvatar && (
                     <View style={styles.uploadingOverlay}>
                       <ActivityIndicator size="small" color="white" />
@@ -464,6 +505,16 @@ const styles = StyleSheet.create({
     borderRadius: 50,
     borderWidth: 3,
     borderColor: '#2A9D8F',
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    borderWidth: 3,
+    borderColor: '#2A9D8F',
+    backgroundColor: '#e8f4f3',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   cameraIconContainer: {
     position: 'absolute',

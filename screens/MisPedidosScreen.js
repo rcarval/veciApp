@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
@@ -547,9 +548,9 @@ const MisPedidosScreen = () => {
         )}
 
         {pedido.estado === 'confirmado' && pedido.horaEntregaEstimada && (
-          <View style={styles.horaEntregaContainer}>
-            <FontAwesome name="clock-o" size={14} color="#27ae60" />
-            <Text style={styles.horaEntregaTexto}>
+          <View style={[styles.horaEntregaContainer, { backgroundColor: currentTheme.primary + '20' }]}>
+            <FontAwesome name="clock-o" size={14} color={currentTheme.primary} />
+            <Text style={[styles.horaEntregaTexto, { color: currentTheme.primary }]}>
               Entrega estimada: {new Date(pedido.horaEntregaEstimada).toLocaleTimeString('es-CL', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
@@ -561,9 +562,9 @@ const MisPedidosScreen = () => {
       
       {pedido.productos && (
         <View style={styles.productosContainer}>
-          <Text style={styles.productosTitulo}>Productos:</Text>
+          <Text style={[styles.productosTitulo, { color: currentTheme.text }]}>Productos:</Text>
           {pedido.productos.map((producto, index) => (
-            <Text key={index} style={styles.productoItem}>
+            <Text key={index} style={[styles.productoItem, { color: currentTheme.textSecondary }]}>
               • {producto.nombre} (x{producto.cantidad})
             </Text>
           ))}
@@ -780,33 +781,45 @@ const MisPedidosScreen = () => {
 
       <View style={[styles.tabsContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
         <TouchableOpacity
-          style={[styles.tab, tabActivo === 'pendientes' && [styles.tabActivo, { backgroundColor: currentTheme.primary + '20' }]]}
+          style={[styles.tab, tabActivo === 'pendientes' && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
           onPress={() => setTabActivo('pendientes')}
         >
-          <FontAwesome name="clock-o" size={16} color={tabActivo === 'pendientes' ? currentTheme.primary : currentTheme.textSecondary} />
-          <Text style={[styles.tabTexto, { color: tabActivo === 'pendientes' ? currentTheme.primary : currentTheme.textSecondary }, tabActivo === 'pendientes' && styles.tabTextoActivo]}>
-            Pendientes ({pedidosPendientes.length})
+          <Text style={[styles.tabTexto, { color: tabActivo === 'pendientes' ? "white" : currentTheme.textSecondary }, tabActivo === 'pendientes' && styles.tabTextoActivo]}>
+            Pendientes
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === 'pendientes' ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === 'pendientes' ? "white" : currentTheme.primary }]}>
+              {pedidosPendientes.length}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === 'rechazados' && [styles.tabActivo, { backgroundColor: currentTheme.primary + '20' }]]}
+          style={[styles.tab, tabActivo === 'rechazados' && [styles.tabActivo, { backgroundColor: '#e74c3c' }]]}
           onPress={() => setTabActivo('rechazados')}
         >
-          <FontAwesome name="exclamation-triangle" size={16} color={tabActivo === 'rechazados' ? '#e74c3c' : currentTheme.textSecondary} />
-          <Text style={[styles.tabTexto, { color: tabActivo === 'rechazados' ? '#e74c3c' : currentTheme.textSecondary }, tabActivo === 'rechazados' && styles.tabTextoActivo]}>
-            Rechazados ({pedidosRechazadosPendientes.length})
+          <Text style={[styles.tabTexto, { color: tabActivo === 'rechazados' ? "white" : currentTheme.textSecondary }, tabActivo === 'rechazados' && styles.tabTextoActivo]}>
+            Rechazados
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === 'rechazados' ? "rgba(255,255,255,0.3)" : '#e74c3c' + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === 'rechazados' ? "white" : '#e74c3c' }]}>
+              {pedidosRechazadosPendientes.length}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === 'historial' && [styles.tabActivo, { backgroundColor: currentTheme.primary + '20' }]]}
+          style={[styles.tab, tabActivo === 'historial' && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
           onPress={() => setTabActivo('historial')}
         >
-          <FontAwesome name="history" size={16} color={tabActivo === 'historial' ? currentTheme.primary : currentTheme.textSecondary} />
-          <Text style={[styles.tabTexto, { color: tabActivo === 'historial' ? currentTheme.primary : currentTheme.textSecondary }, tabActivo === 'historial' && styles.tabTextoActivo]}>
-            Historial ({pedidosCompletados.length})
+          <Text style={[styles.tabTexto, { color: tabActivo === 'historial' ? "white" : currentTheme.textSecondary }, tabActivo === 'historial' && styles.tabTextoActivo]}>
+            Historial
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === 'historial' ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === 'historial' ? "white" : currentTheme.primary }]}>
+              {pedidosCompletados.length}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -823,8 +836,8 @@ const MisPedidosScreen = () => {
             ordenarPedidosPorFecha([...pedidosPendientes]).map(renderPedido)
           ) : (
             <View style={styles.emptyState}>
-              <FontAwesome name="shopping-cart" size={48} color="#ccc" />
-              <Text style={styles.emptyStateTexto}>No tienes pedidos pendientes</Text>
+              <FontAwesome name="shopping-cart" size={48} color={currentTheme.textSecondary} />
+              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos pendientes</Text>
             </View>
           )
         ) : tabActivo === 'rechazados' ? (
@@ -836,8 +849,8 @@ const MisPedidosScreen = () => {
             })()
           ) : (
             <View style={styles.emptyState}>
-              <FontAwesome name="check-circle" size={48} color="#27ae60" />
-              <Text style={styles.emptyStateTexto}>No tienes pedidos rechazados pendientes</Text>
+              <FontAwesome name="check-circle" size={48} color={currentTheme.primary} />
+              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos rechazados pendientes</Text>
             </View>
           )
         ) : (
@@ -845,8 +858,8 @@ const MisPedidosScreen = () => {
             ordenarPedidosPorFecha([...pedidosCompletados]).map(renderPedido)
           ) : (
             <View style={styles.emptyState}>
-              <FontAwesome name="history" size={48} color="#ccc" />
-              <Text style={styles.emptyStateTexto}>No tienes pedidos en el historial</Text>
+              <FontAwesome name="history" size={48} color={currentTheme.textSecondary} />
+              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos en el historial</Text>
             </View>
           )
         )}
@@ -886,7 +899,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
     borderRadius: 12,
-    padding: 4,
+    padding: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -895,24 +908,38 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     borderRadius: 8,
+    gap: 4,
   },
   tabActivo: {
-    backgroundColor: '#E8F4F3',
+    backgroundColor: '#2A9D8F',
   },
   tabTexto: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
-    marginLeft: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#7f8c8d',
+    flexShrink: 1,
+    textAlign: 'center',
   },
   tabTextoActivo: {
-    color: '#2A9D8F',
+    color: 'white',
+    fontWeight: '700',
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  tabBadgeTexto: {
+    fontSize: 11,
     fontWeight: 'bold',
   },
   scrollContainer: {

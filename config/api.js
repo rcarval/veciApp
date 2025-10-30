@@ -44,6 +44,10 @@ export const API_ENDPOINTS = {
   EMPRENDIMIENTO_BY_ID: (id) => `${API_BASE_URL}/emprendimientos/${id}`,
   SUBIR_LOGO_EMPRENDIMIENTO: (id) => `${API_BASE_URL}/emprendimientos/${id}/logo`,
   SUBIR_BACKGROUND_EMPRENDIMIENTO: (id) => `${API_BASE_URL}/emprendimientos/${id}/background`,
+  
+  // Productos
+  PRODUCTOS: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/productos`,
+  PRODUCTO_BY_ID: (emprendimientoId, id) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/productos/${id}`,
 };
 
 export default API_BASE_URL;

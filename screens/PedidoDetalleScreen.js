@@ -743,24 +743,24 @@ const reportReasons = [
         onRequestClose={() => setConfirmacionVisible(false)}
       >
         <View style={styles.confirmacionModalContainer}>
-          <View style={styles.confirmacionModalContent}>
+          <View style={[styles.confirmacionModalContent, { backgroundColor: currentTheme.cardBackground }]}>
             <View style={styles.confirmacionHeader}>
               <FontAwesome name="check-circle" size={32} color={currentTheme.primary} />
-              <Text style={styles.confirmacionTitulo}>Confirmar Pedido</Text>
+              <Text style={[styles.confirmacionTitulo, { color: currentTheme.text }]}>Confirmar Pedido</Text>
             </View>
             
-            <Text style={styles.confirmacionMensaje}>
+            <Text style={[styles.confirmacionMensaje, { color: currentTheme.textSecondary }]}>
               ¿Está seguro que su pedido está completo?
             </Text>
             
-            <View style={styles.confirmacionResumen}>
-              <Text style={styles.confirmacionResumenTitulo}>Resumen del pedido:</Text>
+            <View style={[styles.confirmacionResumen, { backgroundColor: currentTheme.background }]}>
+              <Text style={[styles.confirmacionResumenTitulo, { color: currentTheme.text }]}>Resumen del pedido:</Text>
               {carritoRef.current.map((item, index) => (
-                <Text key={index} style={styles.confirmacionItem}>
+                <Text key={index} style={[styles.confirmacionItem, { color: currentTheme.textSecondary }]}>
                   • {item.nombre || item.descripcion} (x{item.cantidad})
                 </Text>
               ))}
-              <Text style={styles.confirmacionTotal}>
+              <Text style={[styles.confirmacionTotal, { color: currentTheme.primary, borderTopColor: currentTheme.border }]}>
                 Total: ${obtenerTotalCarrito().toLocaleString("es-CL")}
               </Text>
             </View>
@@ -793,47 +793,47 @@ const reportReasons = [
         onRequestClose={() => setMostrarCarrito(false)}
       >
         <View style={styles.carritoModalContainer}>
-          <View style={styles.carritoModalContent}>
-            <View style={styles.carritoHeader}>
-              <Text style={styles.carritoTitulo}>Mi Carrito</Text>
+          <View style={[styles.carritoModalContent, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={[styles.carritoHeader, { borderBottomColor: currentTheme.border }]}>
+              <Text style={[styles.carritoTitulo, { color: currentTheme.text }]}>Mi Carrito</Text>
               <TouchableOpacity
                 style={styles.carritoCerrar}
                 onPress={() => setMostrarCarrito(false)}
               >
-                <FontAwesome name="times" size={24} color="#666" />
+                <FontAwesome name="times" size={24} color={currentTheme.textSecondary} />
               </TouchableOpacity>
             </View>
 
             <ScrollView style={styles.carritoLista}>
               {carritoRef.current.length === 0 ? (
                 <View style={styles.carritoVacio}>
-                  <FontAwesome name="shopping-cart" size={48} color="#ccc" />
-                  <Text style={styles.carritoVacioTexto}>Tu carrito está vacío</Text>
-                  <Text style={styles.carritoVacioSubtexto}>Agrega productos para comenzar tu pedido</Text>
+                  <FontAwesome name="shopping-cart" size={48} color={currentTheme.textSecondary} />
+                  <Text style={[styles.carritoVacioTexto, { color: currentTheme.text }]}>Tu carrito está vacío</Text>
+                  <Text style={[styles.carritoVacioSubtexto, { color: currentTheme.textSecondary }]}>Agrega productos para comenzar tu pedido</Text>
                 </View>
               ) : (
                 carritoRef.current.map((item) => (
-                  <View key={item.id} style={styles.carritoItem}>
+                  <View key={item.id} style={[styles.carritoItem, { borderBottomColor: currentTheme.border }]}>
                     <View style={styles.carritoItemInfo}>
-                      <Text style={styles.carritoItemNombre}>{item.nombre || item.descripcion}</Text>
-                      <Text style={styles.carritoItemPrecio}>
+                      <Text style={[styles.carritoItemNombre, { color: currentTheme.text }]}>{item.nombre || item.descripcion}</Text>
+                      <Text style={[styles.carritoItemPrecio, { color: currentTheme.textSecondary }]}>
                         ${item.precio ? item.precio.toLocaleString("es-CL") : "Consulte"} c/u
                       </Text>
                     </View>
                     
                     <View style={styles.carritoItemControls}>
                       <TouchableOpacity
-                        style={styles.carritoBotonCantidad}
+                        style={[styles.carritoBotonCantidad, { borderColor: currentTheme.primary }]}
                         onPress={() => quitarDelCarrito(item.id)}
                       >
-                        <FontAwesome name="minus" size={14} color="#2A9D8F" />
+                        <FontAwesome name="minus" size={14} color={currentTheme.primary} />
                       </TouchableOpacity>
-                      <Text style={styles.carritoCantidad}>{item.cantidad}</Text>
+                      <Text style={[styles.carritoCantidad, { color: currentTheme.text }]}>{item.cantidad}</Text>
                       <TouchableOpacity
-                        style={styles.carritoBotonCantidad}
+                        style={[styles.carritoBotonCantidad, { borderColor: currentTheme.primary }]}
                         onPress={() => agregarAlCarrito(item)}
                       >
-                        <FontAwesome name="plus" size={14} color="#2A9D8F" />
+                        <FontAwesome name="plus" size={14} color={currentTheme.primary} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.carritoBotonEliminar}
@@ -848,9 +848,9 @@ const reportReasons = [
             </ScrollView>
 
             {carritoRef.current.length > 0 && (
-              <View style={styles.carritoFooter}>
+              <View style={[styles.carritoFooter, { borderTopColor: currentTheme.border }]}>
                 <View style={styles.carritoTotal}>
-                  <Text style={styles.carritoTotalTexto}>
+                  <Text style={[styles.carritoTotalTexto, { color: currentTheme.primary }]}>
                     Total: ${obtenerTotalCarrito().toLocaleString("es-CL")}
                   </Text>
                 </View>
@@ -1072,16 +1072,16 @@ const reportReasons = [
           {/* ✅ Dirección y botones */}
           {/* ✅ Sección de Contacto con Acordeón */}
           <TouchableOpacity
-            style={styles.acordeonTitulo}
+            style={[styles.acordeonTitulo, { borderBottomColor: currentTheme.border }]}
             onPress={() => setContactoAbierto(!contactoAbierto)}
           >
-            <Text style={styles.seccionTituloAcordeon}>
+            <Text style={[styles.seccionTituloAcordeon, { color: currentTheme.text }]}>
               Información de Contacto
             </Text>
             <FontAwesome
               name={contactoAbierto ? "chevron-up" : "chevron-down"}
               size={18}
-              color="#2A9D8F"
+              color={currentTheme.primary}
             />
           </TouchableOpacity>
 
@@ -1696,7 +1696,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
     marginTop: 15,
-    borderBottomColor: "#EEE",
   },
   contactoContainer: {
     marginTop: 15,

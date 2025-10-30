@@ -15,10 +15,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
+import { useTheme } from "../context/ThemeContext";
 
 const PlanScreen = () => {
   const navigation = useNavigation();
   const { usuario, cargarUsuario, invalidarUsuario, actualizarUsuarioLocal } = useUser();
+  const { currentTheme } = useTheme();
   
   const [planActual, setPlanActual] = useState("basico");
   const [modalVisible, setModalVisible] = useState(false);
@@ -245,37 +247,37 @@ const PlanScreen = () => {
     const esPremium = planKey === "premium";
 
     return (
-      <View key={planKey} style={[styles.planCard, esPlanActual && styles.planCardActual]}>
+      <View key={planKey} style={[styles.planCard, esPlanActual && [styles.planCardActual, { shadowColor: currentTheme.shadow }], !esPlanActual && { shadowColor: currentTheme.shadow }]}>
         <LinearGradient
-          colors={esPlanActual ? [plan.color, "#1D7874"] : ["#f8f9fa", "#ffffff"]}
+          colors={esPlanActual ? [currentTheme.primary, currentTheme.secondary] : [currentTheme.cardBackground, currentTheme.cardBackground]}
           style={styles.planGradient}
         >
           <View style={styles.planHeader}>
-            <View style={styles.planIconContainer}>
+            <View style={[styles.planIconContainer, { backgroundColor: esPlanActual ? 'rgba(255,255,255,0.2)' : currentTheme.primary + '20' }]}>
               <FontAwesome 
                 name={plan.icono} 
                 size={24} 
-                color={esPlanActual ? "white" : plan.color} 
+                color={esPlanActual ? "white" : currentTheme.primary} 
               />
             </View>
             <View style={styles.planInfo}>
-              <Text style={[styles.planNombre, esPlanActual && styles.planNombreActual]}>
+              <Text style={[styles.planNombre, esPlanActual && styles.planNombreActual, !esPlanActual && { color: currentTheme.text }]}>
                 {plan.nombre}
               </Text>
-              <Text style={[styles.planPrecio, esPlanActual && styles.planPrecioActual]}>
+              <Text style={[styles.planPrecio, esPlanActual && styles.planPrecioActual, !esPlanActual && { color: currentTheme.primary }]}>
                 {plan.precio}
                 {plan.periodo && (
-                  <Text style={styles.planPeriodo}> / {plan.periodo}</Text>
+                  <Text style={[styles.planPeriodo, esPlanActual && { color: 'rgba(255,255,255,0.8)' }, !esPlanActual && { color: currentTheme.textSecondary }]}> / {plan.periodo}</Text>
                 )}
               </Text>
-              <Text style={[styles.planDescripcion, esPlanActual && styles.planDescripcionActual]}>
+              <Text style={[styles.planDescripcion, esPlanActual && styles.planDescripcionActual, !esPlanActual && { color: currentTheme.textSecondary }]}>
                 {plan.descripcion}
               </Text>
             </View>
           </View>
 
           <View style={styles.caracteristicasContainer}>
-            <Text style={[styles.caracteristicasTitulo, esPlanActual && styles.caracteristicasTituloActual]}>
+            <Text style={[styles.caracteristicasTitulo, esPlanActual && styles.caracteristicasTituloActual, !esPlanActual && { color: currentTheme.text }]}>
               {esPlanActual ? "✅ Incluye:" : "Características:"}
             </Text>
             {plan.caracteristicas.map((caracteristica, index) => (
@@ -285,7 +287,7 @@ const PlanScreen = () => {
                   size={12} 
                   color={esPlanActual ? "white" : "#27ae60"} 
                 />
-                <Text style={[styles.caracteristicaTexto, esPlanActual && styles.caracteristicaTextoActual]}>
+                <Text style={[styles.caracteristicaTexto, esPlanActual && styles.caracteristicaTextoActual, !esPlanActual && { color: currentTheme.text }]}>
                   {caracteristica}
                 </Text>
               </View>
@@ -294,11 +296,11 @@ const PlanScreen = () => {
 
           {plan.limitaciones && (
             <View style={styles.limitacionesContainer}>
-              <Text style={styles.limitacionesTitulo}>Limitaciones:</Text>
+              <Text style={[styles.limitacionesTitulo, { color: esPlanActual ? 'rgba(255,255,255,0.8)' : currentTheme.textSecondary }]}>Limitaciones:</Text>
               {plan.limitaciones.map((limitacion, index) => (
                 <View key={index} style={styles.limitacionItem}>
-                  <FontAwesome name="times" size={12} color="#e74c3c" />
-                  <Text style={styles.limitacionTexto}>{limitacion}</Text>
+                  <FontAwesome name="times" size={12} color={esPlanActual ? 'rgba(255,255,255,0.7)' : "#e74c3c"} />
+                  <Text style={[styles.limitacionTexto, { color: esPlanActual ? 'rgba(255,255,255,0.8)' : currentTheme.textSecondary }]}>{limitacion}</Text>
                 </View>
               ))}
             </View>
@@ -306,7 +308,7 @@ const PlanScreen = () => {
 
           {plan.beneficios && (
             <View style={styles.beneficiosContainer}>
-              <Text style={[styles.beneficiosTitulo, esPlanActual && styles.beneficiosTituloActual]}>
+              <Text style={[styles.beneficiosTitulo, esPlanActual && styles.beneficiosTituloActual, !esPlanActual && { color: currentTheme.text }]}>
                 🚀 Beneficios:
               </Text>
               {plan.beneficios.map((beneficio, index) => (
@@ -316,7 +318,7 @@ const PlanScreen = () => {
                     size={12} 
                     color={esPlanActual ? "white" : "#f39c12"} 
                   />
-                  <Text style={[styles.beneficioTexto, esPlanActual && styles.beneficioTextoActual]}>
+                  <Text style={[styles.beneficioTexto, esPlanActual && styles.beneficioTextoActual, !esPlanActual && { color: currentTheme.text }]}>
                     {beneficio}
                   </Text>
                 </View>
@@ -340,7 +342,7 @@ const PlanScreen = () => {
               </View>
             ) : (
               <TouchableOpacity
-                style={[styles.suscribirseButton, { backgroundColor: plan.color }]}
+                style={[styles.suscribirseButton, { backgroundColor: esPremium ? currentTheme.primary : plan.color || currentTheme.primary }]}
                 onPress={esPremium ? handleSuscribirsePremium : () => {}}
                 disabled={!esPremium}
               >
@@ -356,9 +358,9 @@ const PlanScreen = () => {
   };
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerContainer}>
@@ -378,27 +380,34 @@ const PlanScreen = () => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
         {cargandoPlan ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2A9D8F" />
-            <Text style={styles.loadingText}>Cargando información del plan...</Text>
+            <ActivityIndicator size="large" color={currentTheme.primary} />
+            <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>Cargando información del plan...</Text>
           </View>
         ) : (
           <>
             <View style={styles.resumenContainer}>
-              <Text style={styles.resumenTitulo}>Resumen de tu Plan</Text>
-              <View style={styles.resumenCard}>
-                <FontAwesome 
-                  name={planes[planActual].icono} 
-                  size={32} 
-                  color={planes[planActual].color} 
-                />
+              <Text style={[styles.resumenTitulo, { color: currentTheme.text }]}>Resumen de tu Plan</Text>
+              <View style={[styles.resumenCard, { 
+                backgroundColor: currentTheme.cardBackground, 
+                shadowColor: currentTheme.shadow,
+                borderColor: currentTheme.border,
+                borderWidth: 1
+              }]}>
+                <View style={[styles.resumenIconWrapper, { backgroundColor: currentTheme.primary + '20' }]}>
+                  <FontAwesome 
+                    name={planes[planActual].icono} 
+                    size={32} 
+                    color={currentTheme.primary} 
+                  />
+                </View>
                 <View style={styles.resumenInfo}>
-                  <Text style={styles.resumenPlan}>{planes[planActual].nombre}</Text>
-                  <Text style={styles.resumenPrecio}>{planes[planActual].precio}</Text>
+                  <Text style={[styles.resumenPlan, { color: currentTheme.text }]}>{planes[planActual].nombre}</Text>
+                  <Text style={[styles.resumenPrecio, { color: currentTheme.primary }]}>{planes[planActual].precio}</Text>
                   {planActual === "premium" && (
-                    <Text style={styles.resumenPeriodo}>Facturación mensual</Text>
+                    <Text style={[styles.resumenPeriodo, { color: currentTheme.textSecondary }]}>Facturación mensual</Text>
                   )}
                   {usuario?.fecha_suscripcion && (
-                    <Text style={styles.resumenFecha}>
+                    <Text style={[styles.resumenFecha, { color: currentTheme.textSecondary }]}>
                       Suscrito desde: {new Date(usuario.fecha_suscripcion).toLocaleDateString('es-CL')}
                     </Text>
                   )}
@@ -407,27 +416,27 @@ const PlanScreen = () => {
             </View>
 
         <View style={styles.planesContainer}>
-          <Text style={styles.planesTitulo}>Planes Disponibles</Text>
+          <Text style={[styles.planesTitulo, { color: currentTheme.text }]}>Planes Disponibles</Text>
           {Object.keys(planes).map(renderPlanCard)}
         </View>
 
-        <View style={styles.infoContainer}>
-          <Text style={styles.infoTitulo}>💡 Información Importante</Text>
+        <View style={[styles.infoContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+          <Text style={[styles.infoTitulo, { color: currentTheme.text }]}>💡 Información Importante</Text>
           <View style={styles.infoItem}>
-            <FontAwesome name="info-circle" size={16} color="#3498db" />
-            <Text style={styles.infoTexto}>
+            <FontAwesome name="info-circle" size={16} color={currentTheme.primary} />
+            <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
               Puedes cambiar de plan en cualquier momento desde esta pantalla.
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <FontAwesome name="credit-card" size={16} color="#3498db" />
-            <Text style={styles.infoTexto}>
+            <FontAwesome name="credit-card" size={16} color={currentTheme.primary} />
+            <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
               El Plan Premium se renueva automáticamente cada mes.
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <FontAwesome name="shield" size={16} color="#3498db" />
-            <Text style={styles.infoTexto}>
+            <FontAwesome name="shield" size={16} color={currentTheme.primary} />
+            <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
               Tus datos están protegidos con encriptación de nivel bancario.
             </Text>
           </View>
@@ -444,37 +453,37 @@ const PlanScreen = () => {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { backgroundColor: currentTheme.cardBackground }]}>
             <View style={styles.modalHeader}>
-              <FontAwesome name="star" size={24} color="#2A9D8F" />
-              <Text style={styles.modalTitulo}>Suscribirse al Plan Premium</Text>
+              <FontAwesome name="star" size={24} color={currentTheme.primary} />
+              <Text style={[styles.modalTitulo, { color: currentTheme.text }]}>Suscribirse al Plan Premium</Text>
             </View>
             
             <View style={styles.modalInfo}>
-              <Text style={styles.modalPrecio}>$4.990 / mes</Text>
-              <Text style={styles.modalDescripcion}>
+              <Text style={[styles.modalPrecio, { color: currentTheme.primary }]}>$4.990 / mes</Text>
+              <Text style={[styles.modalDescripcion, { color: currentTheme.textSecondary }]}>
                 Accede a todas las funcionalidades premium y haz crecer tu negocio.
               </Text>
             </View>
 
             <View style={styles.modalBeneficios}>
-              <Text style={styles.modalBeneficiosTitulo}>Incluye:</Text>
-              <Text style={styles.modalBeneficio}>✓ Vitrina virtual completa</Text>
-              <Text style={styles.modalBeneficio}>✓ Promoción destacada</Text>
-              <Text style={styles.modalBeneficio}>✓ Estadísticas avanzadas</Text>
-              <Text style={styles.modalBeneficio}>✓ Soporte prioritario</Text>
+              <Text style={[styles.modalBeneficiosTitulo, { color: currentTheme.text }]}>Incluye:</Text>
+              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Vitrina virtual completa</Text>
+              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Promoción destacada</Text>
+              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Estadísticas avanzadas</Text>
+              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Soporte prioritario</Text>
             </View>
 
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={styles.modalCancelButton}
+                style={[styles.modalCancelButton, { borderColor: currentTheme.border }]}
                 onPress={() => setModalVisible(false)}
               >
                 <Text style={styles.modalCancelButtonText}>Cancelar</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[styles.modalConfirmButton, cargando && styles.modalConfirmButtonDisabled]}
+                style={[styles.modalConfirmButton, { backgroundColor: currentTheme.primary }, cargando && styles.modalConfirmButtonDisabled]}
                 onPress={confirmarSuscripcion}
                 disabled={cargando}
               >
@@ -551,8 +560,16 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  resumenIconWrapper: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
+  },
   resumenInfo: {
-    marginLeft: 15,
+    marginLeft: 0,
     flex: 1,
   },
   resumenPlan: {

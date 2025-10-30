@@ -230,7 +230,8 @@ const PedidosRecibidosScreen = () => {
           
           return {
             ...pedido,
-            estado: pedido.estado || 'pendiente',
+            // Preservar el estado original si existe, especialmente para cancelados
+            estado: pedido.estado || (pedido.motivoCancelacion ? 'cancelado' : 'pendiente'),
             fechaRecepcion: pedido.fechaRecepcion || pedido.fecha,
             fechaHoraReserva: fechaHoraReserva.toISOString(),
             cliente: datosCliente.nombre,
@@ -610,12 +611,14 @@ const PedidosRecibidosScreen = () => {
         ['pendiente', 'confirmado', 'preparando', 'listo'].includes(pedido.estado)
       );
     } else if (tabActivo === "cancelados") {
+      // Filtrar solo pedidos cancelados que tengan motivo de cancelación
       pedidosFiltrados = pedidosRecibidos.filter(pedido => 
         pedido.estado === 'cancelado' && pedido.motivoCancelacion
       );
     } else {
+      // Historial: solo entregados y rechazados, excluyendo cancelados
       pedidosFiltrados = pedidosRecibidos.filter(pedido => 
-        ['entregado', 'rechazado'].includes(pedido.estado)
+        ['entregado', 'rechazado'].includes(pedido.estado) && pedido.estado !== 'cancelado'
       );
     }
     
@@ -642,16 +645,16 @@ const PedidosRecibidosScreen = () => {
     const horaFormateada = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
     
     return (
-      <View key={pedido.id} style={styles.pedidoCard}>
+      <View key={pedido.id} style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
         <View style={styles.pedidoHeader}>
           <View style={styles.pedidoInfo}>
-            <Text style={styles.pedidoNegocio}>{pedido.negocio}</Text>
-            <Text style={styles.pedidoFecha}>
+            <Text style={[styles.pedidoNegocio, { color: currentTheme.text }]}>{pedido.negocio}</Text>
+            <Text style={[styles.pedidoFecha, { color: currentTheme.textSecondary }]}>
               {fechaFormateada} - {horaFormateada}
             </Text>
             <View style={styles.tiempoContainer}>
               <FontAwesome name="clock-o" size={12} color="#e74c3c" />
-              <Text style={styles.tiempoTexto}>Hace {tiempoTranscurrido}</Text>
+              <Text style={[styles.tiempoTexto, { color: "#e74c3c" }]}>Hace {tiempoTranscurrido}</Text>
             </View>
           </View>
           <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(pedido.estado) }]}>
@@ -662,17 +665,17 @@ const PedidosRecibidosScreen = () => {
       <View style={styles.pedidoDetalles}>
         <View style={styles.detalleItem}>
           <FontAwesome name="user" size={14} color={currentTheme.primary} />
-          <Text style={styles.detalleTexto}>Cliente: {pedido.cliente}</Text>
+          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>Cliente: {pedido.cliente}</Text>
         </View>
         
         <View style={styles.detalleItem}>
           <FontAwesome name="phone" size={14} color={currentTheme.primary} />
-          <Text style={styles.detalleTexto}>{pedido.telefonoCliente}</Text>
+          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>{pedido.telefonoCliente}</Text>
         </View>
 
         <View style={styles.detalleItem}>
           <FontAwesome name="map-marker" size={14} color={currentTheme.primary} />
-          <Text style={styles.detalleTexto}>{pedido.direccion}</Text>
+          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>{pedido.direccion}</Text>
         </View>
 
         {pedido.modoEntrega && (
@@ -682,16 +685,16 @@ const PedidosRecibidosScreen = () => {
               size={14} 
               color={currentTheme.primary} 
             />
-            <Text style={styles.detalleTexto}>
+            <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>
               {pedido.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}
             </Text>
           </View>
         )}
 
         {pedido.estado === 'confirmado' && pedido.horaEntregaEstimada && (
-          <View style={styles.detalleItem}>
-            <FontAwesome name="clock-o" size={14} color="#27ae60" />
-            <Text style={styles.detalleTexto}>
+          <View style={[styles.detalleItem, { backgroundColor: currentTheme.primary + '20' }]}>
+            <FontAwesome name="clock-o" size={14} color={currentTheme.primary} />
+            <Text style={[styles.detalleTexto, { color: currentTheme.primary }]}>
               Entrega estimada: {new Date(pedido.horaEntregaEstimada).toLocaleTimeString('es-CL', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
@@ -989,33 +992,48 @@ const PedidosRecibidosScreen = () => {
         </View>
       </LinearGradient>
 
-      {/* Tabs */}
-      <View style={styles.tabsContainer}>
+      {/* Tabs Optimizados */}
+      <View style={[styles.tabsContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "pendientes" && { backgroundColor: currentTheme.primary }]}
+          style={[styles.tab, tabActivo === "pendientes" && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
           onPress={() => setTabActivo("pendientes")}
         >
-          <Text style={[styles.tabTexto, tabActivo === "pendientes" && styles.tabTextoActivo]}>
-            Pendientes ({pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length})
+          <Text style={[styles.tabTexto, { color: tabActivo === "pendientes" ? "white" : currentTheme.textSecondary }, tabActivo === "pendientes" && styles.tabTextoActivo]}>
+            Pendientes
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "pendientes" ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "pendientes" ? "white" : currentTheme.primary }]}>
+              {pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "cancelados" && { backgroundColor: currentTheme.primary }]}
+          style={[styles.tab, tabActivo === "cancelados" && [styles.tabActivo, { backgroundColor: '#e74c3c' }]]}
           onPress={() => setTabActivo("cancelados")}
         >
-          <Text style={[styles.tabTexto, tabActivo === "cancelados" && styles.tabTextoActivo]}>
-            Cancelados ({pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion).length})
+          <Text style={[styles.tabTexto, { color: tabActivo === "cancelados" ? "white" : currentTheme.textSecondary }, tabActivo === "cancelados" && styles.tabTextoActivo]}>
+            Cancelados
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "cancelados" ? "rgba(255,255,255,0.3)" : '#e74c3c' + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "cancelados" ? "white" : '#e74c3c' }]}>
+              {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion).length}
+            </Text>
+          </View>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "historial" && { backgroundColor: currentTheme.primary }]}
+          style={[styles.tab, tabActivo === "historial" && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
           onPress={() => setTabActivo("historial")}
         >
-          <Text style={[styles.tabTexto, tabActivo === "historial" && styles.tabTextoActivo]}>
-            Historial ({pedidosRecibidos.filter(p => ['entregado', 'rechazado'].includes(p.estado)).length})
+          <Text style={[styles.tabTexto, { color: tabActivo === "historial" ? "white" : currentTheme.textSecondary }, tabActivo === "historial" && styles.tabTextoActivo]}>
+            Historial
           </Text>
+          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "historial" ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
+            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "historial" ? "white" : currentTheme.primary }]}>
+              {pedidosRecibidos.filter(p => ['entregado', 'rechazado'].includes(p.estado) && p.estado !== 'cancelado').length}
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -1029,15 +1047,24 @@ const PedidosRecibidosScreen = () => {
           pedidosFiltrados.map(renderPedido)
         ) : (
           <View style={styles.emptyState}>
-            <FontAwesome name="shopping-cart" size={64} color="#bdc3c7" />
-            <Text style={styles.emptyTitle}>
-              {tabActivo === "pendientes" ? "No hay pedidos pendientes" : "No hay pedidos en el historial"}
+            {(() => {
+              const iconName = tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "cancelados" ? "check-circle" : "history");
+              const iconColor = tabActivo === "cancelados" ? currentTheme.primary : currentTheme.textSecondary;
+              return <FontAwesome name={iconName} size={64} color={iconColor} />;
+            })()}
+            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+              {tabActivo === "pendientes" 
+                ? "No hay pedidos pendientes" 
+                : tabActivo === "cancelados"
+                ? "No hay pedidos cancelados"
+                : "No hay pedidos en el historial"}
             </Text>
-            <Text style={styles.emptySubtitle}>
+            <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
               {tabActivo === "pendientes" 
                 ? "Los pedidos de tus clientes aparecerán aquí" 
-                : "Los pedidos completados aparecerán aquí"
-              }
+                : tabActivo === "cancelados"
+                ? "Los pedidos cancelados por clientes aparecerán aquí"
+                : "Los pedidos completados aparecerán aquí"}
             </Text>
           </View>
         )}
@@ -1300,8 +1327,8 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     marginHorizontal: 20,
     marginTop: 20,
-    borderRadius: 10,
-    padding: 4,
+    borderRadius: 12,
+    padding: 6,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -1310,22 +1337,39 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
+    flexDirection: "column",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    gap: 4,
   },
   tabActivo: {
     backgroundColor: "#2A9D8F",
   },
   tabTexto: {
-    fontSize: 14,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "600",
     color: "#7f8c8d",
+    flexShrink: 1,
+    textAlign: "center",
   },
   tabTextoActivo: {
     color: "white",
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  tabBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 6,
+  },
+  tabBadgeTexto: {
+    fontSize: 11,
+    fontWeight: "bold",
   },
   container: {
     flex: 1,

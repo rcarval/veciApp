@@ -17,11 +17,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTheme } from "../context/ThemeContext";
+import productoService from "../services/productoService";
 
 const ProductosEmprendimientoScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { emprendimiento } = route.params;
+  const { currentTheme } = useTheme();
   
   const [productos, setProductos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,20 +55,17 @@ const ProductosEmprendimientoScreen = () => {
   const cargarProductos = async () => {
     try {
       setLoading(true);
-      // Obtener productos del emprendimiento desde AsyncStorage
-      const emprendimientosGuardados = await AsyncStorage.getItem("emprendimientos");
-      if (emprendimientosGuardados) {
-        const emprendimientos = JSON.parse(emprendimientosGuardados);
-        const emp = emprendimientos.find(e => e.id === emprendimiento.id);
-        if (emp && emp.productos) {
-          setProductos(emp.productos);
-        } else {
-          setProductos([]);
-        }
+      // Obtener productos del emprendimiento desde el backend
+      const response = await productoService.obtenerProductos(emprendimiento.id);
+      if (response.ok) {
+        setProductos(response.productos || []);
+      } else {
+        setProductos([]);
       }
     } catch (error) {
       console.error("Error al cargar productos:", error);
       Alert.alert("Error", "No se pudieron cargar los productos");
+      setProductos([]);
     } finally {
       setLoading(false);
     }
@@ -112,51 +112,36 @@ const ProductosEmprendimientoScreen = () => {
     if (!validarFormulario()) return;
 
     try {
-      const nuevoProducto = {
-        id: isEditing ? currentProducto.id : Date.now().toString(),
+      const productoData = {
         nombre,
         descripcion,
         precio: Number(precio),
         categoria,
-        imagen: imagen || currentProducto?.imagen,
         oferta,
-        precioOferta: oferta ? Number(precioOferta) : null,
-        emprendimientoId: emprendimiento.id,
+        precio_oferta: oferta ? Number(precioOferta) : null,
       };
 
-      // Actualizar la lista de productos en AsyncStorage
-      const emprendimientosGuardados = await AsyncStorage.getItem("emprendimientos");
-      let emprendimientos = [];
-      if (emprendimientosGuardados) {
-        emprendimientos = JSON.parse(emprendimientosGuardados);
+      let response;
+      if (isEditing) {
+        // Actualizar producto existente
+        response = await productoService.actualizarProducto(
+          emprendimiento.id,
+          currentProducto.id,
+          productoData,
+          imagen
+        );
+      } else {
+        // Crear nuevo producto
+        response = await productoService.crearProducto(
+          emprendimiento.id,
+          productoData,
+          imagen
+        );
       }
 
-      const empIndex = emprendimientos.findIndex(e => e.id === emprendimiento.id);
-      
-      if (empIndex !== -1) {
-        if (!emprendimientos[empIndex].productos) {
-          emprendimientos[empIndex].productos = [];
-        }
-
-        if (isEditing) {
-          // Editar producto existente
-          const prodIndex = emprendimientos[empIndex].products.findIndex(
-            p => p.id === currentProducto.id
-          );
-          if (prodIndex !== -1) {
-            emprendimientos[empIndex].productos[prodIndex] = nuevoProducto;
-          }
-        } else {
-          // Agregar nuevo producto
-          emprendimientos[empIndex].productos.push(nuevoProducto);
-        }
-
-        await AsyncStorage.setItem(
-          "emprendimientos",
-          JSON.stringify(emprendimientos)
-        );
-        
-        setProductos(emprendimientos[empIndex].productos);
+      if (response.ok) {
+        // Recargar la lista de productos
+        await cargarProductos();
         resetForm();
         setModalVisible(false);
         Alert.alert(
@@ -164,11 +149,11 @@ const ProductosEmprendimientoScreen = () => {
           `Producto ${isEditing ? "actualizado" : "agregado"} correctamente`
         );
       } else {
-        Alert.alert("Error", "No se encontró el emprendimiento");
+        Alert.alert("Error", response.mensaje || "No se pudo guardar el producto");
       }
     } catch (error) {
       console.error("Error al guardar producto:", error);
-      Alert.alert("Error", "No se pudo guardar el producto");
+      Alert.alert("Error", error.message || "No se pudo guardar el producto");
     }
   };
 
@@ -178,9 +163,9 @@ const ProductosEmprendimientoScreen = () => {
     setDescripcion(producto.descripcion);
     setPrecio(producto.precio.toString());
     setCategoria(producto.categoria);
-    setImagen(producto.imagen);
+    setImagen(producto.imagen_url);
     setOferta(producto.oferta || false);
-    setPrecioOferta(producto.precioOferta?.toString() || "");
+    setPrecioOferta(producto.precio_oferta?.toString() || "");
     setIsEditing(true);
     setModalVisible(true);
   };
@@ -196,28 +181,18 @@ const ProductosEmprendimientoScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const emprendimientosGuardados = await AsyncStorage.getItem("emprendimientos");
-              if (emprendimientosGuardados) {
-                let emprendimientos = JSON.parse(emprendimientosGuardados);
-                const empIndex = emprendimientos.findIndex(e => e.id === emprendimiento.id);
-                
-                if (empIndex !== -1 && emprendimientos[empIndex].productos) {
-                  emprendimientos[empIndex].productos = emprendimientos[empIndex].productos.filter(
-                    p => p.id !== id
-                  );
-                  
-                  await AsyncStorage.setItem(
-                    "emprendimientos",
-                    JSON.stringify(emprendimientos)
-                  );
-                  
-                  setProductos(emprendimientos[empIndex].productos);
-                  Alert.alert("Éxito", "Producto eliminado correctamente");
-                }
+              const response = await productoService.eliminarProducto(emprendimiento.id, id);
+              
+              if (response.ok) {
+                // Recargar la lista de productos
+                await cargarProductos();
+                Alert.alert("Éxito", "Producto eliminado correctamente");
+              } else {
+                Alert.alert("Error", response.mensaje || "No se pudo eliminar el producto");
               }
             } catch (error) {
               console.error("Error al eliminar producto:", error);
-              Alert.alert("Error", "No se pudo eliminar el producto");
+              Alert.alert("Error", error.message || "No se pudo eliminar el producto");
             }
           },
         },
@@ -238,32 +213,32 @@ const ProductosEmprendimientoScreen = () => {
   };
 
   const renderProducto = ({ item }) => (
-    <View style={styles.productoCard}>
+    <View style={[styles.productoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
       <View style={styles.productoHeader}>
-        {item.imagen ? (
-          <Image source={{ uri: item.imagen }} style={styles.productoImagen} />
+        {item.imagen_url ? (
+          <Image source={{ uri: item.imagen_url }} style={styles.productoImagen} />
         ) : (
-          <View style={styles.productoImagenPlaceholder}>
-            <FontAwesome name="image" size={24} color="#ccc" />
+          <View style={[styles.productoImagenPlaceholder, { backgroundColor: currentTheme.background }]}>
+            <FontAwesome name="image" size={24} color={currentTheme.textSecondary} />
           </View>
         )}
         <View style={styles.productoInfo}>
-          <Text style={styles.productoNombre}>{item.nombre}</Text>
-          <Text style={styles.productoDescripcion} numberOfLines={2}>
+          <Text style={[styles.productoNombre, { color: currentTheme.text }]}>{item.nombre}</Text>
+          <Text style={[styles.productoDescripcion, { color: currentTheme.textSecondary }]} numberOfLines={2}>
             {item.descripcion}
           </Text>
           <View style={styles.productoPrecioContainer}>
             {item.oferta ? (
               <>
-                <Text style={styles.productoPrecioOferta}>
-                  ${item.precioOferta.toLocaleString("es-CL")}
+                <Text style={[styles.productoPrecioOferta, { color: "#FF5252" }]}>
+                  ${item.precio_oferta.toLocaleString("es-CL")}
                 </Text>
-                <Text style={styles.productoPrecioOriginal}>
+                <Text style={[styles.productoPrecioOriginal, { color: currentTheme.textSecondary }]}>
                   ${item.precio.toLocaleString("es-CL")}
                 </Text>
               </>
             ) : (
-              <Text style={styles.productoPrecio}>
+              <Text style={[styles.productoPrecio, { color: currentTheme.primary }]}>
                 ${item.precio.toLocaleString("es-CL")}
               </Text>
             )}
@@ -275,23 +250,23 @@ const ProductosEmprendimientoScreen = () => {
                 "tag"
               }
               size={14}
-              color="#2A9D8F"
+              color={currentTheme.primary}
             />
-            <Text style={styles.productoCategoriaTexto}>
+            <Text style={[styles.productoCategoriaTexto, { color: currentTheme.textSecondary }]}>
               {categoriasProducto.find(c => c.id === item.categoria)?.nombre}
             </Text>
           </View>
         </View>
       </View>
-      <View style={styles.productoActions}>
+      <View style={[styles.productoActions, { borderTopColor: currentTheme.border }]}>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={[styles.actionButton, { backgroundColor: currentTheme.background }]}
           onPress={() => editarProducto(item)}
         >
-          <MaterialIcons name="edit" size={20} color="#2A9D8F" />
+          <MaterialIcons name="edit" size={20} color={currentTheme.primary} />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={[styles.actionButton, { backgroundColor: currentTheme.background }]}
           onPress={() => eliminarProducto(item.id)}
         >
           <MaterialIcons name="delete" size={20} color="#e74c3c" />
@@ -301,9 +276,9 @@ const ProductosEmprendimientoScreen = () => {
   );
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerTitleContainer}>
@@ -315,16 +290,16 @@ const ProductosEmprendimientoScreen = () => {
         </View>
       </LinearGradient>
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2A9D8F" />
+            <ActivityIndicator size="large" color={currentTheme.primary} />
           </View>
         ) : productos.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <FontAwesome name="shopping-cart" size={60} color="#e0e0e0" />
-            <Text style={styles.emptyTitle}>No hay productos registrados</Text>
-            <Text style={styles.emptyText}>
+            <FontAwesome name="shopping-cart" size={60} color={currentTheme.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No hay productos registrados</Text>
+            <Text style={[styles.emptyText, { color: currentTheme.textSecondary }]}>
               Agrega productos para mostrarlos en tu vitrina virtual
             </Text>
           </View>
@@ -339,7 +314,7 @@ const ProductosEmprendimientoScreen = () => {
 
         {/* Botón flotante para agregar */}
         <TouchableOpacity
-          style={styles.addButton}
+          style={[styles.addButton, { backgroundColor: currentTheme.primary }]}
           onPress={() => {
             resetForm();
             setModalVisible(true);
@@ -357,7 +332,7 @@ const ProductosEmprendimientoScreen = () => {
         onRequestClose={() => setModalVisible(false)}
       >
         <LinearGradient
-          colors={["#2A9D8F", "#1D7874"]}
+          colors={[currentTheme.primary, currentTheme.secondary]}
           style={styles.modalHeaderGradient}
         >
           <View style={styles.modalHeader}>
@@ -371,12 +346,12 @@ const ProductosEmprendimientoScreen = () => {
           </View>
         </LinearGradient>
 
-        <ScrollView style={styles.modalContainer}>
+        <ScrollView style={[styles.modalContainer, { backgroundColor: currentTheme.background }]}>
           {/* Campo Nombre */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Nombre del Producto*</Text>
+            <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Nombre del Producto*</Text>
             <TextInput
-              style={styles.inputField}
+              style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
               value={nombre}
               onChangeText={setNombre}
               placeholder="Ej: Pizza Familiar"
@@ -385,9 +360,9 @@ const ProductosEmprendimientoScreen = () => {
 
           {/* Campo Descripción */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Descripción*</Text>
+            <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Descripción*</Text>
             <TextInput
-              style={[styles.inputField, styles.textArea]}
+              style={[styles.inputField, styles.textArea, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
               value={descripcion}
               onChangeText={setDescripcion}
               placeholder="Describe tu producto..."
@@ -398,9 +373,9 @@ const ProductosEmprendimientoScreen = () => {
 
           {/* Campo Precio */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Precio*</Text>
+            <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Precio*</Text>
             <TextInput
-              style={styles.inputField}
+              style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
               value={precio}
               onChangeText={setPrecio}
               placeholder="Ej: 9990"
@@ -414,19 +389,19 @@ const ProductosEmprendimientoScreen = () => {
               style={styles.checkboxContainer}
               onPress={() => setOferta(!oferta)}
             >
-              <View style={[styles.checkbox, oferta && styles.checkboxSelected]}>
+              <View style={[styles.checkbox, oferta && [styles.checkboxSelected, { backgroundColor: currentTheme.primary, borderColor: currentTheme.primary }]]}>
                 {oferta && (
                   <Ionicons name="checkmark" size={16} color="white" />
                 )}
               </View>
-              <Text style={styles.checkboxLabel}>¿Es una oferta?</Text>
+              <Text style={[styles.checkboxLabel, { color: currentTheme.text }]}>¿Es una oferta?</Text>
             </TouchableOpacity>
 
             {oferta && (
               <View style={[styles.inputGroup, { marginTop: 10 }]}>
-                <Text style={styles.inputLabel}>Precio de Oferta*</Text>
+                <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Precio de Oferta*</Text>
                 <TextInput
-                  style={styles.inputField}
+                  style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
                   value={precioOferta}
                   onChangeText={setPrecioOferta}
                   placeholder="Ej: 7990"
@@ -438,25 +413,27 @@ const ProductosEmprendimientoScreen = () => {
 
           {/* Campo Categoría */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Categoría*</Text>
+            <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Categoría*</Text>
             <View style={styles.categoriasContainer}>
               {categoriasProducto.map((cat) => (
                 <TouchableOpacity
                   key={cat.id}
                   style={[
                     styles.categoriaButton,
-                    categoria === cat.id && styles.categoriaSelected,
+                    { borderColor: currentTheme.primary },
+                    categoria === cat.id && [styles.categoriaSelected, { backgroundColor: currentTheme.primary }],
                   ]}
                   onPress={() => setCategoria(cat.id)}
                 >
                   <FontAwesome
                     name={cat.icon}
                     size={16}
-                    color={categoria === cat.id ? "white" : "#2A9D8F"}
+                    color={categoria === cat.id ? "white" : currentTheme.primary}
                   />
                   <Text
                     style={[
                       styles.categoriaText,
+                      { color: categoria === cat.id ? "white" : currentTheme.primary },
                       categoria === cat.id && styles.categoriaTextSelected,
                     ]}
                   >
@@ -469,24 +446,24 @@ const ProductosEmprendimientoScreen = () => {
 
           {/* Imagen del producto */}
           <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>
+            <Text style={[styles.inputLabel, { color: currentTheme.text }]}>
               Imagen del Producto{!isEditing && "*"}
             </Text>
             <TouchableOpacity
-              style={styles.imageUploadButton}
+              style={[styles.imageUploadButton, { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}
               onPress={seleccionarImagen}
             >
               {imagen ? (
                 <Image source={{ uri: imagen }} style={styles.imagePreview} />
-              ) : currentProducto?.imagen ? (
+              ) : currentProducto?.imagen_url ? (
                 <Image
-                  source={{ uri: currentProducto.imagen }}
+                  source={{ uri: currentProducto.imagen_url }}
                   style={styles.imagePreview}
                 />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <FontAwesome name="camera" size={24} color="#2A9D8F" />
-                  <Text style={styles.imagePlaceholderText}>
+                  <FontAwesome name="camera" size={24} color={currentTheme.primary} />
+                  <Text style={[styles.imagePlaceholderText, { color: currentTheme.primary }]}>
                     Seleccionar imagen
                   </Text>
                 </View>
@@ -496,7 +473,7 @@ const ProductosEmprendimientoScreen = () => {
 
           {/* Botón Guardar */}
           <TouchableOpacity
-            style={styles.saveButton}
+            style={[styles.saveButton, { backgroundColor: currentTheme.primary }]}
             onPress={guardarProducto}
           >
             <Text style={styles.saveButtonText}>
