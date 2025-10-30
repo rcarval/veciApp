@@ -45,6 +45,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
+    "babel-plugin-inline-dotenv": "^1.7.0",
     "metro": "^0.83.1",
     "metro-config": "^0.82.4",
     "metro-resolver": "^0.82.4"

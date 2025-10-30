@@ -11,14 +11,17 @@ import { PanGestureHandler } from 'react-native-gesture-handler';
 import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-const PedidoPopup = ({ navigation, usuario }) => {
+const PedidoPopup = ({ navigation }) => {
+  const { currentTheme } = useTheme();
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
   const [visible, setVisible] = useState(false);
   const [hasLoggedIn, setHasLoggedIn] = useState(false);
+  const [usuario, setUsuario] = useState(null);
   const [position, setPosition] = useState({ 
     x: screenWidth * 0.02,  // 80% del ancho (esquina derecha)
     y: screenHeight * 0.78  // 78% de la altura (parte inferior)
@@ -27,23 +30,101 @@ const PedidoPopup = ({ navigation, usuario }) => {
   const translateY = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
-  // Detectar cuando estamos en Login y limpiar sesión
-  useFocusEffect(
-    React.useCallback(() => {
-      const unsubscribe = navigation.addListener('state', (e) => {
-        const currentRouteName = e.data.state?.routes[e.data.state.index]?.name;
-        console.log('🔍 Pantalla actual:', currentRouteName);
+  // Cargar usuario desde AsyncStorage
+  useEffect(() => {
+    const cargarUsuario = async () => {
+      try {
+        const usuarioGuardado = await AsyncStorage.getItem('usuario');
+        if (usuarioGuardado) {
+          const usuarioData = JSON.parse(usuarioGuardado);
+          console.log('👤 Usuario cargado desde AsyncStorage:', usuarioData.nombre);
+          setUsuario(usuarioData);
+        } else {
+          console.log('👤 No hay usuario guardado en AsyncStorage');
+          setUsuario(null);
+        }
+      } catch (error) {
+        console.log('Error al cargar usuario:', error);
+        setUsuario(null);
+      }
+    };
+
+    cargarUsuario();
+  }, []);
+
+  // Detectar cuando la app vuelve del background
+  useEffect(() => {
+    const { AppState } = require('react-native');
+    
+    const handleAppStateChange = async (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('📱 App volvió a estar activa, verificando popup...');
         
-        if (currentRouteName === 'Login') {
-          console.log('🧹 Detectado Login, limpiando sesión activa');
-          AsyncStorage.removeItem('sesionActiva');
+        // Recargar usuario desde AsyncStorage cada vez que la app vuelva a estar activa
+        try {
+          const usuarioGuardado = await AsyncStorage.getItem('usuario');
+          if (usuarioGuardado) {
+            const usuarioData = JSON.parse(usuarioGuardado);
+            console.log('📱 Usuario recargado al volver:', usuarioData.nombre);
+            setUsuario(usuarioData);
+            
+            // Verificar pedidos pendientes
+            const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
+            const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+            
+            console.log('📱 Pedidos guardados:', pedidosGuardados ? 'EXISTEN' : 'NO EXISTEN');
+            console.log('📱 Pedidos rechazados:', pedidosRechazadosGuardados ? 'EXISTEN' : 'NO EXISTEN');
+            
+            if (pedidosGuardados) {
+              const pedidos = JSON.parse(pedidosGuardados);
+              console.log('📱 Pedidos encontrados al volver:', pedidos.length);
+              setPedidosPendientes(pedidos);
+            }
+            
+            if (pedidosRechazadosGuardados) {
+              const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
+              console.log('📱 Pedidos rechazados al volver:', pedidosRechazados.length);
+              setPedidosRechazadosPendientes(pedidosRechazados);
+            }
+            
+            const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
+                                   (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+            console.log('📱 Total pendientes al volver:', totalPendientes);
+            setVisible(totalPendientes > 0);
+          } else {
+            console.log('📱 No hay usuario guardado, ocultando popup');
+            setUsuario(null);
+            setVisible(false);
+          }
+        } catch (error) {
+          console.log('Error al recargar usuario al volver:', error);
+        }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => subscription?.remove();
+  }, [usuario]);
+
+  // Limpiar sesión solo al iniciar la app (no durante la navegación)
+  useEffect(() => {
+    const limpiarSesionAlInicio = async () => {
+      try {
+        // Solo limpiar si no hay usuario logueado
+        if (!usuario) {
+          console.log('🧹 No hay usuario, limpiando sesión activa');
+          await AsyncStorage.removeItem('sesionActiva');
           setHasLoggedIn(false);
           setVisible(false);
         }
-      });
-      return unsubscribe;
-    }, [navigation])
-  );
+      } catch (error) {
+        console.log('Error al limpiar sesión:', error);
+      }
+    };
+
+    limpiarSesionAlInicio();
+  }, [usuario]);
 
   // Verificar si el usuario hizo login en esta sesión
   useEffect(() => {
@@ -51,6 +132,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
       try {
         const sesionActiva = await AsyncStorage.getItem('sesionActiva');
         console.log('🔍 Sesión activa:', sesionActiva);
+        console.log('👤 Usuario:', usuario ? 'EXISTE' : 'NULL');
         
         if (sesionActiva === 'true' && usuario) {
           console.log('✅ Sesión activa detectada, marcando hasLoggedIn = true');
@@ -107,6 +189,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
         if (pedidosGuardados) {
           const pedidos = JSON.parse(pedidosGuardados);
           console.log('📦 Cantidad de pedidos:', pedidos.length);
+          console.log('📦 Detalles de pedidos:', pedidos);
           setPedidosPendientes(pedidos);
         }
         
@@ -118,6 +201,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
         
         const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
                                (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+        console.log('📊 Total pendientes:', totalPendientes);
         setVisible(totalPendientes > 0);
         console.log('👁️ Popup visible:', totalPendientes > 0);
       } catch (error) {
@@ -128,24 +212,85 @@ const PedidoPopup = ({ navigation, usuario }) => {
     cargarPedidos();
   }, [usuario, hasLoggedIn]);
 
-  // Escuchar cambios en pedidos solo si el usuario está logueado y ya hizo login en esta sesión
+  // Monitorear trigger de popup usando AsyncStorage
   useEffect(() => {
     if (!usuario || !hasLoggedIn) {
       return;
     }
 
-    const interval = setInterval(async () => {
+    let lastTrigger = null;
+    
+    const verificarTrigger = async () => {
+      try {
+        const trigger = await AsyncStorage.getItem('popupTrigger');
+        if (trigger && trigger !== lastTrigger) {
+          console.log('🎯 TRIGGER DE POPUP DETECTADO');
+          lastTrigger = trigger;
+          
+          // Verificar pedidos inmediatamente
+          const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
+          const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+          
+          if (pedidosGuardados) {
+            const pedidos = JSON.parse(pedidosGuardados);
+            setPedidosPendientes(pedidos);
+          }
+          
+          if (pedidosRechazadosGuardados) {
+            const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
+            setPedidosRechazadosPendientes(pedidosRechazados);
+          }
+          
+          const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
+                                 (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+          setVisible(totalPendientes > 0);
+        }
+      } catch (error) {
+        console.log('Error al verificar trigger:', error);
+      }
+    };
+
+    // Verificar trigger cada 500ms para reducir logs
+    const interval = setInterval(verificarTrigger, 500);
+    
+    return () => clearInterval(interval);
+  }, [usuario, hasLoggedIn]);
+
+  // Escuchar cambios en pedidos solo si el usuario está logueado y ya hizo login en esta sesión
+  useEffect(() => {
+    if (!usuario || !hasLoggedIn) {
+      return;
+    }
+    
+    // Función para verificar pedidos
+    const verificarPedidos = async () => {
       try {
         const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
+        const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+        
         if (pedidosGuardados) {
           const pedidos = JSON.parse(pedidosGuardados);
           setPedidosPendientes(pedidos);
-          setVisible(pedidos.length > 0);
         }
+        
+        if (pedidosRechazadosGuardados) {
+          const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
+          setPedidosRechazadosPendientes(pedidosRechazados);
+        }
+        
+        const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
+                               (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+        setVisible(totalPendientes > 0);
       } catch (error) {
         console.log('Error al verificar pedidos:', error);
       }
-    }, 2000); // Verificar cada 2 segundos
+    };
+
+    // Verificar inmediatamente
+    verificarPedidos();
+    
+    // Luego verificar cada 5 segundos para reducir logs
+    const interval = setInterval(verificarPedidos, 5000);
 
     return () => clearInterval(interval);
   }, [usuario, hasLoggedIn]);
@@ -200,7 +345,9 @@ const PedidoPopup = ({ navigation, usuario }) => {
     }
   };
 
-  if (!visible) return null;
+  if (!visible) {
+    return null;
+  }
 
   return (
     <PanGestureHandler
@@ -222,7 +369,7 @@ const PedidoPopup = ({ navigation, usuario }) => {
         ]}
       >
         <TouchableOpacity
-          style={styles.popupButton}
+          style={[styles.popupButton, { backgroundColor: currentTheme.primary, shadowColor: currentTheme.shadow }]}
           onPress={handlePress}
           activeOpacity={0.8}
         >

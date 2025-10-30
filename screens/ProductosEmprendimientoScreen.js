@@ -562,6 +562,7 @@ const styles = StyleSheet.create({
   },
   listContainer: {
     padding: 15,
+    paddingBottom: 180, // Espacio para el botón flotante
   },
   productoCard: {
     backgroundColor: "#fff",
@@ -656,7 +657,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     position: "absolute",
-    bottom: 30,
+    bottom: 160, // Aumentado para evitar el menú inferior
     right: 30,
     width: 60,
     height: 60,

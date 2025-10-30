@@ -14,11 +14,26 @@ import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useTheme } from "../context/ThemeContext";
 
 // Componente ItemGaleria completamente separado
-const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito }) => {
+const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito, theme }) => {
+  const themeStyles = theme ? {
+    backgroundColor: theme.cardBackground,
+    textColor: theme.text,
+    textSecondaryColor: theme.textSecondary,
+    primaryColor: theme.primary,
+    borderColor: theme.border,
+  } : {
+    backgroundColor: "#FFF",
+    textColor: "#333",
+    textSecondaryColor: "#666",
+    primaryColor: "#2A9D8F",
+    borderColor: "#f0f0f0",
+  };
+  
   return (
-    <View style={styles.itemGaleria}>
+    <View style={[styles.itemGaleria, { backgroundColor: themeStyles.backgroundColor, borderColor: themeStyles.borderColor }]}>
       <TouchableOpacity
         onPress={() => onImagenPress(item)}
         activeOpacity={0.8}
@@ -36,7 +51,7 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
               styles.etiquetaCategoria,
               item.categoria === "oferta" && styles.etiquetaOferta,
               item.categoria === "principal" && styles.etiquetaPrincipal,
-              item.categoria === "secundario" && styles.etiquetaSecundario,
+              item.categoria === "secundario" && [styles.etiquetaSecundario, { backgroundColor: themeStyles.primaryColor }],
             ]}
           >
             <Text style={styles.etiquetaTexto}>
@@ -50,23 +65,23 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
         </View>
 
         <View style={styles.infoGaleria}>
-          <Text style={styles.nombreGaleria} numberOfLines={2}>
+          <Text style={[styles.nombreGaleria, { color: themeStyles.textColor }]} numberOfLines={2}>
             {item.nombre}
           </Text>
-          <Text style={styles.descripcionGaleria} numberOfLines={2}>
+          <Text style={[styles.descripcionGaleria, { color: themeStyles.textSecondaryColor }]} numberOfLines={2}>
             {item.descripcion}
           </Text>
           <View style={styles.precioContainer}>
             {item.categoria === "oferta" ? (
               <View style={styles.precioOfertaContainer}>
-                <Text style={styles.precioOferta}>
+                <Text style={[styles.precioOferta, { color: themeStyles.primaryColor }]}>
                   {item.precio
                     ? `$${item.precio.toLocaleString("es-CL")}`
                     : "Consulte"}
                 </Text>
               </View>
             ) : (
-              <Text style={styles.precioNormal}>
+              <Text style={[styles.precioNormal, { color: themeStyles.primaryColor }]}>
                 {item.precio
                   ? `$${item.precio.toLocaleString("es-CL")}`
                   : "Consulte"}
@@ -77,21 +92,21 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
       </TouchableOpacity>
 
       {/* Controles del carrito */}
-      <View style={styles.carritoControls}>
+      <View style={[styles.carritoControls, { borderTopColor: themeStyles.borderColor }]}>
         {cantidadEnCarrito > 0 ? (
           <View style={styles.cantidadContainer}>
             <TouchableOpacity
-              style={styles.botonCantidad}
+              style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
               onPress={() => onQuitar(index, categoria)}
             >
-              <FontAwesome name="minus" size={12} color="#2A9D8F" />
+              <FontAwesome name="minus" size={12} color={themeStyles.primaryColor} />
             </TouchableOpacity>
-            <Text style={styles.cantidadTexto}>{cantidadEnCarrito}</Text>
+            <Text style={[styles.cantidadTexto, { color: themeStyles.textColor }]}>{cantidadEnCarrito}</Text>
             <TouchableOpacity
-              style={styles.botonCantidad}
+              style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
               onPress={() => onAgregar(item, index, categoria)}
             >
-              <FontAwesome name="plus" size={12} color="#2A9D8F" />
+              <FontAwesome name="plus" size={12} color={themeStyles.primaryColor} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.botonEliminar}
@@ -102,7 +117,7 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
           </View>
         ) : (
           <TouchableOpacity
-            style={styles.botonAgregarCarrito}
+            style={[styles.botonAgregarCarrito, { backgroundColor: themeStyles.primaryColor }]}
             onPress={() => onAgregar(item, index, categoria)}
           >
             <FontAwesome name="plus" size={14} color="white" />
@@ -116,6 +131,7 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
 
 const PedidoDetalleScreen = ({ route, navigation }) => {
   const { producto } = route.params;
+  const { currentTheme } = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
   const [contactoAbierto, setContactoAbierto] = useState(false);
   const [distancia, setDistancia] = useState(null);
@@ -387,9 +403,23 @@ const reportReasons = [
     setConfirmacionVisible(true);
   };
 
-  const confirmarEnvioPedido = () => {
+  const confirmarEnvioPedido = async () => {
+    console.log('✅ CONFIRMANDO ENVÍO DE PEDIDO');
     setConfirmacionVisible(false);
-    guardarPedido();
+    
+    // Guardar el pedido primero
+    await guardarPedido();
+    console.log('✅ Pedido guardado, activando popup...');
+    
+    // Activar el popup inmediatamente usando AsyncStorage
+    try {
+      await AsyncStorage.setItem('popupTrigger', Date.now().toString());
+      console.log('✅ Trigger de popup enviado');
+    } catch (error) {
+      console.log('❌ Error al enviar trigger de popup:', error);
+    }
+    
+    // Abrir WhatsApp
     abrirWhatsApp();
   };
 
@@ -425,6 +455,12 @@ const reportReasons = [
   };
 
   const abrirWhatsApp = () => {
+    console.log('📱 INICIANDO ENVÍO DE WHATSAPP');
+    console.log('📱 Carrito actual:', carritoRef.current);
+    console.log('📱 Usuario:', usuario ? 'EXISTE' : 'NULL');
+    console.log('📱 Modo entrega:', modoEntrega);
+    console.log('📱 Dirección:', direccionUsuario);
+    
     const numero = "+56994908047"; // 🔥 Número de WhatsApp del negocio (con código país)
     
     let mensaje = `🛍️ *NUEVO PEDIDO*\n\n`;
@@ -448,13 +484,20 @@ const reportReasons = [
       mensaje += `\n💰 *TOTAL: $${total.toLocaleString("es-CL")}*`;
     }
     
+    console.log('📱 Mensaje construido:', mensaje);
+    
     const url = `https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`;
+    console.log('📱 URL de WhatsApp:', url);
     
     // Limpiar el carrito después de enviar el pedido
+    console.log('📱 Limpiando carrito...');
     carritoRef.current = [];
     forceUpdate({});
+    console.log('📱 Carrito limpiado');
     
+    console.log('📱 Abriendo WhatsApp...');
     Linking.openURL(url);
+    console.log('📱 WhatsApp abierto - POPUP DEBERÍA APARECER AHORA');
   };
 
   const llamarTelefono = () => {
@@ -572,8 +615,8 @@ const reportReasons = [
 
   return (
     <LinearGradient
-      colors={["#ffffff", "#ffffff", "#ffffff", "#2A9D8F"]}
-      style={styles.container}
+      colors={[currentTheme.background, currentTheme.background, currentTheme.background, currentTheme.primary]}
+      style={[styles.container, { backgroundColor: currentTheme.background }]}
     >
       {/* Modal de Reporte */}
 <Modal
@@ -587,8 +630,8 @@ const reportReasons = [
 >
   <View style={styles.reportModalContainer}>
     <View style={styles.reportModalContent}>
-      <Text style={styles.reportModalTitle}>Reportar Emprendimiento</Text>
-      <Text style={styles.reportModalSubtitle}>Selecciona el motivo del reporte</Text>
+      <Text style={[styles.reportModalTitle, { color: currentTheme.text }]}>Reportar Emprendimiento</Text>
+      <Text style={[styles.reportModalSubtitle, { color: currentTheme.textSecondary }]}>Selecciona el motivo del reporte</Text>
       
       <ScrollView style={styles.reportOptionsContainer}>
         {reportReasons.map((reason) => (
@@ -626,6 +669,7 @@ const reportReasons = [
         <TouchableOpacity
           style={[
             styles.reportModalSubmitButton,
+            { backgroundColor: currentTheme.primary },
             !selectedReportReason && styles.reportModalSubmitButtonDisabled
           ]}
           disabled={!selectedReportReason}
@@ -701,7 +745,7 @@ const reportReasons = [
         <View style={styles.confirmacionModalContainer}>
           <View style={styles.confirmacionModalContent}>
             <View style={styles.confirmacionHeader}>
-              <FontAwesome name="check-circle" size={32} color="#2A9D8F" />
+              <FontAwesome name="check-circle" size={32} color={currentTheme.primary} />
               <Text style={styles.confirmacionTitulo}>Confirmar Pedido</Text>
             </View>
             
@@ -864,19 +908,19 @@ const reportReasons = [
     <View style={styles.modalContent}>
       {/* Título con ícono */}
       <View style={styles.modalHeader}>
-        <Text style={styles.modalTitulo}>⏰ Horarios de Atención</Text>
+        <Text style={[styles.modalTitulo, { color: currentTheme.primary }]}>⏰ Horarios de Atención</Text>
       </View>
 
       {/* Lista de horarios */}
-      {formatHorariosForDisplay(horarios).map((horario, index) => (
-        <Text key={index} style={styles.horarioTexto}>
+        {formatHorariosForDisplay(horarios).map((horario, index) => (
+        <Text key={index} style={[styles.horarioTexto, { color: currentTheme.text }]}>
           {horario}
         </Text>
       ))}
 
       {/* Botón de cierre */}
       <TouchableOpacity
-        style={styles.botonCerrar}
+        style={[styles.botonCerrar, { backgroundColor: currentTheme.primary }]}
         onPress={() => setModalVisible(false)}
       >
         <Text style={styles.botonCerrarTexto}>Cerrar</Text>
@@ -958,7 +1002,7 @@ const reportReasons = [
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
-        <View style={styles.contenedorSuperpuesto}>
+        <View style={[styles.contenedorSuperpuesto, { backgroundColor: currentTheme.cardBackground }]}>
           <View style={styles.productoHeader}>
             {/* 🔥 Logo a la izquierda */}
             <Image
@@ -970,14 +1014,14 @@ const reportReasons = [
 
             {/* 🔥 Contenedor del nombre y las estrellas */}
             <View style={styles.infoContainer}>
-              <Text style={styles.nombreEmpresa}>{producto.nombre}</Text>
+              <Text style={[styles.nombreEmpresa, { color: currentTheme.text }]}>{producto.nombre}</Text>
 
               {/* ✅ Evaluación con estrellas mejorada */}
               {renderEstrellasConVotantes()}
             </View>
           </View>
 
-          <Text style={styles.descripcion}>{producto.descripcion}</Text>
+          <Text style={[styles.descripcion, { color: currentTheme.textSecondary }]}>{producto.descripcion}</Text>
           
           {/* ✅ Precio y estado */}
           <View style={styles.productoEstadoContainer}>
@@ -1017,8 +1061,8 @@ const reportReasons = [
             </View>
           </View>
           <View style={styles.distanciaContainer}>
-            <FontAwesome name="map-marker" size={16} color="#2A9D8F" />
-            <Text style={styles.distanciaTexto}>
+            <FontAwesome name="map-marker" size={16} color={currentTheme.primary} />
+            <Text style={[styles.distanciaTexto, { color: currentTheme.text }]}>
               {cargandoDistancia
                 ? "Calculando distancia..."
                 : "A " + distancia + " de tu ubicación" ||
@@ -1047,55 +1091,55 @@ const reportReasons = [
                 style={styles.contactoItem}
                 onPress={llamarTelefono}
               >
-                <FontAwesome name="phone" size={18} color="#2A9D8F" />
-                <Text style={styles.contactoTexto}>{producto.telefono}</Text>
-                <Text style={styles.contactoAccion}> (Tocar para llamar)</Text>
+                <FontAwesome name="phone" size={18} color={currentTheme.primary} />
+                <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>{producto.telefono}</Text>
+                <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Tocar para llamar)</Text>
               </TouchableOpacity>
 
               <View style={styles.contactoItem}>
-                <FontAwesome name="map-marker" size={18} color="#2A9D8F" />
+                <FontAwesome name="map-marker" size={18} color={currentTheme.primary} />
                 <Text
-                  style={styles.contactoTexto}
+                  style={[styles.contactoTexto, { color: currentTheme.text }]}
                   numberOfLines={2} // Permite hasta 2 líneas
                   ellipsizeMode="tail"
                 >
                   {producto.direccion}
                 </Text>
                 <TouchableOpacity onPress={abrirMapa}>
-                  <Text style={styles.contactoAccion}> (Ver en mapa)</Text>
+                  <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Ver en mapa)</Text>
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
                 style={styles.contactoItem}
                 onPress={() => setModalVisible(true)}
               >
-                <FontAwesome name="clock-o" size={18} color="#2A9D8F" />
-                <Text style={styles.contactoTexto}>Horarios de atención</Text>
-                <Text style={styles.contactoAccion}> (Ver horarios)</Text>
+                <FontAwesome name="clock-o" size={18} color={currentTheme.primary} />
+                <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>Horarios de atención</Text>
+                <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Ver horarios)</Text>
               </TouchableOpacity>
             </View>
           )}
           <View style={styles.seccionEntrega}>
-            <Text style={styles.seccionTitulo}>Opciones de Entrega</Text>
+            <Text style={[styles.seccionTitulo, { color: currentTheme.text }]}>Opciones de Entrega</Text>
             {/* 🔥 Métodos de pago disponibles */}
-            <Text style={styles.contactoTexto}>Medios de Pago:</Text>
+            <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>Medios de Pago:</Text>
             <View style={styles.metodosPagoContainer}>
               {producto.metodosPago.tarjeta && (
                 <View style={styles.metodoPago}>
-                  <FontAwesome name="credit-card" size={20} color="#2A9D8F" />
-                  <Text style={styles.metodoPagoTexto}>Tarjeta</Text>
+                  <FontAwesome name="credit-card" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Tarjeta</Text>
                 </View>
               )}
               {producto.metodosPago.efectivo && (
                 <View style={styles.metodoPago}>
                   <FontAwesome name="money" size={20} color="#FFD700" />
-                  <Text style={styles.metodoPagoTexto}>Efectivo</Text>
+                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Efectivo</Text>
                 </View>
               )}
               {producto.metodosPago.transferencia && (
                 <View style={styles.metodoPago}>
                   <FontAwesome name="exchange" size={20} color="#FFD700" />
-                  <Text style={styles.metodoPagoTexto}>Transferencia</Text>
+                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Transferencia</Text>
                 </View>
               )}
             </View>
@@ -1104,7 +1148,7 @@ const reportReasons = [
                 <TouchableOpacity
                   style={[
                     styles.selectorBoton,
-                    modoEntrega === "delivery" && styles.seleccionado,
+                    modoEntrega === "delivery" && [styles.seleccionado, { backgroundColor: currentTheme.primary }],
                   ]}
                   onPress={() => cambiarModoEntrega("delivery")}
                 >
@@ -1139,7 +1183,7 @@ const reportReasons = [
                 <TouchableOpacity
                   style={[
                     styles.selectorBoton,
-                    modoEntrega === "retiro" && styles.seleccionado,
+                    modoEntrega === "retiro" && [styles.seleccionado, { backgroundColor: currentTheme.primary }],
                   ]}
                   onPress={() => cambiarModoEntrega("retiro")}
                 >
@@ -1177,8 +1221,8 @@ const reportReasons = [
             </Text>
           </View>
           <View style={styles.seccionEntrega}>
-            <Text style={styles.seccionTitulo}>Productos o Servicios</Text>
-            <Text style={styles.descripcionLarga}>
+            <Text style={[styles.seccionTitulo, { color: currentTheme.text }]}>Productos o Servicios</Text>
+            <Text style={[styles.descripcionLarga, { color: currentTheme.textSecondary }]}>
               {producto.descripcionLarga ||
                 "Descripción detallada no disponible"}
             </Text>
@@ -1191,7 +1235,7 @@ const reportReasons = [
                     <View style={styles.iconoSeccionContainer}>
                       <FontAwesome name="star" size={16} color="#FFD700" />
                     </View>
-                    <Text style={styles.tituloSeccionGaleria}>Destacados</Text>
+                    <Text style={[styles.tituloSeccionGaleria, { color: currentTheme.text }]}>Destacados</Text>
                   </View>
                   <ScrollView
                     horizontal
@@ -1209,6 +1253,7 @@ const reportReasons = [
                         onQuitar={handleQuitarItem}
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "principal")}
+                        theme={currentTheme}
                       />
                     ))}
                   </ScrollView>
@@ -1252,6 +1297,7 @@ const reportReasons = [
                         onQuitar={handleQuitarItem}
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "oferta")}
+                        theme={currentTheme}
                       />
                     ))}
                   </ScrollView>
@@ -1277,7 +1323,7 @@ const reportReasons = [
                     <Text
                       style={[
                         styles.tituloSeccionGaleria,
-                        { color: "#2A9D8F" },
+                        { color: currentTheme.primary },
                       ]}
                     >
                       Adicionales
@@ -1295,6 +1341,7 @@ const reportReasons = [
                         onQuitar={handleQuitarItem}
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "secundario")}
+                        theme={currentTheme}
                       />
                     ))}
                   </View>

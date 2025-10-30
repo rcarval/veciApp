@@ -8,7 +8,8 @@ import {
   ScrollView,
   Alert,
   FlatList,
-  Modal
+  Modal,
+  ActivityIndicator
 } from "react-native";
 import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -17,12 +18,16 @@ import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
+import { API_ENDPOINTS } from "../config/api";
+import { useUser } from "../context/UserContext";
 
 const MisDireccionesScreen = () => {
   const navigation = useNavigation();
-  const [direcciones, setDirecciones] = useState([]);
+  const { direcciones, cargarDirecciones, invalidarDirecciones } = useUser();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [direccionEditando, setDireccionEditando] = useState(null);
+  const [cargando, setCargando] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   
   // Estados del formulario
   const [nombre, setNombre] = useState("");
@@ -52,20 +57,36 @@ const MisDireccionesScreen = () => {
     { id: "5", nombre: "Melipilla" },
   ];
 
+  // Cargar direcciones al iniciar (usando contexto con cache)
   useEffect(() => {
-    cargarDirecciones();
+    const cargar = async () => {
+      try {
+        setCargando(true);
+        await cargarDirecciones(false); // Usar cache si es válido
+      } catch (error) {
+        console.error("Error al cargar direcciones:", error);
+      } finally {
+        setCargando(false);
+      }
+    };
+    cargar();
   }, []);
 
-  const cargarDirecciones = async () => {
-    try {
-      const direccionesGuardadas = await AsyncStorage.getItem('direcciones');
-      if (direccionesGuardadas) {
-        setDirecciones(JSON.parse(direccionesGuardadas));
+  // Recargar cuando se regrese a la pantalla (solo si es necesario)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        setCargando(true);
+        await cargarDirecciones(false); // Solo recargará si el cache expiró
+      } catch (error) {
+        console.error("Error al recargar direcciones:", error);
+      } finally {
+        setCargando(false);
       }
-    } catch (error) {
-      console.log('Error al cargar direcciones:', error);
-    }
-  };
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const guardarDireccion = async () => {
     if (!nombre.trim() || !direccionCompleta.trim()) {
@@ -74,48 +95,76 @@ const MisDireccionesScreen = () => {
     }
 
     try {
-      const nuevaDireccion = {
-        id: direccionEditando ? direccionEditando.id : Date.now().toString(),
+      setGuardando(true);
+      const token = await AsyncStorage.getItem("token");
+      
+      if (!token) {
+        Alert.alert("Error", "No hay sesión activa. Por favor inicia sesión.");
+        navigation.navigate("Login");
+        return;
+      }
+
+      // Preparar datos para el backend
+      const datosDireccion = {
         nombre: nombre.trim(),
         direccion: direccionCompleta.trim(),
-        referencia: referencia.trim(),
-        esPrincipal: esPrincipal,
-        coordenadas: direccionValidada?.coordenadas || null,
-        fechaCreacion: direccionEditando ? direccionEditando.fechaCreacion : new Date().toISOString()
+        referencia: referencia.trim() || null,
+        es_principal: esPrincipal,
+        latitud: direccionValidada?.coordenadas?.lat || selectedLocation?.latitude || null,
+        longitud: direccionValidada?.coordenadas?.lng || selectedLocation?.longitude || null,
       };
 
-      let direccionesActualizadas;
+      let response;
       
       if (direccionEditando) {
-        // Editar dirección existente
-        direccionesActualizadas = direcciones.map(dir => 
-          dir.id === direccionEditando.id ? nuevaDireccion : dir
+        // Actualizar dirección existente
+        response = await fetch(API_ENDPOINTS.DIRECCION_BY_ID(direccionEditando.id), {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(datosDireccion),
+        });
+      } else {
+        // Crear nueva dirección
+        response = await fetch(API_ENDPOINTS.DIRECCIONES, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify(datosDireccion),
+        });
+      }
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        // Invalidar cache y recargar direcciones
+        invalidarDirecciones();
+        await cargarDirecciones(true); // Forzar recarga para obtener datos actualizados
+        
+        // Limpiar formulario
+        limpiarFormulario();
+        
+        Alert.alert(
+          "Éxito", 
+          data.mensaje || (direccionEditando ? "Dirección actualizada correctamente" : "Dirección guardada correctamente")
         );
       } else {
-        // Agregar nueva dirección
-        direccionesActualizadas = [...direcciones, nuevaDireccion];
+        Alert.alert("Error", data.mensaje || data.error || "No se pudo guardar la dirección");
       }
-
-      // Si se marca como principal, quitar principal de las demás
-      if (esPrincipal) {
-        direccionesActualizadas = direccionesActualizadas.map(dir => 
-          dir.id === nuevaDireccion.id ? dir : { ...dir, esPrincipal: false }
-        );
-      }
-
-      await AsyncStorage.setItem('direcciones', JSON.stringify(direccionesActualizadas));
-      setDirecciones(direccionesActualizadas);
-      
-      // Limpiar formulario
-      limpiarFormulario();
-      
-      Alert.alert(
-        "Éxito", 
-        direccionEditando ? "Dirección actualizada correctamente" : "Dirección guardada correctamente"
-      );
     } catch (error) {
-      console.log('Error al guardar dirección:', error);
-      Alert.alert("Error", "No se pudo guardar la dirección");
+      console.error('Error al guardar dirección:', error);
+      Alert.alert(
+        "Error de conexión",
+        "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté corriendo."
+      );
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -123,8 +172,20 @@ const MisDireccionesScreen = () => {
     setDireccionEditando(direccion);
     setNombre(direccion.nombre);
     setDireccionCompleta(direccion.direccion);
-    setReferencia(direccion.referencia);
-    setEsPrincipal(direccion.esPrincipal);
+    setReferencia(direccion.referencia || "");
+    setEsPrincipal(direccion.esPrincipal || false);
+    
+    // Restaurar coordenadas si existen
+    if (direccion.coordenadas) {
+      setSelectedLocation({
+        latitude: direccion.coordenadas.lat || direccion.coordenadas.latitude,
+        longitude: direccion.coordenadas.lng || direccion.coordenadas.longitude,
+      });
+      setDireccionValidada({
+        coordenadas: direccion.coordenadas
+      });
+    }
+    
     setMostrarFormulario(true);
   };
 
@@ -139,13 +200,42 @@ const MisDireccionesScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const direccionesActualizadas = direcciones.filter(dir => dir.id !== id);
-              await AsyncStorage.setItem('direcciones', JSON.stringify(direccionesActualizadas));
-              setDirecciones(direccionesActualizadas);
-              Alert.alert("Éxito", "Dirección eliminada correctamente");
+              setCargando(true);
+              const token = await AsyncStorage.getItem("token");
+              
+              if (!token) {
+                Alert.alert("Error", "No hay sesión activa. Por favor inicia sesión.");
+                navigation.navigate("Login");
+                return;
+              }
+
+              const response = await fetch(API_ENDPOINTS.DIRECCION_BY_ID(id), {
+                method: "DELETE",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+                  "Authorization": `Bearer ${token}`,
+                },
+              });
+
+              const data = await response.json();
+
+              if (response.ok && data.ok) {
+                // Invalidar cache y recargar direcciones
+                invalidarDirecciones();
+                await cargarDirecciones(true); // Forzar recarga
+                Alert.alert("Éxito", data.mensaje || "Dirección eliminada correctamente");
+              } else {
+                Alert.alert("Error", data.mensaje || data.error || "No se pudo eliminar la dirección");
+              }
             } catch (error) {
-              console.log('Error al eliminar dirección:', error);
-              Alert.alert("Error", "No se pudo eliminar la dirección");
+              console.error('Error al eliminar dirección:', error);
+              Alert.alert(
+                "Error de conexión",
+                "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté corriendo."
+              );
+            } finally {
+              setCargando(false);
             }
           }
         }
@@ -404,7 +494,12 @@ const MisDireccionesScreen = () => {
       </LinearGradient>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
-        {direcciones.length > 0 ? (
+        {cargando ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2A9D8F" />
+            <Text style={styles.loadingText}>Cargando direcciones...</Text>
+          </View>
+        ) : direcciones.length > 0 ? (
           <FlatList
             data={direcciones}
             renderItem={renderDireccion}
@@ -514,12 +609,17 @@ const MisDireccionesScreen = () => {
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={styles.guardarButton}
+                  style={[styles.guardarButton, guardando && styles.guardarButtonDisabled]}
                   onPress={guardarDireccion}
+                  disabled={guardando}
                 >
-                  <Text style={styles.guardarButtonText}>
-                    {direccionEditando ? "Actualizar" : "Guardar"}
-                  </Text>
+                  {guardando ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <Text style={styles.guardarButtonText}>
+                      {direccionEditando ? "Actualizar" : "Guardar"}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -655,6 +755,7 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 20,
+    paddingBottom: 150, // Espacio para el botón flotante y menú inferior
   },
   direccionesList: {
     marginBottom: 20,
@@ -853,11 +954,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginLeft: 10,
     alignItems: "center",
+    justifyContent: "center",
+  },
+  guardarButtonDisabled: {
+    backgroundColor: "#95a5a6",
+    opacity: 0.6,
   },
   guardarButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#7f8c8d",
   },
   // Estilos para validación con mapa
   direccionButton: {

@@ -11,12 +11,14 @@ import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LineChart } from "react-native-chart-kit";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { useTheme } from "../context/ThemeContext";
 
 const MisEstadisticasScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { emprendimiento } = route.params;
   const { width } = useWindowDimensions();
+  const { currentTheme } = useTheme();
 
   // Estados
   const [periodo, setPeriodo] = useState("año");
@@ -174,9 +176,9 @@ const MisEstadisticasScreen = () => {
 
   // Configuración segura del gráfico
   const chartConfig = {
-    backgroundColor: "#2A9D8F",
-    backgroundGradientFrom: "#2A9D8F",
-    backgroundGradientTo: "#1D7874",
+    backgroundColor: currentTheme.primary,
+    backgroundGradientFrom: currentTheme.primary,
+    backgroundGradientTo: currentTheme.secondary,
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
@@ -266,9 +268,9 @@ const MisEstadisticasScreen = () => {
   };
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerTitleContainer}>
@@ -281,47 +283,47 @@ const MisEstadisticasScreen = () => {
       </LinearGradient>
 
       <ScrollView 
-        style={styles.container}
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
         contentContainerStyle={styles.scrollContent}
       >
         {/* Selector de período */}
         <View style={styles.periodoContainer}>
-          <Text style={styles.sectionTitle}>Periodo de análisis</Text>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Periodo de análisis</Text>
           <View style={styles.periodoButtons}>
             <TouchableOpacity
-              style={[styles.periodoButton, periodo === "año" && styles.periodoButtonActive]}
+              style={[styles.periodoButton, periodo === "año" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
               onPress={() => setPeriodo("año")}
             >
-              <Text style={[styles.periodoButtonText, periodo === "año" && styles.periodoButtonTextActive]}>Año</Text>
+              <Text style={[styles.periodoButtonText, periodo === "año" && styles.periodoButtonTextActive, { color: periodo === "año" ? "white" : currentTheme.text }]}>Año</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.periodoButton, periodo === "mes" && styles.periodoButtonActive]}
+              style={[styles.periodoButton, periodo === "mes" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
               onPress={() => setPeriodo("mes")}
             >
-              <Text style={[styles.periodoButtonText, periodo === "mes" && styles.periodoButtonTextActive]}>Mes</Text>
+              <Text style={[styles.periodoButtonText, periodo === "mes" && styles.periodoButtonTextActive, { color: periodo === "mes" ? "white" : currentTheme.text }]}>Mes</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.periodoButton, periodo === "semana" && styles.periodoButtonActive]}
+              style={[styles.periodoButton, periodo === "semana" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
               onPress={() => setPeriodo("semana")}
             >
-              <Text style={[styles.periodoButtonText, periodo === "semana" && styles.periodoButtonTextActive]}>Semana</Text>
+              <Text style={[styles.periodoButtonText, periodo === "semana" && styles.periodoButtonTextActive, { color: periodo === "semana" ? "white" : currentTheme.text }]}>Semana</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.periodoButton, periodo === "dia" && styles.periodoButtonActive]}
+              style={[styles.periodoButton, periodo === "dia" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
               onPress={() => setPeriodo("dia")}
             >
-              <Text style={[styles.periodoButtonText, periodo === "dia" && styles.periodoButtonTextActive]}>Día</Text>
+              <Text style={[styles.periodoButtonText, periodo === "dia" && styles.periodoButtonTextActive, { color: periodo === "dia" ? "white" : currentTheme.text }]}>Día</Text>
             </TouchableOpacity>
           </View>
           
-          <Text style={styles.rangoFechas}>
+          <Text style={[styles.rangoFechas, { color: currentTheme.textSecondary }]}>
             {formatearFecha(fechaInicio)} - {formatearFecha(fechaFin)}
           </Text>
         </View>
 
         {/* Gráfico */}
-        <View style={styles.chartContainer}>
-          <Text style={styles.sectionTitle}>Evolución de interacciones</Text>
+        <View style={[styles.chartContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Evolución de interacciones</Text>
           {visualizaciones.length > 0 && contactos.length > 0 && (
             <>
               {(() => {
@@ -366,9 +368,9 @@ const MisEstadisticasScreen = () => {
 
         {/* Resumen de estadísticas */}
         <View style={styles.statsContainer}>
-          <Text style={styles.sectionTitle}>Resumen</Text>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Resumen</Text>
           <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#2A9D8F" }]}>
+            <View style={[styles.statCard, { backgroundColor: currentTheme.primary }]}>
               <Text style={styles.statValue}>{totalVisualizaciones}</Text>
               <Text style={styles.statLabel}>Visualizaciones</Text>
               <FontAwesome name="eye" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
@@ -390,38 +392,38 @@ const MisEstadisticasScreen = () => {
 
         {/* Sección de Pedidos */}
         <View style={styles.pedidosContainer}>
-          <Text style={styles.sectionTitle}>💰 Información de Pedidos</Text>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>💰 Información de Pedidos</Text>
           <View style={styles.pedidosGrid}>
-            <View style={styles.pedidoCard}>
-              <FontAwesome name="shopping-cart" size={24} color="#2A9D8F" style={styles.pedidoIcon} />
-              <Text style={styles.pedidoValue}>{datosPedidos.totalPedidos || 0}</Text>
-              <Text style={styles.pedidoLabel}>Total Pedidos</Text>
+            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              <FontAwesome name="shopping-cart" size={24} color={currentTheme.primary} style={styles.pedidoIcon} />
+              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{datosPedidos.totalPedidos || 0}</Text>
+              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Total Pedidos</Text>
             </View>
-            <View style={styles.pedidoCard}>
+            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="dollar" size={24} color="#F4A261" style={styles.pedidoIcon} />
-              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.montoTotal || 0)}</Text>
-              <Text style={styles.pedidoLabel}>Monto Total</Text>
+              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.montoTotal || 0)}</Text>
+              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Monto Total</Text>
             </View>
           </View>
           <View style={styles.pedidosGrid}>
-            <View style={styles.pedidoCard}>
+            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="calculator" size={24} color="#E76F51" style={styles.pedidoIcon} />
-              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.promedioPedido || 0)}</Text>
-              <Text style={styles.pedidoLabel}>Promedio por Pedido</Text>
+              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.promedioPedido || 0)}</Text>
+              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Promedio por Pedido</Text>
             </View>
-            <View style={styles.pedidoCard}>
+            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="calendar" size={24} color="#9C27B0" style={styles.pedidoIcon} />
-              <Text style={styles.pedidoValue}>{datosPedidos.pedidosPeriodo || 0}</Text>
-              <Text style={styles.pedidoLabel}>
+              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{datosPedidos.pedidosPeriodo || 0}</Text>
+              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>
                 Pedidos este {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
               </Text>
             </View>
           </View>
           <View style={styles.pedidosGrid}>
-            <View style={[styles.pedidoCard, { flex: 1 }]}>
+            <View style={[styles.pedidoCard, { flex: 1, backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="line-chart" size={24} color="#4CAF50" style={styles.pedidoIcon} />
-              <Text style={styles.pedidoValue}>{formatearMonto(datosPedidos.montoPeriodo || 0)}</Text>
-              <Text style={styles.pedidoLabel}>
+              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.montoPeriodo || 0)}</Text>
+              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>
                 Monto del {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
               </Text>
             </View>
@@ -430,37 +432,37 @@ const MisEstadisticasScreen = () => {
 
         {/* Sección de Calificaciones */}
         <View style={styles.calificacionesContainer}>
-          <Text style={styles.sectionTitle}>⭐ Calificaciones de Clientes</Text>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>⭐ Calificaciones de Clientes</Text>
           
           {/* Calificación General */}
-          <View style={styles.calificacionGeneralCard}>
+          <View style={[styles.calificacionGeneralCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
             <View style={styles.calificacionGeneralHeader}>
-              <Text style={styles.calificacionGeneralTitulo}>Calificación General</Text>
-              <Text style={styles.calificacionGeneralVotantes}>({datosCalificaciones.totalVotantes} votos)</Text>
+              <Text style={[styles.calificacionGeneralTitulo, { color: currentTheme.text }]}>Calificación General</Text>
+              <Text style={[styles.calificacionGeneralVotantes, { color: currentTheme.textSecondary }]}>({datosCalificaciones.totalVotantes} votos)</Text>
             </View>
             <View style={styles.calificacionGeneralContent}>
               <View style={styles.estrellasContainer}>
                 {renderEstrellas(datosCalificaciones.calificacionGeneral)}
               </View>
-              <Text style={styles.calificacionGeneralNumero}>
+              <Text style={[styles.calificacionGeneralNumero, { color: currentTheme.primary }]}>
                 {datosCalificaciones.calificacionGeneral.toFixed(1)}
               </Text>
             </View>
           </View>
 
           {/* Criterios Individuales */}
-          <View style={styles.criteriosContainer}>
-            <Text style={styles.criteriosTitulo}>Calificación por Criterios</Text>
+          <View style={[styles.criteriosContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+            <Text style={[styles.criteriosTitulo, { color: currentTheme.text }]}>Calificación por Criterios</Text>
             
             <View style={styles.criterioItem}>
               <View style={styles.criterioInfo}>
-                <Text style={styles.criterioLabel}>💰 Precio</Text>
+                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>💰 Precio</Text>
               </View>
               <View style={styles.criterioCalificacion}>
                 <View style={styles.estrellasContainer}>
                   {renderEstrellas(datosCalificaciones.criterios.precio.promedio)}
                 </View>
-                <Text style={styles.criterioNumero}>
+                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
                   {datosCalificaciones.criterios.precio.promedio.toFixed(1)}
                 </Text>
               </View>
@@ -468,13 +470,13 @@ const MisEstadisticasScreen = () => {
 
             <View style={styles.criterioItem}>
               <View style={styles.criterioInfo}>
-                <Text style={styles.criterioLabel}>⭐ Calidad</Text>
+                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>⭐ Calidad</Text>
               </View>
               <View style={styles.criterioCalificacion}>
                 <View style={styles.estrellasContainer}>
                   {renderEstrellas(datosCalificaciones.criterios.calidad.promedio)}
                 </View>
-                <Text style={styles.criterioNumero}>
+                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
                   {datosCalificaciones.criterios.calidad.promedio.toFixed(1)}
                 </Text>
               </View>
@@ -482,13 +484,13 @@ const MisEstadisticasScreen = () => {
 
             <View style={styles.criterioItem}>
               <View style={styles.criterioInfo}>
-                <Text style={styles.criterioLabel}>👥 Servicio al Cliente</Text>
+                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>👥 Servicio al Cliente</Text>
               </View>
               <View style={styles.criterioCalificacion}>
                 <View style={styles.estrellasContainer}>
                   {renderEstrellas(datosCalificaciones.criterios.servicio.promedio)}
                 </View>
-                <Text style={styles.criterioNumero}>
+                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
                   {datosCalificaciones.criterios.servicio.promedio.toFixed(1)}
                 </Text>
               </View>
@@ -496,13 +498,13 @@ const MisEstadisticasScreen = () => {
 
             <View style={styles.criterioItem}>
               <View style={styles.criterioInfo}>
-                <Text style={styles.criterioLabel}>⏰ Tiempo de Entrega</Text>
+                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>⏰ Tiempo de Entrega</Text>
               </View>
               <View style={styles.criterioCalificacion}>
                 <View style={styles.estrellasContainer}>
                   {renderEstrellas(datosCalificaciones.criterios.tiempoEntrega.promedio)}
                 </View>
-                <Text style={styles.criterioNumero}>
+                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
                   {datosCalificaciones.criterios.tiempoEntrega.promedio.toFixed(1)}
                 </Text>
               </View>
@@ -512,20 +514,20 @@ const MisEstadisticasScreen = () => {
 
         {/* Consejos basados en estadísticas */}
         <View style={styles.tipsContainer}>
-          <Text style={styles.sectionTitle}>Consejos para mejorar</Text>
+          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Consejos para mejorar</Text>
           
           {/* Consejos basados en tasa de conversión */}
           {parseFloat(tasaConversion) < 5 ? (
-            <View style={styles.tipCard}>
+            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="exclamation-circle" size={20} color="#E76F51" style={styles.tipIcon} />
-              <Text style={styles.tipText}>
+              <Text style={[styles.tipText, { color: currentTheme.text }]}>
                 Tu tasa de conversión es baja. Considera mejorar la descripción de tu emprendimiento o agregar más fotos atractivas.
               </Text>
             </View>
           ) : (
-            <View style={styles.tipCard}>
-              <FontAwesome name="check-circle" size={20} color="#2A9D8F" style={styles.tipIcon} />
-              <Text style={styles.tipText}>
+            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              <FontAwesome name="check-circle" size={20} color={currentTheme.primary} style={styles.tipIcon} />
+              <Text style={[styles.tipText, { color: currentTheme.text }]}>
                 ¡Buen trabajo! Tu tasa de conversión es saludable. Sigue así o prueba pequeñas mejoras para aumentar aún más.
               </Text>
             </View>
@@ -533,9 +535,9 @@ const MisEstadisticasScreen = () => {
           
           {/* Consejos basados en horarios */}
           {periodo === "dia" && visualizaciones.slice(6, 8).some(v => v > 0) && (
-            <View style={styles.tipCard}>
+            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
               <FontAwesome name="lightbulb-o" size={20} color="#F4A261" style={styles.tipIcon} />
-              <Text style={styles.tipText}>
+              <Text style={[styles.tipText, { color: currentTheme.text }]}>
                 Tienes visitas en horario nocturno. Considera extender tu horario de atención si es posible.
               </Text>
             </View>
@@ -632,9 +634,9 @@ const MisEstadisticasScreen = () => {
             }
             
             return consejos.map((consejo, index) => (
-              <View key={index} style={styles.tipCard}>
+              <View key={index} style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
                 <FontAwesome name={consejo.icon} size={20} color={consejo.color} style={styles.tipIcon} />
-                <Text style={styles.tipText}>{consejo.text}</Text>
+                <Text style={[styles.tipText, { color: currentTheme.text }]}>{consejo.text}</Text>
               </View>
             ));
           })()}
@@ -697,7 +699,7 @@ const styles = StyleSheet.create({
     padding: 10,
     marginHorizontal: 5,
     borderRadius: 8,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: "#f0f0f0", // Fondo por defecto, se sobrescribe con el tema cuando está activo
     alignItems: "center",
   },
   periodoButtonActive: {
@@ -892,7 +894,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
+    borderBottomColor: "#f0f0f0", // Se mantiene para consistencia visual
   },
   criterioInfo: {
     flex: 1,

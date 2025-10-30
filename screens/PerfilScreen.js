@@ -7,43 +7,133 @@ import {
   StyleSheet, 
   ScrollView,
   Image,
-  Alert 
+  Alert,
+  ActivityIndicator 
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { Picker } from "@react-native-picker/picker";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useUser } from "../context/UserContext";
+import { useTheme } from "../context/ThemeContext";
+import { API_ENDPOINTS } from "../config/api";
 
 const PerfilScreen = () => {
-  const route = useRoute();
   const navigation = useNavigation();
-  const usuario = route.params?.usuario ?? {};
+  const { usuario, loading, cargarUsuario, actualizarUsuarioLocal } = useUser();
+  const { currentTheme, changeTheme, getNextTheme, isChangingTheme } = useTheme();
   const [imagenPerfil, setImagenPerfil] = useState(null);
+  const [subiendoAvatar, setSubiendoAvatar] = useState(false);
 
-  // Cargar imagen del perfil al iniciar
+  // Cargar usuario al iniciar (solo si no está en cache o es antiguo)
+  useEffect(() => {
+    cargarUsuario(false); // false = no forzar, usar cache si es válido
+  }, []);
+
+  // Cargar imagen cuando el usuario cambie
   useEffect(() => {
     cargarImagenPerfil();
-  }, []);
+  }, [usuario]);
+
+  // Recargar usuario cuando se regrese a la pantalla (solo si es necesario)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      cargarUsuario(false); // Usar cache si es válido, recargar si expiró
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const cargarImagenPerfil = async () => {
     try {
+      console.log('🖼️ cargarImagenPerfil - usuario.avatar_url:', usuario?.avatar_url);
+      
+      // Si el usuario tiene avatar_url del backend, usarlo
+      if (usuario?.avatar_url) {
+        console.log('🖼️ Usando avatar del backend:', usuario.avatar_url);
+        setImagenPerfil(usuario.avatar_url);
+        return;
+      }
+      
+      // Fallback: cargar desde AsyncStorage (para compatibilidad)
       const imagenGuardada = await AsyncStorage.getItem('imagenPerfil');
       if (imagenGuardada) {
+        console.log('🖼️ Usando avatar de AsyncStorage:', imagenGuardada);
         setImagenPerfil(imagenGuardada);
+      } else {
+        console.log('🖼️ No hay avatar disponible');
       }
     } catch (error) {
       console.log('Error al cargar imagen del perfil:', error);
     }
   };
 
-  const guardarImagenPerfil = async (uri) => {
+  const subirAvatarAlBackend = async (uri) => {
     try {
-      await AsyncStorage.setItem('imagenPerfil', uri);
-      setImagenPerfil(uri);
+      setSubiendoAvatar(true);
+      
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      // Crear FormData para enviar la imagen
+      const formData = new FormData();
+      formData.append('avatar', {
+        uri: uri,
+        type: 'image/jpeg',
+        name: 'avatar.jpg',
+      });
+
+      console.log('📤 Subiendo avatar al backend...');
+      
+      const response = await fetch(API_ENDPOINTS.SUBIR_AVATAR, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.ok) {
+        console.log('✅ Avatar subido exitosamente:', data.avatar_url);
+        console.log('✅ Usuario actual antes:', usuario?.avatar_url);
+        
+        // Actualizar el usuario en el contexto con la nueva URL
+        if (actualizarUsuarioLocal) {
+          const usuarioActualizado = {
+            ...usuario,
+            avatar_url: data.avatar_url
+          };
+          console.log('✅ Actualizando usuario en contexto:', usuarioActualizado.avatar_url);
+          actualizarUsuarioLocal(usuarioActualizado);
+        }
+        
+        // Forzar recarga del usuario desde el backend para obtener datos frescos
+        console.log('🔄 Recargando usuario desde backend...');
+        await cargarUsuario(true);
+        
+        // Actualizar estado local directamente
+        console.log('✅ Estableciendo imagen local:', data.avatar_url);
+        setImagenPerfil(data.avatar_url);
+        
+        // Limpiar AsyncStorage (ya no lo necesitamos)
+        await AsyncStorage.removeItem('imagenPerfil');
+        
+        Alert.alert('Éxito', 'Avatar actualizado correctamente');
+      } else {
+        throw new Error(data.mensaje || 'Error al subir avatar');
+      }
     } catch (error) {
-      console.log('Error al guardar imagen del perfil:', error);
+      console.error('❌ Error al subir avatar:', error);
+      Alert.alert('Error', `No se pudo subir el avatar: ${error.message}`);
+    } finally {
+      setSubiendoAvatar(false);
     }
   };
 
@@ -94,8 +184,7 @@ const PerfilScreen = () => {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await guardarImagenPerfil(result.assets[0].uri);
-        Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
+        await subirAvatarAlBackend(result.assets[0].uri);
       }
     } catch (error) {
       console.log('Error al tomar foto:', error);
@@ -113,8 +202,7 @@ const PerfilScreen = () => {
       });
 
       if (!result.canceled && result.assets[0]) {
-        await guardarImagenPerfil(result.assets[0].uri);
-        Alert.alert('Éxito', 'Foto de perfil actualizada correctamente');
+        await subirAvatarAlBackend(result.assets[0].uri);
       }
     } catch (error) {
       console.log('Error al seleccionar imagen:', error);
@@ -122,7 +210,42 @@ const PerfilScreen = () => {
     }
   };
 
-  const opciones = [
+  const cambiarTema = () => {
+    const nextTheme = getNextTheme();
+    changeTheme(nextTheme);
+  };
+
+  const cerrarSesion = async () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que deseas cerrar sesión? Se eliminarán todos los datos guardados.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Cerrar Sesión', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Limpiar AsyncStorage
+              await AsyncStorage.clear();
+              console.log('✅ Sesión cerrada y datos limpiados');
+              
+              // Navegar al Login
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (error) {
+              console.log('Error al cerrar sesión:', error);
+              Alert.alert('Error', 'No se pudo cerrar la sesión');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const opciones = usuario ? [
     { nombre: "Información Personal", icono: "user-circle", screen: "InformacionPersonal" },
     { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones" },
     { nombre: "Mis Pedidos", icono: "shopping-bag", screen: "MisPedidos" },
@@ -130,52 +253,99 @@ const PerfilScreen = () => {
     { nombre: "Pedidos Recibidos", icono: "shopping-cart", screen: "PedidosRecibidos", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
     { nombre: "Mi Plan", icono: "star", screen: "PlanScreen" },
     { nombre: "Necesito Ayuda", icono: "question-circle", screen: "HelpScreen" },
-  ].filter(op => op.mostrar !== false);
+    { nombre: "Cerrar Sesión", icono: "sign-out", screen: "cerrarSesion", esAccion: true },
+  ].filter(op => op.mostrar !== false) : [];
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerTitleContainer}>
-        <Ionicons name="person" size={24} color="white" />
+          <Ionicons name="person" size={24} color="white" />
           <Text style={styles.tituloPrincipal}>Mi Perfil</Text>
+          <TouchableOpacity 
+            style={[styles.themeButton, isChangingTheme && styles.themeButtonDisabled]}
+            onPress={cambiarTema}
+            activeOpacity={0.7}
+            disabled={isChangingTheme}
+          >
+            {isChangingTheme ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <Ionicons name={currentTheme.icon} size={24} color="white" />
+            )}
+          </TouchableOpacity>
+        </View>
+        <View style={styles.themeIndicator}>
+          <Text style={styles.themeIndicatorText}>{currentTheme.name}</Text>
         </View>
       </LinearGradient>
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
-        {/* Tarjeta de perfil */}
-        <View style={styles.perfilCard}>
-          <View style={styles.avatarContainer}>
-            <TouchableOpacity 
-              style={styles.avatarTouchable}
-              onPress={seleccionarImagenPerfil}
-              activeOpacity={0.8}
-            >
-              <Image 
-                source={imagenPerfil ? { uri: imagenPerfil } : require('../assets/favicon.png')} 
-                style={styles.avatarImage}
-              />
-              <View style={styles.cameraIconContainer}>
-                <Ionicons name="camera" size={16} color="white" />
-              </View>
-            </TouchableOpacity>
-            <Text style={styles.nombreUsuario}>{usuario.nombre}</Text>
-            <Text style={styles.tipoUsuario}>{usuario.tipo_usuario === "emprendedor" ? "Emprendedor" : "Cliente"}</Text>
-            <Text style={styles.tipoPlan}>{usuario.plan_id?"Plan Premium":"Plan Básico"}</Text>
+        {loading || subiendoAvatar ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={currentTheme.primary} />
+            <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
+              {subiendoAvatar ? 'Subiendo avatar...' : 'Cargando perfil...'}
+            </Text>
           </View>
-        </View>
+        ) : usuario ? (
+          <>
+            {/* Tarjeta de perfil */}
+            <View style={[styles.perfilCard, { 
+              backgroundColor: currentTheme.cardBackground,
+              shadowColor: currentTheme.shadow,
+              borderColor: currentTheme.border
+            }]}>
+              <View style={styles.avatarContainer}>
+                <TouchableOpacity 
+                  style={styles.avatarTouchable}
+                  onPress={seleccionarImagenPerfil}
+                  activeOpacity={0.8}
+                >
+                  <Image 
+                    source={imagenPerfil ? { uri: imagenPerfil } : require('../assets/favicon.png')} 
+                    style={[styles.avatarImage, { borderColor: currentTheme.primary }]}
+                  />
+                  {subiendoAvatar && (
+                    <View style={styles.uploadingOverlay}>
+                      <ActivityIndicator size="small" color="white" />
+                    </View>
+                  )}
+                  <View style={[styles.cameraIconContainer, { backgroundColor: currentTheme.primary }]}>
+                    <Ionicons name="camera" size={16} color="white" />
+                  </View>
+                </TouchableOpacity>
+                <Text style={[styles.nombreUsuario, { color: currentTheme.text }]}>{usuario.nombre}</Text>
+                <Text style={[styles.tipoUsuario, { color: currentTheme.primary }]}>{usuario.tipo_usuario === "emprendedor" ? "Emprendedor" : "Cliente"}</Text>
+                <Text style={[styles.tipoPlan, { color: currentTheme.text }]}>{usuario.plan_id ? "Plan Premium" : "Plan Básico"}</Text>
+              </View>
+            </View>
 
         {/* Accesos rápidos */}
-        <View style={styles.accesosContainer}>
-          <Text style={styles.seccionTitulo}>Accesos Rápidos</Text>
+        <View style={[styles.accesosContainer, { 
+          backgroundColor: currentTheme.cardBackground,
+          shadowColor: currentTheme.shadow,
+          borderColor: currentTheme.border
+        }]}>
+          <Text style={[styles.seccionTitulo, { color: currentTheme.primary }]}>Accesos Rápidos</Text>
           <View style={styles.opcionesGrid}>
             {opciones.map((opcion) => (
               <TouchableOpacity 
                 key={opcion.nombre} 
-                style={styles.opcionCard}
+                style={[styles.opcionCard, { 
+                  backgroundColor: currentTheme.background,
+                  borderColor: currentTheme.border
+                }]}
                 onPress={() => {
+                  // Manejar acciones especiales
+                  if (opcion.esAccion && opcion.screen === 'cerrarSesion') {
+                    cerrarSesion();
+                    return;
+                  }
+                  
                   // Navegar según el tipo de screen
                   if (opcion.screen === 'InformacionPersonal' || opcion.screen === 'MisDirecciones' || opcion.screen === 'MisPedidos' || opcion.screen === 'PlanScreen' || opcion.screen === 'HelpScreen') {
                     // Screens dentro del stack Perfil
@@ -186,14 +356,31 @@ const PerfilScreen = () => {
                   }
                 }}
               >
-                <View style={styles.opcionIconoContainer}>
-                  <FontAwesome name={opcion.icono} size={24} color="#2A9D8F" />
+                <View style={[styles.opcionIconoContainer, { backgroundColor: currentTheme.primary + '20' }]}>
+                  <FontAwesome 
+                    name={opcion.icono} 
+                    size={24} 
+                    color={opcion.esAccion ? "#e74c3c" : currentTheme.primary} 
+                  />
                 </View>
-                <Text style={styles.opcionTexto}>{opcion.nombre}</Text>
+                <Text style={[
+                  styles.opcionTexto,
+                  { color: currentTheme.text },
+                  opcion.esAccion && styles.opcionTextoAccion
+                ]}>
+                  {opcion.nombre}
+                </Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
+          </>
+        ) : (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={48} color="#e74c3c" />
+            <Text style={styles.errorText}>No se pudo cargar el perfil</Text>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -229,6 +416,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  themeButton: {
+    position: 'absolute',
+    right: 0,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  themeButtonDisabled: {
+    opacity: 0.5,
+  },
+  themeIndicator: {
+    alignItems: 'center',
+    marginTop: 5,
+  },
+  themeIndicatorText: {
+    color: 'rgba(255, 255, 255, 0.8)',
+    fontSize: 12,
+    fontWeight: '500',
   },
   headerIcon: {
     marginRight: 10,
@@ -398,6 +604,44 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#333',
     textAlign: 'center',
+  },
+  opcionTextoAccion: {
+    color: '#e74c3c',
+    fontWeight: 'bold',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#7f8c8d",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  errorText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#e74c3c",
+    fontWeight: "500",
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

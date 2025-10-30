@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,10 +7,12 @@ import {
   Alert,
   StyleSheet,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { API_ENDPOINTS } from "../config/api";
 
 const RegisterScreen = ({ navigation }) => {
   const [nombre, setNombre] = useState("");
@@ -19,13 +21,16 @@ const RegisterScreen = ({ navigation }) => {
   const [contrasena, setContrasena] = useState("");
   const [confirmarContrasena, setConfirmarContrasena] = useState("");
   const [telefono, setTelefono] = useState("");
-  const [comuna, setComuna] = useState("1"); // Combo temporal
-  const [tipoUsuario, setTipoUsuario] = useState("vecino");
+  const [comuna, setComuna] = useState("");
+  const [comunas, setComunas] = useState([]);
+  const [cargandoComunas, setCargandoComunas] = useState(true);
+  const [tipoUsuario, setTipoUsuario] = useState("cliente");
   const [nivelSeguridad, setNivelSeguridad] = useState("");
   const [errorCorreo, setErrorCorreo] = useState("");
   const [errorContrasena, setErrorContrasena] = useState("");
   const [verPassword, setVerPassword] = useState(false);
   const [verConfirmPassword, setVerConfirmPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   // 🔥 Verifica si el correo ingresado es válido y coincide con la confirmación
   const verificarCorreo = (text) => {
@@ -76,6 +81,46 @@ const RegisterScreen = ({ navigation }) => {
       return "Fuerte";
     return "Moderada";
   };
+
+  // Cargar comunas desde el backend
+  useEffect(() => {
+    const cargarComunas = async () => {
+      try {
+        setCargandoComunas(true);
+        const response = await fetch(API_ENDPOINTS.COMUNAS);
+        const data = await response.json();
+        
+        if (response.ok && data.comunas) {
+          setComunas(data.comunas);
+          // Seleccionar la primera comuna por defecto si hay comunas
+          if (data.comunas.length > 0) {
+            setComuna(data.comunas[0].id.toString());
+          }
+        } else {
+          console.error('Error al cargar comunas:', data);
+          // Fallback a comunas hardcodeadas si falla la API
+          setComunas([
+            { id: 1, nombre: 'Isla de Maipo' },
+            { id: 2, nombre: 'Talagante' }
+          ]);
+          setComuna('1');
+        }
+      } catch (error) {
+        console.error('Error de conexión al cargar comunas:', error);
+        // Fallback a comunas hardcodeadas
+        setComunas([
+          { id: 1, nombre: 'Isla de Maipo' },
+          { id: 2, nombre: 'Talagante' }
+        ]);
+        setComuna('1');
+      } finally {
+        setCargandoComunas(false);
+      }
+    };
+
+    cargarComunas();
+  }, []);
+
   const handleRegister = async () => {
     console.log(correo);
     if (
@@ -115,55 +160,57 @@ const RegisterScreen = ({ navigation }) => {
       Alert.alert("Error", "Las contraseñas no coinciden.");
       return;
     }
-    console.log("Correo antes de envío:", correo);
-    console.log(
-      "JSON.stringify antes de envío:",
-      JSON.stringify({
+    setLoading(true);
+
+    try {
+      // Preparar datos para envío
+      const datosRegistro = {
         nombre,
-        correo,
+        correo: correo.toLowerCase(),
         contrasena,
         telefono,
-        comuna_id: comuna,
-        tipo_usuario: tipoUsuario,
-      })
-    );
-    try {
-      const response = await fetch(
-        "http://192.168.18.58:3000/api/auth/registro",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            nombre,
-            correo,
-            contrasena,
-            telefono,
-            comuna_id: comuna,
-            tipo_usuario: tipoUsuario,
-          }),
-        }
-      );
+        tipo_usuario: tipoUsuario === 'vecino' ? 'cliente' : tipoUsuario, // Mapear vecino -> cliente
+      };
+
+      // Agregar comuna_id solo si se seleccionó una comuna
+      if (comuna) {
+        datosRegistro.comuna_id = parseInt(comuna);
+      }
+
+      const response = await fetch(API_ENDPOINTS.REGISTER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(datosRegistro),
+      });
 
       const data = await response.json();
 
       if (response.ok) {
         Alert.alert(
           "Registro exitoso",
-          `Revisa tu correo para activar tu cuenta.`
+          data.mensaje || "Tu cuenta ha sido creada exitosamente. ¡Bienvenido a VeciApp!",
+          [
+            {
+              text: "OK",
+              onPress: () => navigation.navigate("Login")
+            }
+          ]
         );
-        navigation.navigate("Login"); // Redirige al login
       } else {
-        Alert.alert(
-          "Error",
-          data.mensaje || "No se pudo completar el registro."
-        );
+        const mensajeError = data.mensaje || data.error || "No se pudo completar el registro.";
+        Alert.alert("Error", mensajeError);
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo conectar al servidor." + error);
-      console.log("Error de conexión:", error);
+      console.error("Error de conexión:", error);
+      Alert.alert(
+        "Error de conexión",
+        "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté corriendo."
+      );
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -283,26 +330,50 @@ const RegisterScreen = ({ navigation }) => {
             onValueChange={(itemValue) => setTipoUsuario(itemValue)}
             style={styles.picker}
           >
-            <Picker.Item label="Solo Comprar" value="vecino" />
+            <Picker.Item label="Solo Comprar" value="cliente" />
             <Picker.Item label="Comprar y Vender" value="emprendedor" />
           </Picker>
         </View>
 
-        {/* 🔥 Comuna (Picker mejorado) */}
+        {/* 🔥 Comuna (Picker mejorado - cargado desde API) */}
         <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={comuna}
-            onValueChange={(itemValue) => setComuna(itemValue)}
-            style={styles.picker}
-          >
-            <Picker.Item label="Isla de Maipo" value="1" />
-            <Picker.Item label="Talagante" value="2" />
-          </Picker>
+          {cargandoComunas ? (
+            <View style={styles.loadingComunas}>
+              <ActivityIndicator size="small" color="#2A9D8F" />
+              <Text style={styles.loadingText}>Cargando comunas...</Text>
+            </View>
+          ) : (
+            <Picker
+              selectedValue={comuna}
+              onValueChange={(itemValue) => setComuna(itemValue)}
+              style={styles.picker}
+            >
+              <Picker.Item label="Selecciona una comuna" value="" />
+              {comunas.map((comunaItem) => (
+                <Picker.Item
+                  key={comunaItem.id}
+                  label={comunaItem.nombre}
+                  value={comunaItem.id.toString()}
+                />
+              ))}
+            </Picker>
+          )}
         </View>
 
         {/* 🔥 Botón de registro */}
-        <TouchableOpacity style={styles.button} onPress={handleRegister}>
-          <Text style={styles.buttonText}>Registrarse</Text>
+        <TouchableOpacity 
+          style={[styles.button, loading && styles.buttonDisabled]} 
+          onPress={handleRegister}
+          disabled={loading || cargandoComunas}
+        >
+          {loading ? (
+            <View style={styles.buttonLoading}>
+              <ActivityIndicator size="small" color="#FFF" />
+              <Text style={styles.buttonText}>Registrando...</Text>
+            </View>
+          ) : (
+            <Text style={styles.buttonText}>Registrarse</Text>
+          )}
         </TouchableOpacity>
       </LinearGradient>
     </ScrollView>
@@ -395,6 +466,25 @@ const styles = StyleSheet.create({
   },
   icon: {
     marginLeft: 10,
+  },
+  loadingComunas: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  loadingText: {
+    marginLeft: 10,
+    color: '#666',
+    fontSize: 14,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+  buttonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });
 

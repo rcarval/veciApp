@@ -3,9 +3,12 @@ import { TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
+import { useTheme } from '../context/ThemeContext';
 
 const BottomTabBarCliente = () => {
   const navigation = useNavigation();
+  const { currentTheme } = useTheme();
+  const styles = BottomTabBarClienteStyles(currentTheme);
 
   // Función para obtener el color del icono (todos blancos por ahora)
   const getIconColor = () => {
@@ -13,7 +16,7 @@ const BottomTabBarCliente = () => {
   };
 
   return (
-    <LinearGradient colors={['#2A9D8F', '#1D7874']} style={styles.tabBar}>
+    <LinearGradient colors={[currentTheme.primary, currentTheme.secondary]} style={styles.tabBar}>
       {/* Inicio */}
       <TouchableOpacity
         style={styles.tabItem}
@@ -53,7 +56,7 @@ const BottomTabBarCliente = () => {
   );
 };
 
-const styles = StyleSheet.create({
+const BottomTabBarClienteStyles = (theme) => StyleSheet.create({
   tabBar: {
     flexDirection: "row",
     height: 120,
@@ -61,8 +64,8 @@ const styles = StyleSheet.create({
     marginBottom: 0,
     borderTopLeftRadius: 40,
     borderTopRightRadius: 40,
-    borderTopColor: "#e1e1e1",
-    backgroundColor: "#2A9D8F",
+    borderTopColor: theme.border,
+    backgroundColor: theme.primary,
   },
   tabItem: {
     flex: 1,

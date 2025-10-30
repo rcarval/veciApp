@@ -9,6 +9,7 @@ import {
   Modal,
   Pressable,
   TextInput,
+  ActivityIndicator,
   //BackHandler,
   Alert,
 } from "react-native";
@@ -18,15 +19,20 @@ import { LinearGradient } from "expo-linear-gradient";
 import Swiper from "react-native-swiper";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
+import { useUser } from "../context/UserContext";
+import { useTheme } from "../context/ThemeContext";
 
 const HomeScreen = ({ navigation }) => {
-  const [usuario, setUsuario] = useState(null);
-  const [direcciones, setDirecciones] = useState([]);
-  const [direccionSeleccionada, setDireccionSeleccionada] = useState(null);
+  const userContext = useUser();
+  const { usuario, direcciones, direccionSeleccionada, loading, cargarUsuario, cargarDirecciones, establecerDireccionSeleccionada } = userContext;
+  const { currentTheme } = useTheme();
+  const [cargandoUsuario, setCargandoUsuario] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalObligatorioVisible, setModalObligatorioVisible] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
+  const intentosCargaRef = useRef(0);
+
 
   // Helper para obtener el nombre de la comuna
   const obtenerNombreComuna = (comunaId) => {
@@ -101,104 +107,116 @@ const HomeScreen = ({ navigation }) => {
     ).start();
   }, []);
 
+  // Cargar usuario y direcciones al iniciar (usando contexto con cache)
   useEffect(() => {
-    const cargarUsuario = async () => {
+    const cargarDatos = async () => {
       try {
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          setUsuario(JSON.parse(usuarioGuardado));
+        setCargandoUsuario(true);
+        console.log('🏠 HomeScreen: Iniciando carga de datos. Usuario en contexto:', usuario ? 'EXISTE' : 'NULL');
+        
+        // Verificar si hay token antes de intentar cargar
+        const token = await AsyncStorage.getItem("token");
+        if (!token) {
+          console.log('🏠 HomeScreen: No hay token, redirigiendo al login');
+          navigation.navigate("Login");
+          setCargandoUsuario(false);
+          return;
         }
-      } catch (error) {
-        console.log("Error al obtener el usuario:", error);
-      }
-    };
-    cargarUsuario();
-  }, []);
 
-  useEffect(() => {
-    const cargarDirecciones = async () => {
-      try {
-        const direccionesGuardadas = await AsyncStorage.getItem('direcciones');
-        if (direccionesGuardadas) {
-          const direccionesData = JSON.parse(direccionesGuardadas);
-          setDirecciones(direccionesData);
+        // Si no hay usuario en el contexto, esperar un momento y luego cargar
+        if (!usuario) {
+          console.log('🏠 HomeScreen: No hay usuario, esperando 1 segundo y cargando desde backend...');
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
           
-          // Si no hay direcciones, mostrar modal obligatorio
-          if (direccionesData.length === 0) {
-            setModalObligatorioVisible(true);
+          console.log('🏠 HomeScreen: Llamando a cargarUsuario(true)...');
+          const usuarioCargado = await cargarUsuario(true); // Forzar recarga para obtener datos frescos
+          console.log('🏠 HomeScreen: Usuario cargado:', usuarioCargado ? `EXISTE (ID: ${usuarioCargado.id})` : 'NULL');
+          
+          // Si después de cargar todavía es null, hay un error
+          if (!usuarioCargado) {
+            console.error('🏠 HomeScreen: No se pudo cargar el usuario después del intento');
+            setCargandoUsuario(false);
             return;
           }
-          
-          // Seleccionar la dirección principal por defecto
-          const direccionPrincipal = direccionesData.find(dir => dir.esPrincipal);
-          if (direccionPrincipal) {
-            setDireccionSeleccionada(direccionPrincipal.id);
-          } else if (direccionesData.length > 0) {
-            setDireccionSeleccionada(direccionesData[0].id);
-          }
         } else {
-          // No hay direcciones guardadas, mostrar modal obligatorio
-          setModalObligatorioVisible(true);
+          console.log('🏠 HomeScreen: Usuario existe, usando cache');
+          await cargarUsuario(false); // Usar cache si es válido
         }
+        
+        console.log('🏠 HomeScreen: Cargando direcciones...');
+        await cargarDirecciones(false); // Usar cache si es válido
+        
+        console.log('🏠 HomeScreen: Datos cargados correctamente');
       } catch (error) {
-        console.log('Error al cargar direcciones:', error);
-        setModalObligatorioVisible(true);
+        console.error('🏠 HomeScreen: Error al cargar datos:', error);
+        // Si hay error de autenticación, redirigir al login
+        if (error.message && error.message.includes('sesión')) {
+          navigation.navigate("Login");
+        }
+        setCargandoUsuario(false);
       }
     };
-    cargarDirecciones();
-  }, []);
+    
+    cargarDatos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Ejecutar solo al montar
 
-  // Recargar direcciones cuando se regrese a la pantalla
+  // Actualizar cargandoUsuario cuando el usuario se carga o cuando loading cambia
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
-      const cargarDirecciones = async () => {
-        try {
-          const direccionesGuardadas = await AsyncStorage.getItem('direcciones');
-          if (direccionesGuardadas) {
-            const direccionesData = JSON.parse(direccionesGuardadas);
-            setDirecciones(direccionesData);
-            
-            // Si no hay direcciones, mostrar modal obligatorio SIEMPRE
-            if (direccionesData.length === 0) {
-              setModalObligatorioVisible(true);
-              return;
-            } else {
-              // Si hay direcciones, ocultar el modal
-              setModalObligatorioVisible(false);
-            }
-            
-            // Mantener la selección actual o seleccionar la principal
-            if (!direccionSeleccionada || !direccionesData.find(dir => dir.id === direccionSeleccionada)) {
-              const direccionPrincipal = direccionesData.find(dir => dir.esPrincipal);
-              if (direccionPrincipal) {
-                setDireccionSeleccionada(direccionPrincipal.id);
-              } else if (direccionesData.length > 0) {
-                setDireccionSeleccionada(direccionesData[0].id);
-              }
-            }
-          } else {
-            // No hay direcciones guardadas, mostrar modal obligatorio
-            setModalObligatorioVisible(true);
-          }
-        } catch (error) {
-          console.log('Error al cargar direcciones:', error);
-          setModalObligatorioVisible(true);
+    // Si hay usuario y no está cargando, desactivar loading
+    if (usuario && !loading) {
+      console.log('🏠 HomeScreen: Usuario disponible, desactivando loading');
+      setCargandoUsuario(false);
+    }
+  }, [usuario, loading]);
+
+  // Efecto adicional para manejar el caso donde el usuario se carga después del montaje
+  useEffect(() => {
+    if (usuario && cargandoUsuario) {
+      console.log('🏠 HomeScreen: Usuario cargado después del montaje, desactivando loading');
+      setCargandoUsuario(false);
+    }
+  }, [usuario, cargandoUsuario]);
+
+  // Recargar cuando se regrese a la pantalla (solo si es necesario)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      try {
+        // Si no hay usuario, forzar recarga
+        if (!usuario) {
+          setCargandoUsuario(true);
+          await cargarUsuario(true);
+        } else {
+          await cargarUsuario(false);
         }
-      };
-      cargarDirecciones();
+        await cargarDirecciones(false); // Solo recargará si el cache expiró (5 min)
+      } catch (error) {
+        console.error('Error al recargar datos:', error);
+        setCargandoUsuario(false);
+      }
     });
 
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, usuario]);
 
   // Verificar constantemente si hay direcciones y mostrar/ocultar modal
   useEffect(() => {
-    if (direcciones.length === 0) {
+    if (direcciones && direcciones.length === 0) {
       setModalObligatorioVisible(true);
-    } else {
+    } else if (direcciones && direcciones.length > 0) {
       setModalObligatorioVisible(false);
+      // Seleccionar dirección principal por defecto si no hay selección
+      if (!direccionSeleccionada && establecerDireccionSeleccionada) {
+        const direccionPrincipal = direcciones.find(dir => dir.esPrincipal);
+        if (direccionPrincipal) {
+          establecerDireccionSeleccionada(direccionPrincipal.id);
+        } else {
+          establecerDireccionSeleccionada(direcciones[0].id);
+        }
+      }
     }
-  }, [direcciones]);
+  }, [direcciones, direccionSeleccionada, establecerDireccionSeleccionada]);
+
   // ✅ Interceptar botón "Atrás"
   /*useEffect(() => {
     const handleBackPress = () => {
@@ -216,20 +234,27 @@ const HomeScreen = ({ navigation }) => {
   }, []);*/
 
   const handleSeleccionDireccion = (id) => {
-    setDireccionSeleccionada(id);
+    if (establecerDireccionSeleccionada) {
+      establecerDireccionSeleccionada(id);
+    }
   };
 
-  if (!usuario) {
+  // Mostrar loading si está cargando o si no hay usuario aún
+  // El componente se re-renderizará automáticamente cuando el contexto se actualice
+  if (cargandoUsuario || loading || !usuario) {
     return (
       <View style={styles.loadingContainer}>
-        <Text>Cargando...</Text>
+        <ActivityIndicator size="large" color={currentTheme.primary} />
+        <Text style={{ marginTop: 10 }}>
+          {loading || cargandoUsuario ? 'Cargando...' : 'Cargando usuario...'}
+        </Text>
       </View>
     );
   }
 
-  const direccionActual = direcciones.find(
-    (dir) => dir.id === direccionSeleccionada
-  );
+  const direccionActual = direcciones && direcciones.length > 0 
+    ? direcciones.find((dir) => dir.id === direccionSeleccionada)
+    : null;
 
   const toggleSection = (index) => {
     setActiveSection(activeSection === index ? null : index);
@@ -619,11 +644,11 @@ const getIconForCategory = (categoria) => {
 
   // ✅ **Menú lateral con el menú colapsable dentro**
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <View
-        style={styles.container}
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
       >
-        <LinearGradient  colors={['#2A9D8F', '#1D7874']} style={styles.direccionContainer}>
+        <LinearGradient  colors={[currentTheme.primary, currentTheme.secondary]} style={styles.direccionContainer}>
           <View style={styles.direccionSuperior}>
             <TouchableOpacity
               style={styles.selectorDireccion}
@@ -676,7 +701,7 @@ const getIconForCategory = (categoria) => {
               </View>
 
               <ScrollView>
-                {direcciones.map((direccion) => (
+                {(direcciones || []).map((direccion) => (
                   <TouchableOpacity
                     key={direccion.id}
                     style={[
@@ -1095,7 +1120,7 @@ const getIconForCategory = (categoria) => {
         <View style={styles.modalObligatorioOverlay}>
           <View style={styles.modalObligatorioContainer}>
             <View style={styles.modalObligatorioHeader}>
-              <Ionicons name="location" size={32} color="#2A9D8F" />
+              <Ionicons name="location" size={32} color={currentTheme.primary} />
               <Text style={styles.modalObligatorioTitle}>
                 ¡Necesitas una dirección!
               </Text>
@@ -1107,7 +1132,7 @@ const getIconForCategory = (categoria) => {
             
             <View style={styles.modalObligatorioActions}>
               <TouchableOpacity
-                style={styles.modalObligatorioButton}
+                style={[styles.modalObligatorioButton, { backgroundColor: currentTheme.primary, shadowColor: currentTheme.primary }]}
                 onPress={() => {
                   setModalObligatorioVisible(false);
                   navigation.navigate('MisDirecciones');
@@ -1640,7 +1665,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   modalObligatorioButton: {
-    backgroundColor: '#2A9D8F',
+    backgroundColor: '#2A9D8F', // Se actualizará dinámicamente en el JSX
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

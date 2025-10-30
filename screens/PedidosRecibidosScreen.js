@@ -9,6 +9,7 @@ import {
   Modal,
   ActivityIndicator,
   TextInput,
+  Image,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -17,10 +18,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import { Picker } from '@react-native-picker/picker';
+import { useTheme } from '../context/ThemeContext';
 
 const PedidosRecibidosScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { currentTheme } = useTheme();
   const usuario = route.params?.usuario ?? {};
   
   const [pedidosRecibidos, setPedidosRecibidos] = useState([]);
@@ -34,9 +37,22 @@ const PedidosRecibidosScreen = () => {
   const [modalRechazoVisible, setModalRechazoVisible] = useState(false);
   const [pedidoParaRechazar, setPedidoParaRechazar] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
+  const [motivoSeleccionado, setMotivoSeleccionado] = useState('');
+  const [motivoPersonalizado, setMotivoPersonalizado] = useState('');
   const [modalTiempoEntregaVisible, setModalTiempoEntregaVisible] = useState(false);
   const [pedidoParaConfirmar, setPedidoParaConfirmar] = useState(null);
   const [tiempoEntrega, setTiempoEntrega] = useState(30); // Valor por defecto: 30 minutos
+  const [modalCalificacionClienteVisible, setModalCalificacionClienteVisible] = useState(false);
+  const [pedidoParaCalificarCliente, setPedidoParaCalificarCliente] = useState(null);
+  const [calificacionesCliente, setCalificacionesCliente] = useState({
+    puntualidad: 0,
+    comunicacion: 0,
+    amabilidad: 0,
+    cooperacion: 0
+  });
+  const [pedidosCanceladosPendientes, setPedidosCanceladosPendientes] = useState([]);
+  const [modalCancelacionVisible, setModalCancelacionVisible] = useState(false);
+  const [pedidoParaConfirmarCancelacion, setPedidoParaConfirmarCancelacion] = useState(null);
 
   // Opciones de tiempo de entrega
   const opcionesTiempo = [
@@ -50,9 +66,41 @@ const PedidosRecibidosScreen = () => {
     { label: '2:00 horas', value: 120 },
   ];
 
+  // Motivos predefinidos para rechazo
+  const motivosRechazo = [
+    'Producto agotado',
+    'Fuera del área de cobertura',
+    'Horario de atención cerrado',
+    'Problema con el método de pago',
+    'Cliente no responde',
+    'Dirección incorrecta'
+  ];
+
+  // Criterios de calificación para el cliente
+  const criteriosCliente = [
+    { key: 'puntualidad', label: 'Puntualidad', icon: 'clock-o' },
+    { key: 'comunicacion', label: 'Comunicación', icon: 'comment' },
+    { key: 'amabilidad', label: 'Amabilidad', icon: 'heart' },
+    { key: 'cooperacion', label: 'Cooperación', icon: 'users' }
+  ];
+
   useEffect(() => {
     cargarPedidosRecibidos();
   }, []);
+
+  // Función temporal para limpiar AsyncStorage (eliminar después de usar)
+  const limpiarAsyncStorage = async () => {
+    try {
+      await AsyncStorage.clear();
+      console.log('✅ AsyncStorage limpiado completamente');
+      Alert.alert('Éxito', 'Todos los datos han sido eliminados. La app se reiniciará.');
+      // Recargar la pantalla
+      cargarPedidosRecibidos();
+    } catch (error) {
+      console.log('❌ Error al limpiar AsyncStorage:', error);
+      Alert.alert('Error', 'No se pudieron eliminar los datos');
+    }
+  };
 
   // Generar calificación aleatoria para el cliente
   const generarCalificacionCliente = () => {
@@ -64,14 +112,22 @@ const PedidosRecibidosScreen = () => {
   const generarDatosCliente = () => {
     const nombres = ['María González', 'Carlos Rodríguez', 'Ana Martínez', 'Luis Pérez', 'Carmen López'];
     const telefonos = ['+56912345678', '+56987654321', '+56911223344', '+56999887766', '+56955443322'];
+    const fotosPerfil = [
+      'https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face',
+      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face',
+      'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face',
+      'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+      'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face'
+    ];
     const indices = Math.floor(Math.random() * nombres.length);
     
     return {
       nombre: nombres[indices],
       telefono: telefonos[indices],
+      fotoPerfil: fotosPerfil[indices],
       calificacion: generarCalificacionCliente(),
       pedidosRealizados: Math.floor(Math.random() * 20) + 1,
-      clienteDesde: '2023-' + (Math.floor(Math.random() * 12) + 1).toString().padStart(2, '0') + '-15'
+      clienteDesde: '15-' + (Math.floor(Math.random() * 12) + 1).toString().padStart(2, '0') + '-2023'
     };
   };
 
@@ -139,17 +195,38 @@ const PedidosRecibidosScreen = () => {
   const cargarPedidosRecibidos = async () => {
     try {
       setCargando(true);
-      // Por ahora cargamos los mismos pedidos que hace el usuario como cliente
-      // En una implementación real, esto vendría de una API específica para emprendedores
+      
+      // Cargar pedidos pendientes
       const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
+      let pedidosPendientes = [];
       if (pedidosGuardados) {
-        const pedidos = JSON.parse(pedidosGuardados);
+        pedidosPendientes = JSON.parse(pedidosGuardados);
+      }
+      
+      // Cargar historial de pedidos recibidos
+      const historialGuardado = await AsyncStorage.getItem('historialPedidosRecibidos');
+      let historialPedidos = [];
+      if (historialGuardado) {
+        historialPedidos = JSON.parse(historialGuardado);
+      }
+      
+      // Cargar pedidos cancelados pendientes
+      const pedidosCanceladosGuardados = await AsyncStorage.getItem('pedidosCanceladosPendientes');
+      let pedidosCanceladosPendientes = [];
+      if (pedidosCanceladosGuardados) {
+        pedidosCanceladosPendientes = JSON.parse(pedidosCanceladosGuardados);
+      }
+      
+      // Combinar pedidos pendientes, historial y cancelados pendientes
+      const todosLosPedidos = [...pedidosPendientes, ...historialPedidos, ...pedidosCanceladosPendientes];
+      
+      if (todosLosPedidos.length > 0) {
         // Simulamos que estos son pedidos recibidos por el emprendedor
-        const pedidosConEstados = pedidos.map(pedido => {
+        const pedidosConEstados = todosLosPedidos.map(pedido => {
           const datosCliente = generarDatosCliente();
           
           // Usar la fechaHoraReserva original del pedido (ahora siempre existe)
-          const fechaHoraReserva = pedido.fechaHoraReserva ? new Date(pedido.fechaHoraReserva) : new Date();
+          const fechaHoraReserva = pedido.fechaHoraReserva ? new Date(pedido.fechaHoraReserva) : new Date(pedido.fecha);
           
           return {
             ...pedido,
@@ -158,12 +235,15 @@ const PedidosRecibidosScreen = () => {
             fechaHoraReserva: fechaHoraReserva.toISOString(),
             cliente: datosCliente.nombre,
             telefonoCliente: datosCliente.telefono,
+            fotoPerfilCliente: datosCliente.fotoPerfil,
             calificacionCliente: datosCliente.calificacion,
             pedidosRealizadosCliente: datosCliente.pedidosRealizados,
             clienteDesde: datosCliente.clienteDesde
           };
         });
         setPedidosRecibidos(pedidosConEstados);
+      } else {
+        setPedidosRecibidos([]);
       }
     } catch (error) {
       console.log('Error al cargar pedidos recibidos:', error);
@@ -191,8 +271,23 @@ const PedidosRecibidosScreen = () => {
       
       setPedidosRecibidos(pedidosActualizados);
       
-      // Guardar en AsyncStorage
-      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
+      // Si el pedido se marca como entregado, moverlo al historial
+      if (nuevoEstado === 'entregado') {
+        const pedidoEntregado = pedidosActualizados.find(p => p.id === pedidoId);
+        
+        // Guardar en historial del emprendedor
+        const historialExistente = await AsyncStorage.getItem('historialPedidosRecibidos');
+        const historial = historialExistente ? JSON.parse(historialExistente) : [];
+        historial.push(pedidoEntregado);
+        await AsyncStorage.setItem('historialPedidosRecibidos', JSON.stringify(historial));
+        
+        // Remover de pedidos pendientes
+        const pedidosPendientesActualizados = pedidosActualizados.filter(p => p.id !== pedidoId);
+        await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosPendientesActualizados));
+      } else {
+        // Guardar todos los pedidos en AsyncStorage
+        await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
+      }
       
       Alert.alert(
         "Estado actualizado",
@@ -212,9 +307,14 @@ const PedidosRecibidosScreen = () => {
       return;
     }
     
-    const mensaje = nuevoEstado === 'entregado' 
-      ? "¿Confirmas que el pedido ha sido entregado al cliente?"
-      : `¿Cambiar el estado del pedido a "${getEstadoTexto(nuevoEstado)}"?`;
+    if (nuevoEstado === 'entregado') {
+      // Abrir modal para calificar al cliente
+      setPedidoParaCalificarCliente(pedido);
+      setModalCalificacionClienteVisible(true);
+      return;
+    }
+    
+    const mensaje = `¿Cambiar el estado del pedido a "${getEstadoTexto(nuevoEstado)}"?`;
     
     Alert.alert(
       "Confirmar cambio",
@@ -268,6 +368,70 @@ const PedidosRecibidosScreen = () => {
     }
   };
 
+  // Función para manejar calificación de criterio del cliente
+  const manejarCalificacionCliente = (criterio, valor) => {
+    setCalificacionesCliente(prev => ({
+      ...prev,
+      [criterio]: valor
+    }));
+  };
+
+  // Función para renderizar estrellas de calificación del cliente
+  const renderEstrellasCliente = (criterio, valor) => {
+    return (
+      <View style={styles.estrellasContainer}>
+        {[1, 2, 3, 4, 5].map((estrella) => (
+          <TouchableOpacity
+            key={estrella}
+            onPress={() => manejarCalificacionCliente(criterio, estrella)}
+            style={styles.estrellaButton}
+          >
+            <FontAwesome
+              name={estrella <= valor ? "star" : "star-o"}
+              size={20}
+              color={estrella <= valor ? "#FFD700" : "#ddd"}
+            />
+          </TouchableOpacity>
+        ))}
+      </View>
+    );
+  };
+
+  // Función para guardar calificación del cliente
+  const guardarCalificacionCliente = async () => {
+    if (!pedidoParaCalificarCliente) return;
+
+    const calificacionPromedio = Object.values(calificacionesCliente).reduce((sum, val) => sum + val, 0) / 4;
+    
+    const pedidoActualizado = {
+      ...pedidoParaCalificarCliente,
+      estado: 'entregado',
+      calificacionCliente: calificacionPromedio,
+      calificacionesClienteDetalle: calificacionesCliente,
+      fechaEntrega: new Date().toISOString()
+    };
+
+    const pedidosActualizados = pedidosRecibidos.map(p => 
+      p.id === pedidoParaCalificarCliente.id ? pedidoActualizado : p
+    );
+    
+    setPedidosRecibidos(pedidosActualizados);
+    
+    // Guardar en AsyncStorage
+    await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados));
+    
+    Alert.alert('Calificación Guardada', 'La calificación del cliente ha sido guardada exitosamente.');
+    
+    setModalCalificacionClienteVisible(false);
+    setPedidoParaCalificarCliente(null);
+    setCalificacionesCliente({
+      puntualidad: 0,
+      comunicacion: 0,
+      amabilidad: 0,
+      cooperacion: 0
+    });
+  };
+
   const getEstadoTexto = (estado) => {
     const estados = {
       'pendiente': 'Pendiente',
@@ -296,12 +460,17 @@ const PedidosRecibidosScreen = () => {
 
   const abrirModalRechazo = (pedido) => {
     setPedidoParaRechazar(pedido);
+    setMotivoSeleccionado('');
+    setMotivoPersonalizado('');
     setModalRechazoVisible(true);
   };
 
   const confirmarRechazo = async () => {
-    if (!motivoRechazo.trim()) {
-      Alert.alert('Motivo requerido', 'Por favor indica un motivo para rechazar el pedido.');
+    // Determinar el motivo final
+    const motivoFinal = motivoSeleccionado === 'Otro' ? motivoPersonalizado : motivoSeleccionado;
+    
+    if (!motivoFinal.trim()) {
+      Alert.alert('Motivo requerido', 'Por favor selecciona un motivo para rechazar el pedido.');
       return;
     }
 
@@ -311,7 +480,7 @@ const PedidosRecibidosScreen = () => {
       const pedidoRechazado = { 
         ...pedidoParaRechazar, 
         estado: 'rechazado', 
-        motivoRechazo, 
+        motivoRechazo: motivoFinal, 
         fechaRechazo: new Date().toISOString() 
       };
 
@@ -347,6 +516,32 @@ const PedidosRecibidosScreen = () => {
     }
   };
 
+  const confirmarCancelacion = async (pedido) => {
+    try {
+      // Guardar en historial del emprendedor
+      const historialExistente = await AsyncStorage.getItem('historialPedidosRecibidos');
+      const historial = historialExistente ? JSON.parse(historialExistente) : [];
+      historial.push(pedido);
+      await AsyncStorage.setItem('historialPedidosRecibidos', JSON.stringify(historial));
+      
+      // Remover de pedidos cancelados pendientes
+      const pedidosCanceladosPendientes = await AsyncStorage.getItem('pedidosCanceladosPendientes');
+      if (pedidosCanceladosPendientes) {
+        const canceladosPendientes = JSON.parse(pedidosCanceladosPendientes);
+        const canceladosActualizados = canceladosPendientes.filter(p => p.id !== pedido.id);
+        await AsyncStorage.setItem('pedidosCanceladosPendientes', JSON.stringify(canceladosActualizados));
+      }
+      
+      // Recargar datos
+      cargarPedidosRecibidos();
+      
+      Alert.alert('Cancelación confirmada', 'La cancelación del pedido ha sido confirmada.');
+    } catch (error) {
+      console.log('Error al confirmar cancelación:', error);
+      Alert.alert('Error', 'No se pudo confirmar la cancelación.');
+    }
+  };
+
   const getSiguienteEstado = (estadoActual) => {
     const flujoEstados = {
       'pendiente': 'confirmado',
@@ -357,16 +552,79 @@ const PedidosRecibidosScreen = () => {
     return flujoEstados[estadoActual];
   };
 
+  // Renderizar ruta de estados tipo Salesforce
+  const renderRutaEstados = (pedido) => {
+    const estados = [
+      { key: 'pendiente', label: 'Pendiente', icon: 'clock-o' },
+      { key: 'confirmado', label: 'Confirmado', icon: 'check-circle' },
+      { key: 'preparando', label: 'Preparando', icon: 'cutlery' },
+      { key: 'listo', label: 'Listo', icon: 'check' },
+      { key: 'entregado', label: 'Entregado', icon: 'gift' }
+    ];
+
+    const estadoActualIndex = estados.findIndex(estado => estado.key === pedido.estado);
+    
+    return (
+      <View style={styles.rutaEstadosContainer}>
+        {estados.map((estado, index) => {
+          const isCompleted = index <= estadoActualIndex;
+          const isCurrent = index === estadoActualIndex;
+          
+          return (
+            <View key={estado.key} style={styles.estadoItem}>
+              <View style={[
+                styles.estadoIcono,
+                isCompleted ? styles.estadoIconoCompletado : styles.estadoIconoPendiente,
+                isCurrent && styles.estadoIconoActual
+              ]}>
+                <FontAwesome 
+                  name={estado.icon} 
+                  size={12} 
+                  color={isCompleted ? "white" : "#bdc3c7"} 
+                />
+              </View>
+              <Text style={[
+                styles.estadoLabel,
+                isCompleted ? styles.estadoLabelCompletado : styles.estadoLabelPendiente
+              ]}>
+                {estado.label}
+              </Text>
+              {index < estados.length - 1 && (
+                <View style={[
+                  styles.estadoLinea,
+                  isCompleted ? styles.estadoLineaCompletada : styles.estadoLineaPendiente
+                ]} />
+              )}
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
   const obtenerPedidosFiltrados = () => {
+    let pedidosFiltrados = [];
+    
     if (tabActivo === "pendientes") {
-      return pedidosRecibidos.filter(pedido => 
+      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
         ['pendiente', 'confirmado', 'preparando', 'listo'].includes(pedido.estado)
       );
+    } else if (tabActivo === "cancelados") {
+      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
+        pedido.estado === 'cancelado' && pedido.motivoCancelacion
+      );
     } else {
-      return pedidosRecibidos.filter(pedido => 
-        ['entregado', 'cancelado', 'rechazado'].includes(pedido.estado)
+      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
+        ['entregado', 'rechazado'].includes(pedido.estado)
       );
     }
+    
+    // Ordenar del más nuevo al más antiguo por fechaHoraReserva
+    return pedidosFiltrados.sort((a, b) => {
+      const fechaA = a.fechaHoraReserva ? new Date(a.fechaHoraReserva) : new Date(a.fecha);
+      const fechaB = b.fechaHoraReserva ? new Date(b.fechaHoraReserva) : new Date(b.fecha);
+      return fechaB - fechaA; // Más nuevo primero
+    });
   };
 
   const renderPedido = (pedido) => {
@@ -403,17 +661,17 @@ const PedidosRecibidosScreen = () => {
 
       <View style={styles.pedidoDetalles}>
         <View style={styles.detalleItem}>
-          <FontAwesome name="user" size={14} color="#2A9D8F" />
+          <FontAwesome name="user" size={14} color={currentTheme.primary} />
           <Text style={styles.detalleTexto}>Cliente: {pedido.cliente}</Text>
         </View>
         
         <View style={styles.detalleItem}>
-          <FontAwesome name="phone" size={14} color="#2A9D8F" />
+          <FontAwesome name="phone" size={14} color={currentTheme.primary} />
           <Text style={styles.detalleTexto}>{pedido.telefonoCliente}</Text>
         </View>
 
         <View style={styles.detalleItem}>
-          <FontAwesome name="map-marker" size={14} color="#2A9D8F" />
+          <FontAwesome name="map-marker" size={14} color={currentTheme.primary} />
           <Text style={styles.detalleTexto}>{pedido.direccion}</Text>
         </View>
 
@@ -422,7 +680,7 @@ const PedidosRecibidosScreen = () => {
             <FontAwesome 
               name={pedido.modoEntrega === "delivery" ? "truck" : "shopping-bag"} 
               size={14} 
-              color="#2A9D8F" 
+              color={currentTheme.primary} 
             />
             <Text style={styles.detalleTexto}>
               {pedido.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}
@@ -443,6 +701,14 @@ const PedidosRecibidosScreen = () => {
         )}
       </View>
 
+      {/* Mostrar motivo de cancelación si está en la pestaña cancelados */}
+      {tabActivo === "cancelados" && pedido.motivoCancelacion && (
+        <View style={styles.motivoCancelacionContainer}>
+          <Text style={styles.motivoCancelacionLabel}>Motivo de cancelación:</Text>
+          <Text style={styles.motivoCancelacionTexto}>{pedido.motivoCancelacion}</Text>
+        </View>
+      )}
+
       <View style={styles.productosContainer}>
         <Text style={styles.productosTitulo}>Productos:</Text>
         {pedido.productos.map((producto, index) => (
@@ -454,43 +720,61 @@ const PedidosRecibidosScreen = () => {
         ))}
       </View>
 
+      {/* Ruta de Estados */}
+      {tabActivo === "pendientes" && renderRutaEstados(pedido)}
+
       <View style={styles.pedidoFooter}>
         <Text style={styles.totalTexto}>Total: ${pedido.total.toLocaleString()}</Text>
         
-        {tabActivo === "pendientes" && (
-          <View style={styles.accionesContainer}>
-            {getSiguienteEstado(pedido.estado) && (
-              <TouchableOpacity
-                style={[styles.accionButton, { backgroundColor: getEstadoColor(getSiguienteEstado(pedido.estado)) }]}
-                onPress={() => confirmarCambioEstado(pedido, getSiguienteEstado(pedido.estado))}
-              >
-                <Text style={styles.accionTexto}>
-                  {getSiguienteEstado(pedido.estado) === 'entregado' ? 'Marcar Entregado' : 'Siguiente Paso'}
-                </Text>
-              </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity
-              style={[styles.accionButton, { backgroundColor: '#e74c3c' }]}
-              onPress={() => abrirModalRechazo(pedido)}
-            >
-              <FontAwesome name="times" size={14} color="white" />
-              <Text style={styles.accionTexto}>Rechazar</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.detalleButton}
-              onPress={async () => {
-                setPedidoSeleccionado(pedido);
-                await obtenerCoordenadasDireccion(pedido.direccion);
-                setModalVisible(true);
-              }}
-            >
-              <FontAwesome name="eye" size={16} color="#2A9D8F" />
-            </TouchableOpacity>
-          </View>
-        )}
+        <TouchableOpacity
+          style={styles.detalleButton}
+          onPress={async () => {
+            setPedidoSeleccionado(pedido);
+            await obtenerCoordenadasDireccion(pedido.direccion);
+            setModalVisible(true);
+          }}
+        >
+          <FontAwesome name="eye" size={16} color={currentTheme.primary} />
+        </TouchableOpacity>
       </View>
+
+      {/* Botones de Acción en nueva línea */}
+      {tabActivo === "pendientes" && (
+        <View style={styles.accionesContainerNuevaLinea}>
+          {getSiguienteEstado(pedido.estado) && (
+            <TouchableOpacity
+              style={[styles.accionButtonNuevaLinea, { backgroundColor: getEstadoColor(getSiguienteEstado(pedido.estado)) }]}
+              onPress={() => confirmarCambioEstado(pedido, getSiguienteEstado(pedido.estado))}
+            >
+              <FontAwesome name={getSiguienteEstado(pedido.estado) === 'entregado' ? 'gift' : 'arrow-right'} size={16} color="white" />
+              <Text style={styles.accionTextoNuevaLinea}>
+                {getSiguienteEstado(pedido.estado) === 'entregado' ? 'Marcar Entregado' : 'Siguiente Paso'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          
+          <TouchableOpacity
+            style={[styles.accionButtonNuevaLinea, { backgroundColor: '#e74c3c' }]}
+            onPress={() => abrirModalRechazo(pedido)}
+          >
+            <FontAwesome name="times" size={16} color="white" />
+            <Text style={styles.accionTextoNuevaLinea}>Rechazar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Botón de confirmación para pedidos cancelados */}
+      {tabActivo === "cancelados" && (
+        <View style={styles.accionesContainerNuevaLinea}>
+          <TouchableOpacity
+            style={[styles.accionButtonNuevaLinea, { backgroundColor: '#27ae60' }]}
+            onPress={() => confirmarCancelacion(pedido)}
+          >
+            <FontAwesome name="check" size={16} color="white" />
+            <Text style={styles.accionTextoNuevaLinea}>Confirmar Cancelación</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
     );
   };
@@ -540,7 +824,7 @@ const PedidosRecibidosScreen = () => {
                 setMapaVisible(false);
               }}
             >
-              <FontAwesome name="times" size={20} color="#2A9D8F" />
+              <FontAwesome name="times" size={20} color={currentTheme.primary} />
             </TouchableOpacity>
           </View>
 
@@ -551,9 +835,16 @@ const PedidosRecibidosScreen = () => {
                 <Text style={styles.modalInfoTitulo}>Información del Cliente</Text>
                 
                 <View style={styles.clienteHeader}>
-                  <View style={styles.clienteAvatar}>
-                    <FontAwesome name="user" size={24} color="white" />
-                  </View>
+                  {pedidoSeleccionado.fotoPerfilCliente ? (
+                    <Image 
+                      source={{ uri: pedidoSeleccionado.fotoPerfilCliente }} 
+                      style={styles.clienteAvatarImagen}
+                    />
+                  ) : (
+                    <View style={styles.clienteAvatar}>
+                      <FontAwesome name="user" size={24} color="white" />
+                    </View>
+                  )}
                   <View style={styles.clienteInfo}>
                     <Text style={styles.clienteNombre}>{pedidoSeleccionado.cliente}</Text>
                     <View style={styles.calificacionContainer}>
@@ -569,11 +860,11 @@ const PedidosRecibidosScreen = () => {
                 
                 <View style={styles.clienteStats}>
                   <View style={styles.statItem}>
-                    <FontAwesome name="shopping-bag" size={14} color="#2A9D8F" />
+                    <FontAwesome name="shopping-bag" size={14} color={currentTheme.primary} />
                     <Text style={styles.statTexto}>{pedidoSeleccionado.pedidosRealizadosCliente} pedidos</Text>
                   </View>
                   <View style={styles.statItem}>
-                    <FontAwesome name="calendar" size={14} color="#2A9D8F" />
+                    <FontAwesome name="calendar" size={14} color={currentTheme.primary} />
                     <Text style={styles.statTexto}>Cliente desde {pedidoSeleccionado.clienteDesde}</Text>
                   </View>
                 </View>
@@ -630,9 +921,9 @@ const PedidosRecibidosScreen = () => {
                     disabled={cargandoMapa}
                   >
                     {cargandoMapa ? (
-                      <ActivityIndicator size="small" color="#2A9D8F" />
+                      <ActivityIndicator size="small" color={currentTheme.primary} />
                     ) : (
-                      <FontAwesome name={mapaVisible ? "eye-slash" : "eye"} size={16} color="#2A9D8F" />
+                      <FontAwesome name={mapaVisible ? "eye-slash" : "eye"} size={16} color={currentTheme.primary} />
                     )}
                     <Text style={styles.mapaToggleTexto}>
                       {cargandoMapa ? "Cargando..." : mapaVisible ? "Ocultar" : "Ver"} Mapa
@@ -657,7 +948,7 @@ const PedidosRecibidosScreen = () => {
                         coordinate={coordenadasDireccion}
                         title="📍 Dirección de Entrega"
                         description={pedidoSeleccionado.direccion}
-                        pinColor="#2A9D8F"
+                        pinColor={currentTheme.primary}
                       />
                     </MapView>
                     <View style={styles.mapaInfo}>
@@ -679,9 +970,9 @@ const PedidosRecibidosScreen = () => {
   const pedidosFiltrados = obtenerPedidosFiltrados();
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerContainer}>
@@ -701,7 +992,7 @@ const PedidosRecibidosScreen = () => {
       {/* Tabs */}
       <View style={styles.tabsContainer}>
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "pendientes" && styles.tabActivo]}
+          style={[styles.tab, tabActivo === "pendientes" && { backgroundColor: currentTheme.primary }]}
           onPress={() => setTabActivo("pendientes")}
         >
           <Text style={[styles.tabTexto, tabActivo === "pendientes" && styles.tabTextoActivo]}>
@@ -710,19 +1001,28 @@ const PedidosRecibidosScreen = () => {
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "historial" && styles.tabActivo]}
+          style={[styles.tab, tabActivo === "cancelados" && { backgroundColor: currentTheme.primary }]}
+          onPress={() => setTabActivo("cancelados")}
+        >
+          <Text style={[styles.tabTexto, tabActivo === "cancelados" && styles.tabTextoActivo]}>
+            Cancelados ({pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion).length})
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.tab, tabActivo === "historial" && { backgroundColor: currentTheme.primary }]}
           onPress={() => setTabActivo("historial")}
         >
           <Text style={[styles.tabTexto, tabActivo === "historial" && styles.tabTextoActivo]}>
-            Historial ({pedidosRecibidos.filter(p => ['entregado', 'cancelado', 'rechazado'].includes(p.estado)).length})
+            Historial ({pedidosRecibidos.filter(p => ['entregado', 'rechazado'].includes(p.estado)).length})
           </Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
+      <ScrollView style={[styles.container, { backgroundColor: currentTheme.background }]} contentContainerStyle={styles.scrollContainer}>
         {cargando ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2A9D8F" />
+            <ActivityIndicator size="large" color={currentTheme.primary} />
             <Text style={styles.loadingTexto}>Cargando pedidos...</Text>
           </View>
         ) : pedidosFiltrados.length > 0 ? (
@@ -755,7 +1055,7 @@ const PedidosRecibidosScreen = () => {
         <View style={styles.modalTiempoEntregaContainer}>
           <View style={styles.modalTiempoEntregaContent}>
             <View style={styles.modalTiempoEntregaHeader}>
-              <FontAwesome name="clock-o" size={32} color="#2A9D8F" />
+              <FontAwesome name="clock-o" size={32} color={currentTheme.primary} />
               <Text style={styles.modalTiempoEntregaTitulo}>Confirmar Pedido</Text>
               <Text style={styles.modalTiempoEntregaSubtitulo}>
                 Ingresa el tiempo estimado de entrega en minutos
@@ -818,29 +1118,65 @@ const PedidosRecibidosScreen = () => {
               <FontAwesome name="exclamation-triangle" size={32} color="#e74c3c" />
               <Text style={styles.modalRechazoTitulo}>Rechazar Pedido</Text>
               <Text style={styles.modalRechazoSubtitulo}>
-                ¿Estás seguro de que deseas rechazar este pedido?
+                Selecciona el motivo del rechazo
               </Text>
             </View>
             
-            <ScrollView style={styles.modalRechazoBody}>
-              <Text style={styles.motivoLabel}>Motivo del rechazo:</Text>
-              <TextInput
-                style={styles.motivoInput}
-                multiline
-                numberOfLines={5}
-                placeholder="Ej: No tengo el producto en stock, Fuera del área de cobertura, etc."
-                placeholderTextColor="#999"
-                onChangeText={setMotivoRechazo}
-                value={motivoRechazo}
-              />
-            </ScrollView>
+            <Text style={styles.motivoLabel}>Motivo del rechazo:</Text>
+            
+            <View style={styles.motivosContainer}>
+              {motivosRechazo.map((motivo, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={[
+                    styles.motivoOption,
+                    motivoSeleccionado === motivo && styles.motivoOptionSelected
+                  ]}
+                  onPress={() => setMotivoSeleccionado(motivo)}
+                >
+                  <View style={styles.motivoOptionContent}>
+                    <View style={[
+                      styles.motivoRadio,
+                      motivoSeleccionado === motivo && styles.motivoRadioSelected
+                    ]}>
+                      {motivoSeleccionado === motivo && (
+                        <FontAwesome name="check" size={12} color="white" />
+                      )}
+                    </View>
+                    <Text style={[
+                      styles.motivoOptionText,
+                      motivoSeleccionado === motivo && styles.motivoOptionTextSelected
+                    ]}>
+                      {motivo}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            {/* Input personalizado cuando se selecciona "Otro" */}
+            {motivoSeleccionado === 'Otro' && (
+              <View style={styles.motivoPersonalizadoContainer}>
+                <Text style={styles.motivoPersonalizadoLabel}>Especifica el motivo:</Text>
+                <TextInput
+                  style={styles.motivoPersonalizadoInput}
+                  multiline
+                  numberOfLines={3}
+                  placeholder="Describe el motivo del rechazo..."
+                  placeholderTextColor="#999"
+                  onChangeText={setMotivoPersonalizado}
+                  value={motivoPersonalizado}
+                />
+              </View>
+            )}
 
             <View style={styles.modalRechazoFooter}>
               <TouchableOpacity
                 style={styles.modalRechazoCancelar}
                 onPress={() => {
                   setModalRechazoVisible(false);
-                  setMotivoRechazo('');
+                  setMotivoSeleccionado('');
+                  setMotivoPersonalizado('');
                   setPedidoParaRechazar(null);
                 }}
               >
@@ -848,11 +1184,77 @@ const PedidosRecibidosScreen = () => {
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={styles.modalRechazoConfirmar}
+                style={[
+                  styles.modalRechazoConfirmar,
+                  (!motivoSeleccionado || (motivoSeleccionado === 'Otro' && !motivoPersonalizado.trim())) && styles.modalRechazoConfirmarDisabled
+                ]}
                 onPress={confirmarRechazo}
+                disabled={!motivoSeleccionado || (motivoSeleccionado === 'Otro' && !motivoPersonalizado.trim())}
               >
                 <FontAwesome name="times" size={16} color="white" />
-                <Text style={styles.modalRechazoConfirmarTexto}>Rechazar Pedido</Text>
+                <Text style={styles.modalRechazoConfirmarTexto}>Rechazar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      
+      {/* Modal de Calificación del Cliente */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalCalificacionClienteVisible}
+        onRequestClose={() => setModalCalificacionClienteVisible(false)}
+      >
+        <View style={styles.modalCalificacionContainer}>
+          <View style={styles.modalCalificacionContent}>
+            <View style={styles.modalCalificacionHeader}>
+              <FontAwesome name="star" size={32} color="#FFD700" />
+              <Text style={styles.modalCalificacionTitulo}>Califica al Cliente</Text>
+              <Text style={styles.modalCalificacionSubtitulo}>
+                Evalúa la experiencia con {pedidoParaCalificarCliente?.cliente}
+              </Text>
+            </View>
+            
+            <ScrollView style={styles.modalCalificacionBody}>
+              {criteriosCliente.map((criterio) => (
+                <View key={criterio.key} style={styles.criterioContainer}>
+                  <View style={styles.criterioHeader}>
+                    <FontAwesome name={criterio.icon} size={20} color={currentTheme.primary} />
+                    <Text style={styles.criterioLabel}>{criterio.label}</Text>
+                  </View>
+                  {renderEstrellasCliente(criterio.key, calificacionesCliente[criterio.key])}
+                </View>
+              ))}
+            </ScrollView>
+
+            <View style={styles.modalCalificacionFooter}>
+              <TouchableOpacity
+                style={styles.modalCalificacionCancelar}
+                onPress={() => {
+                  setModalCalificacionClienteVisible(false);
+                  setPedidoParaCalificarCliente(null);
+                  setCalificacionesCliente({
+                    puntualidad: 0,
+                    comunicacion: 0,
+                    amabilidad: 0,
+                    cooperacion: 0
+                  });
+                }}
+              >
+                <Text style={styles.modalCalificacionCancelarTexto}>Cancelar</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[
+                  styles.modalCalificacionGuardar,
+                  Object.values(calificacionesCliente).some(val => val === 0) && styles.modalCalificacionGuardarDisabled
+                ]}
+                onPress={guardarCalificacionCliente}
+                disabled={Object.values(calificacionesCliente).some(val => val === 0)}
+              >
+                <FontAwesome name="check" size={16} color="white" />
+                <Text style={styles.modalCalificacionGuardarTexto}>Guardar</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1158,6 +1560,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 15,
   },
+  clienteAvatarImagen: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 15,
+  },
   clienteInfo: {
     flex: 1,
   },
@@ -1360,16 +1768,14 @@ const styles = StyleSheet.create({
   },
   modalRechazoContent: {
     backgroundColor: "white",
-    borderRadius: 15,
+    borderRadius: 16,
     width: "100%",
     maxHeight: "80%",
-    overflow: "hidden",
+    padding: 20,
   },
   modalRechazoHeader: {
     alignItems: "center",
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e0e0",
+    marginBottom: 20,
   },
   modalRechazoTitulo: {
     fontSize: 20,
@@ -1383,15 +1789,14 @@ const styles = StyleSheet.create({
     color: "#7f8c8d",
     textAlign: "center",
   },
-  modalRechazoBody: {
-    padding: 20,
-    maxHeight: 200,
-  },
   motivoLabel: {
     fontSize: 16,
     fontWeight: "600",
     color: "#2c3e50",
-    marginBottom: 10,
+    marginBottom: 12,
+  },
+  motivosContainer: {
+    marginBottom: 20,
   },
   motivoInput: {
     borderWidth: 1,
@@ -1406,24 +1811,22 @@ const styles = StyleSheet.create({
   },
   modalRechazoFooter: {
     flexDirection: "row",
-    padding: 20,
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-    gap: 10,
+    justifyContent: "space-between",
+    marginTop: 20,
+    gap: 12,
   },
   modalRechazoCancelar: {
     flex: 1,
+    backgroundColor: "#95a5a6",
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
     alignItems: "center",
   },
   modalRechazoCancelarTexto: {
+    color: "white",
     fontSize: 16,
     fontWeight: "600",
-    color: "#7f8c8d",
   },
   modalRechazoConfirmar: {
     flex: 1,
@@ -1440,6 +1843,299 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "white",
+  },
+  modalRechazoConfirmarDisabled: {
+    backgroundColor: "#bdc3c7",
+    opacity: 0.6,
+  },
+  // Estilos para modal de calificación del cliente
+  modalCalificacionContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  modalCalificacionContent: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    width: "100%",
+    maxHeight: "80%",
+    padding: 20,
+  },
+  modalCalificacionHeader: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  modalCalificacionTitulo: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  modalCalificacionSubtitulo: {
+    fontSize: 14,
+    color: "#7f8c8d",
+    textAlign: "center",
+  },
+  modalCalificacionBody: {
+    height: 300,
+    marginBottom: 20,
+    borderWidth: 2,
+    borderColor: "#e74c3c",
+    padding: 10,
+  },
+  criterioContainer: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+  },
+  criterioHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  criterioLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginLeft: 10,
+  },
+  estrellasContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  estrellaButton: {
+    padding: 4,
+  },
+  modalCalificacionFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  modalCalificacionCancelar: {
+    flex: 1,
+    backgroundColor: "#95a5a6",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  modalCalificacionCancelarTexto: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  modalCalificacionGuardar: {
+    flex: 1,
+    backgroundColor: "#27ae60",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 8,
+  },
+  modalCalificacionGuardarTexto: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "white",
+  },
+  modalCalificacionGuardarDisabled: {
+    backgroundColor: "#bdc3c7",
+    opacity: 0.6,
+  },
+  // Estilos para botón temporal de limpiar datos
+  limpiarContainer: {
+    padding: 16,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  limpiarButton: {
+    backgroundColor: "#e74c3c",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  limpiarButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Estilos para motivos predefinidos
+  motivoOption: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    marginVertical: 3,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+  },
+  motivoOptionSelected: {
+    backgroundColor: "#e3f2fd",
+    borderColor: "#2A9D8F",
+    borderWidth: 2,
+  },
+  motivoOptionContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 14,
+  },
+  motivoRadio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#bdc3c7",
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  motivoRadioSelected: {
+    backgroundColor: "#2A9D8F",
+    borderColor: "#2A9D8F",
+  },
+  motivoOptionText: {
+    fontSize: 16,
+    color: "#2c3e50",
+    flex: 1,
+  },
+  motivoOptionTextSelected: {
+    color: "#2A9D8F",
+    fontWeight: "600",
+  },
+  // Estilos para motivo personalizado
+  motivoPersonalizadoContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: "#e9ecef",
+  },
+  motivoPersonalizadoLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#2c3e50",
+    marginBottom: 8,
+  },
+  motivoPersonalizadoInput: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#e9ecef",
+    padding: 12,
+    fontSize: 16,
+    color: "#2c3e50",
+    textAlignVertical: "top",
+    minHeight: 80,
+  },
+  // Estilos para la ruta de estados
+  rutaEstadosContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginVertical: 16,
+    paddingHorizontal: 8,
+  },
+  estadoItem: {
+    flex: 1,
+    alignItems: "center",
+    position: "relative",
+  },
+  estadoIcono: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  estadoIconoCompletado: {
+    backgroundColor: "#27ae60",
+  },
+  estadoIconoPendiente: {
+    backgroundColor: "#ecf0f1",
+    borderWidth: 2,
+    borderColor: "#bdc3c7",
+  },
+  estadoIconoActual: {
+    backgroundColor: "#2A9D8F",
+    borderWidth: 2,
+    borderColor: "#2A9D8F",
+  },
+  estadoLabel: {
+    fontSize: 10,
+    textAlign: "center",
+    fontWeight: "500",
+  },
+  estadoLabelCompletado: {
+    color: "#27ae60",
+  },
+  estadoLabelPendiente: {
+    color: "#bdc3c7",
+  },
+  estadoLinea: {
+    position: "absolute",
+    top: 12,
+    left: "50%",
+    width: "100%",
+    height: 2,
+    zIndex: -1,
+  },
+  estadoLineaCompletada: {
+    backgroundColor: "#27ae60",
+  },
+  estadoLineaPendiente: {
+    backgroundColor: "#ecf0f1",
+  },
+  // Estilos para botones en nueva línea
+  accionesContainerNuevaLinea: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    gap: 12,
+  },
+  accionButtonNuevaLinea: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    gap: 8,
+  },
+  accionTextoNuevaLinea: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  // Estilos para motivo de cancelación
+  motivoCancelacionContainer: {
+    backgroundColor: "#fff3cd",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#ffc107",
+  },
+  motivoCancelacionLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#856404",
+    marginBottom: 4,
+  },
+  motivoCancelacionTexto: {
+    fontSize: 14,
+    color: "#856404",
+    lineHeight: 20,
   },
 });
 

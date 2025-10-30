@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { API_ENDPOINTS } from "../config/api";
 
 const VerificarCodigoScreen = ({ route, navigation }) => {
   const { correo } = route.params;
@@ -49,38 +50,67 @@ const VerificarCodigoScreen = ({ route, navigation }) => {
     }
 
     try {
-      const response = await fetch("http://192.168.18.58:3000/api/auth/verificar-codigo", {
+      const response = await fetch(API_ENDPOINTS.VERIFICAR_CODIGO, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ correo, codigo: codigoFinal }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        navigation.navigate("NuevaPassword", { correo });
+        Alert.alert(
+          "Código verificado",
+          data.mensaje || "Código verificado correctamente. Procede a cambiar tu contraseña.",
+          [
+            {
+              text: "OK",
+              onPress: () => navigation.navigate("NuevaPassword", { correo })
+            }
+          ]
+        );
       } else {
-        Alert.alert("Error", "Código inválido o expirado.");
+        Alert.alert("Error", data.mensaje || data.error || "Código inválido o expirado.");
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo conectar al servidor.");
+      console.error("Error de conexión:", error);
+      Alert.alert(
+        "Error de conexión",
+        "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté corriendo."
+      );
     }
   };
 
   // 🔄 **Reenviar código tras 30 segundos**
   const reenviarCodigo = async () => {
     try {
-      await fetch("http://192.168.18.58:3000/api/auth/enviar-codigo", {
+      const response = await fetch(API_ENDPOINTS.RECUPERAR_PASSWORD, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify({ correo }),
       });
 
-      setContador(30);
-      setPuedeReenviar(false);
-      Alert.alert("Código reenviado", "Revisa tu correo.");
+      const data = await response.json();
+
+      if (response.ok) {
+        setContador(30);
+        setPuedeReenviar(false);
+        Alert.alert("Código reenviado", data.mensaje || "Revisa tu correo electrónico.");
+      } else {
+        Alert.alert("Error", data.mensaje || data.error || "No se pudo reenviar el código.");
+      }
     } catch (error) {
-      Alert.alert("Error", "No se pudo reenviar el código.");
+      console.error("Error al reenviar código:", error);
+      Alert.alert(
+        "Error de conexión",
+        "No se pudo conectar al servidor. Verifica tu conexión a internet."
+      );
     }
   };
 

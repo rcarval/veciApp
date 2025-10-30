@@ -7,14 +7,23 @@ import {
   Alert,
   StyleSheet,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
+import { API_ENDPOINTS } from "../config/api";
+import { useUser } from "../context/UserContext";
+import { useTheme } from "../context/ThemeContext";
 //import { Video } from "expo-av";
 
 const LoginScreen = ({ navigation }) => {
+  // Usar useUser solo cuando sea necesario, no en cada render
+  const userContext = useUser();
+  const cargarUsuario = userContext?.cargarUsuario;
+  const limpiarCacheCompleto = userContext?.limpiarCacheCompleto;
+  
   const [correo, setCorreo] = useState("");
   const [verPassword, setVerPassword] = useState(false);
   const [contrasena, setContrasena] = useState("");
@@ -27,61 +36,59 @@ const LoginScreen = ({ navigation }) => {
     }
 
     setLoading(true);
-    //Test
-    if(true){
-      const jsonUser = {
-        usuario: {
-            id: 16,
-            nombre: "Rodrigo Alonso Carvallo González ",
-            correo: "rodrigocarvallog@gmail.com",
-            telefono: "+56994908047",
-            tipo_usuario: "emprendedor",
-            estado_cuenta: "activa",
-            recovery_code: "895920",
-            recovery_expiration: "2025-05-14T01:45:08.000Z",
-            fecha_registro: "2025-05-12T03:08:55.000Z",
-            comuna_id: 1,
-            direcciones: [
-              { id: 1, nombre: "Casa", direccion: "El Chucao 434", comuna: "Isla de Maipo" },
-              { id: 2, nombre: "Trabajo", direccion: "Bario 2141", comuna: "Talagante" },
-              { id: 3, nombre: "Otro", direccion: "Pje. Crucero 107", comuna: "Isla de Maipo" }
-            ],
-            direccionSeleccionada: 1,
-            plan_id: null
+
+    try {
+      // Llamada al nuevo backend VeciApp-Backend
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
         },
-        token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYsImlhdCI6MTc0NzIwMDI2OSwiZXhwIjoxNzQ3Mjg2NjY5fQ.J6yMiS4_7phuoZDN6466lEIzuJh00EniPb5EL8IsAeI",
-        mensaje: "Inicio de sesión exitoso"
-    };
-      AsyncStorage.setItem("usuario", JSON.stringify(jsonUser.usuario));
-      await AsyncStorage.setItem("token", jsonUser.token);
-      await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
-      console.log("✅ Login exitoso - sesionActiva marcada como true");
-      navigation.navigate("Home");
-    }else{
-      try {
-        const response = await fetch("http://192.168.18.58:3000/api/auth/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ correo, contrasena }),
-        });
-        const data = await response.json();
-        if (response.ok) {
-          await AsyncStorage.setItem("usuario", JSON.stringify(data.usuario));
-          await AsyncStorage.setItem("token", data.token);
-          await AsyncStorage.setItem("sesionActiva", "true"); // Marcar sesión como activa
-          console.log("✅ Login exitoso (API) - sesionActiva marcada como true");
-          navigation.navigate("Home");
-        } else {
-          Alert.alert("Error", data.mensaje || "Credenciales incorrectas");
+        body: JSON.stringify({ correo, contrasena }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // Guardar token
+        await AsyncStorage.setItem("token", data.token);
+        await AsyncStorage.setItem("sesionActiva", "true");
+        
+        console.log("✅ Login exitoso - Guardando datos...");
+        
+        // Limpiar cache completo y cargar usuario en el contexto
+        if (limpiarCacheCompleto) {
+          console.log("🧹 Limpiando cache completo...");
+          await limpiarCacheCompleto();
         }
-      } catch (error) {
-        Alert.alert("Error", "No se pudo conectar al servidor.");
-        console.log("No se pudo conectar al servidor: ", error);
+        
+        try {
+          console.log("🔄 Cargando usuario en contexto...");
+          await cargarUsuario(true); // Forzar recarga después del login
+          console.log("✅ Usuario cargado en contexto exitosamente");
+        } catch (error) {
+          console.error("❌ Error al cargar usuario en contexto:", error);
+          // Continuar de todas formas, HomeScreen intentará cargar
+        }
+        
+        console.log("✅ Navegando a Home...");
+        navigation.navigate("Home");
+      } else {
+        // Manejar errores del backend
+        const mensajeError = data.mensaje || data.error || "Credenciales incorrectas";
+        Alert.alert("Error", mensajeError);
+        console.log("Error en login:", data);
       }
+    } catch (error) {
+      console.error("Error al conectar con el servidor:", error);
+      Alert.alert(
+        "Error de conexión", 
+        "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté ejecutándose."
+      );
+    } finally {
+      setLoading(false);
     }
-
-
-    setLoading(false);
   };
 
   return (
@@ -90,7 +97,10 @@ const LoginScreen = ({ navigation }) => {
       style={styles.container}
     >
       <Modal visible={loading} transparent={true} animationType="fade">
-
+        <View style={styles.modalContainer}>
+          <ActivityIndicator size="large" color="#2A9D8F" />
+          <Text style={styles.loadingText}>Iniciando sesión...</Text>
+        </View>
       </Modal>
       <Text style={styles.title}>Bienvenidos a</Text>
       <Image source={require("../assets/welcome.png")} style={styles.logo} />
@@ -216,7 +226,13 @@ const styles = StyleSheet.create({
     position: "relative",
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)", // 🔥 Fondo semi-transparente
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  loadingText: {
+    marginTop: 15,
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

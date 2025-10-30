@@ -23,16 +23,21 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { API_ENDPOINTS } from "../config/api";
+import { useTheme } from "../context/ThemeContext";
 
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { currentTheme } = useTheme();
   const usuario = route.params?.usuario ?? {};
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentEmprendimiento, setCurrentEmprendimiento] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [subiendoImagen, setSubiendoImagen] = useState(false);
+  const [guardando, setGuardando] = useState(false);
 
   // Estados para el formulario
   const [nombre, setNombre] = useState("");
@@ -389,7 +394,7 @@ const EmprendimientoScreen = () => {
                     </Text>
                     <View style={styles.horarioActions}>
                       <TouchableOpacity onPress={() => onEdit(dia, horario)}>
-                        <MaterialIcons name="edit" size={18} color="#2A9D8F" />
+                        <MaterialIcons name="edit" size={18} color={currentTheme.primary} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() => onDelete(dia, horario.id)}
@@ -605,7 +610,7 @@ const EmprendimientoScreen = () => {
         onPress={openMapPicker}
       >
         <View style={styles.direccionButtonContent}>
-          <Ionicons name="map" size={20} color="#2A9D8F" />
+          <Ionicons name="map" size={20} color={currentTheme.primary} />
           <Text style={[styles.direccionButtonText, direccion && styles.direccionButtonTextFilled]}>
             {direccion || "Selecciona en el mapa"}
           </Text>
@@ -620,7 +625,7 @@ const EmprendimientoScreen = () => {
       )}
       {validandoDireccion && (
         <View style={styles.validandoContainer}>
-          <ActivityIndicator size="small" color="#2A9D8F" />
+          <ActivityIndicator size="small" color={currentTheme.primary} />
           <Text style={styles.validandoText}>Validando dirección...</Text>
         </View>
       )}
@@ -638,7 +643,7 @@ const EmprendimientoScreen = () => {
       <View style={styles.mapModalContainer}>
         {/* Encabezado */}
         <LinearGradient
-          colors={["#2A9D8F", "#1D7874"]}
+          colors={[currentTheme.primary, currentTheme.secondary]}
           style={styles.mapModalHeader}
         >
           <TouchableOpacity
@@ -665,7 +670,7 @@ const EmprendimientoScreen = () => {
                 title="Ubicación seleccionada"
               >
                 <View style={styles.customMarker}>
-                  <Ionicons name="location" size={30} color="#2A9D8F" />
+                  <Ionicons name="location" size={30} color={currentTheme.primary} />
                 </View>
               </Marker>
             )}
@@ -673,7 +678,7 @@ const EmprendimientoScreen = () => {
 
           <View style={styles.mapBottomPanel}>
             <View style={styles.locationInfo}>
-              <Ionicons name="location" size={18} color="#2A9D8F" />
+              <Ionicons name="location" size={18} color={currentTheme.primary} />
               <Text style={styles.locationLabel}>Dirección:</Text>
             </View>
             <View style={styles.searchContainer}>
@@ -693,7 +698,7 @@ const EmprendimientoScreen = () => {
                 {buscandoDireccion ? (
                   <Ionicons name="hourglass" size={20} color="#bdc3c7" />
                 ) : (
-                  <Ionicons name="search" size={20} color="#2A9D8F" />
+                  <Ionicons name="search" size={20} color={currentTheme.primary} />
                 )}
               </TouchableOpacity>
             </View>
@@ -707,7 +712,11 @@ const EmprendimientoScreen = () => {
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[styles.confirmMapButton, validandoDireccion && styles.disabledButton]}
+                style={[
+                  styles.confirmMapButton, 
+                  { backgroundColor: currentTheme.primary },
+                  validandoDireccion && styles.disabledButton
+                ]}
                 onPress={confirmMapLocation}
                 disabled={validandoDireccion}
               >
@@ -952,15 +961,61 @@ const EmprendimientoScreen = () => {
   const cargarEmprendimientos = async () => {
     try {
       setLoading(true);
-      // Simulamos carga de datos (en una app real sería una API)
-      const emprendimientosGuardados = await AsyncStorage.getItem(
-        "emprendimientos"
-      );
-      if (emprendimientosGuardados) {
-        setEmprendimientos(JSON.parse(emprendimientosGuardados));
+      const token = await AsyncStorage.getItem("token");
+      
+      if (!token) {
+        console.log("No hay token, no se pueden cargar emprendimientos");
+        setEmprendimientos([]);
+        return;
+      }
+
+      const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTOS, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        // Mapear los datos del backend al formato esperado por el frontend
+        const emprendimientosMapeados = data.emprendimientos.map(emp => ({
+          id: emp.id.toString(),
+          nombre: emp.nombre,
+          descripcionCorta: emp.descripcion_corta || "",
+          descripcionLarga: emp.descripcion_larga || "",
+          comuna: emp.comuna_id?.toString() || "1",
+          direccion: emp.direccion,
+          telefono: emp.telefono || "",
+          logo: emp.logo_url,
+          background: emp.background_url,
+          status: emp.estado || "pendiente",
+          categoria: emp.categoria_principal,
+          subcategorias: emp.subcategorias || [],
+          horarios: emp.horarios || {},
+          metodosPago: emp.medios_pago || {},
+          metodosEntrega: {
+            ...(emp.tipos_entrega || {}),
+            deliveryCosto: emp.costo_delivery || "Consultar"
+          },
+          ubicacion: emp.latitud && emp.longitud ? {
+            latitude: parseFloat(emp.latitud),
+            longitude: parseFloat(emp.longitud)
+          } : null,
+          fechaCreacion: emp.fecha_creacion,
+        }));
+        
+        setEmprendimientos(emprendimientosMapeados);
+      } else {
+        console.error("Error al cargar emprendimientos:", data);
+        setEmprendimientos([]);
       }
     } catch (error) {
       console.error("Error al cargar emprendimientos:", error);
+      setEmprendimientos([]);
     } finally {
       setLoading(false);
     }
@@ -980,9 +1035,57 @@ const EmprendimientoScreen = () => {
     }
   };
 
-  // Llama a esta función cuando subas imágenes exitosamente
-  const seleccionarImagen = async (tipo) => {
+  // Función para subir imagen al backend
+  const subirImagenEmprendimiento = async (uri, tipo, emprendimientoId) => {
+    try {
+      setSubiendoImagen(true);
+      
+      const token = await AsyncStorage.getItem("token");
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
 
+      const formData = new FormData();
+      formData.append(tipo, {
+        uri: uri,
+        type: 'image/jpeg',
+        name: `${tipo}.jpg`,
+      });
+
+      const endpoint = tipo === 'logo' 
+        ? API_ENDPOINTS.SUBIR_LOGO_EMPRENDIMIENTO(emprendimientoId)
+        : API_ENDPOINTS.SUBIR_BACKGROUND_EMPRENDIMIENTO(emprendimientoId);
+
+      console.log(`📤 Subiendo ${tipo} del emprendimiento ${emprendimientoId}...`);
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      
+      if (response.ok && data.ok) {
+        const imageUrl = tipo === 'logo' ? data.logo_url : data.background_url;
+        console.log(`✅ ${tipo} subido exitosamente:`, imageUrl);
+        return imageUrl;
+      } else {
+        throw new Error(data.mensaje || `Error al subir ${tipo}`);
+      }
+    } catch (error) {
+      console.error(`❌ Error al subir ${tipo}:`, error);
+      throw error;
+    } finally {
+      setSubiendoImagen(false);
+    }
+  };
+
+  // Función para seleccionar y subir imagen
+  const seleccionarImagen = async (tipo) => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   
     if (status !== 'granted') {
@@ -1001,13 +1104,33 @@ const EmprendimientoScreen = () => {
       quality: 0.8,
     });
 
-    if (!result.canceled) {
-      if (tipo === "logo") {
-        setLogo(result.assets[0].uri);
-        await guardarImagenesRespaldo(result.assets[0].uri, null);
+    if (!result.canceled && result.assets[0]) {
+      // Si estamos editando un emprendimiento existente, subir inmediatamente
+      if (isEditing && currentEmprendimiento?.id) {
+        try {
+          const imageUrl = await subirImagenEmprendimiento(
+            result.assets[0].uri, 
+            tipo, 
+            currentEmprendimiento.id
+          );
+          
+          if (tipo === "logo") {
+            setLogo(imageUrl);
+          } else {
+            setBackground(imageUrl);
+          }
+          
+          Alert.alert('Éxito', `${tipo === 'logo' ? 'Logo' : 'Imagen de fondo'} subido correctamente`);
+        } catch (error) {
+          Alert.alert('Error', `No se pudo subir el ${tipo}: ${error.message}`);
+        }
       } else {
-        setBackground(result.assets[0].uri);
-        await guardarImagenesRespaldo(null, result.assets[0].uri);
+        // Si es nuevo, solo guardar la URI localmente (se subirá al guardar)
+        if (tipo === "logo") {
+          setLogo(result.assets[0].uri);
+        } else {
+          setBackground(result.assets[0].uri);
+        }
       }
     }
   };
@@ -1196,55 +1319,91 @@ const EmprendimientoScreen = () => {
           text: "Sí, confirmar",
           onPress: async () => {
             try {
-              const nuevoEmprendimiento = {
-                id: isEditing
-                  ? currentEmprendimiento.id
-                  : Date.now().toString(),
-                nombre,
-                descripcionCorta,
-                descripcionLarga,
-                horarios,
-                comuna,
-                direccion: currentAddress,
-                telefono,
-                logo,
-                background,
-                status: isEditing ? "pendiente actualización" : "pendiente",
-                categoria: categoriaSeleccionada,
-                subcategorias: subcategoriasSeleccionadas,
-                ubicacion: selectedLocation, // Guardamos las coordenadas
-                fechaCreacion: new Date().toISOString(),
-                // Agrega campos necesarios para la previsualización
-                estado: "Abierto", // Valor por defecto
-                rating: 5, // Valor por defecto
-                metodosPago: mediosPago,
-                metodosEntrega: {
-                  ...tiposEntrega,
-                  deliveryCosto: tiposEntrega.delivery
-                    ? costoDelivery
-                    : "Consultar",
-                },
-              };
-
-              let nuevosEmprendimientos;
-              if (isEditing) {
-                nuevosEmprendimientos = emprendimientos.map((emp) =>
-                  emp.id === currentEmprendimiento.id
-                    ? nuevoEmprendimiento
-                    : emp
-                );
-              } else {
-                nuevosEmprendimientos = [
-                  ...emprendimientos,
-                  nuevoEmprendimiento,
-                ];
+              setGuardando(true);
+              const token = await AsyncStorage.getItem("token");
+              
+              if (!token) {
+                Alert.alert("Error", "No hay sesión activa");
+                return;
               }
 
-              await AsyncStorage.setItem(
-                "emprendimientos",
-                JSON.stringify(nuevosEmprendimientos)
-              );
-              setEmprendimientos(nuevosEmprendimientos);
+              // Preparar datos para el backend
+              const emprendimientoData = {
+                nombre,
+                descripcion_corta: descripcionCorta,
+                descripcion_larga: descripcionLarga,
+                comuna_id: parseInt(comuna),
+                direccion: currentAddress || direccion,
+                telefono,
+                categoria_principal: categoriaSeleccionada,
+                subcategorias: subcategoriasSeleccionadas,
+                horarios: horarios,
+                medios_pago: mediosPago,
+                tipos_entrega: tiposEntrega,
+                costo_delivery: tiposEntrega.delivery ? costoDelivery : null,
+                latitud: selectedLocation?.latitude || null,
+                longitud: selectedLocation?.longitude || null,
+              };
+
+              let emprendimientoCreado;
+              
+              if (isEditing) {
+                // Actualizar emprendimiento existente
+                const response = await fetch(
+                  API_ENDPOINTS.EMPRENDIMIENTO_BY_ID(currentEmprendimiento.id),
+                  {
+                    method: "PUT",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(emprendimientoData),
+                  }
+                );
+
+                const data = await response.json();
+                if (!response.ok || !data.ok) {
+                  throw new Error(data.mensaje || "Error al actualizar emprendimiento");
+                }
+                emprendimientoCreado = data.emprendimiento;
+              } else {
+                // Crear nuevo emprendimiento
+                const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTOS, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                  },
+                  body: JSON.stringify(emprendimientoData),
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.ok) {
+                  throw new Error(data.mensaje || "Error al crear emprendimiento");
+                }
+                emprendimientoCreado = data.emprendimiento;
+              }
+
+              // Si hay imágenes locales (nuevo emprendimiento), subirlas
+              const emprendimientoId = emprendimientoCreado.id.toString();
+              if (logo && !logo.startsWith('http')) {
+                try {
+                  await subirImagenEmprendimiento(logo, 'logo', emprendimientoId);
+                } catch (error) {
+                  console.error('Error al subir logo:', error);
+                }
+              }
+              if (background && !background.startsWith('http')) {
+                try {
+                  await subirImagenEmprendimiento(background, 'background', emprendimientoId);
+                } catch (error) {
+                  console.error('Error al subir background:', error);
+                }
+              }
+
+              // Recargar lista de emprendimientos
+              await cargarEmprendimientos();
+              
               resetForm();
               setModalVisible(false);
               Alert.alert(
@@ -1254,7 +1413,10 @@ const EmprendimientoScreen = () => {
                 } correctamente`
               );
             } catch (error) {
-              Alert.alert("Error", "No se pudo guardar el emprendimiento");
+              console.error("Error al guardar emprendimiento:", error);
+              Alert.alert("Error", error.message || "No se pudo guardar el emprendimiento");
+            } finally {
+              setGuardando(false);
             }
           },
         },
@@ -1306,18 +1468,36 @@ const EmprendimientoScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const nuevosEmprendimientos = emprendimientos.filter(
-                (emp) => emp.id !== id
+              const token = await AsyncStorage.getItem("token");
+              
+              if (!token) {
+                Alert.alert("Error", "No hay sesión activa");
+                return;
+              }
+
+              const response = await fetch(
+                API_ENDPOINTS.EMPRENDIMIENTO_BY_ID(id),
+                {
+                  method: "DELETE",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                  },
+                }
               );
-              await AsyncStorage.setItem(
-                "emprendimientos",
-                JSON.stringify(nuevosEmprendimientos)
-              );
-              setEmprendimientos(nuevosEmprendimientos);
-              Alert.alert("Éxito", "Emprendimiento eliminado correctamente");
+
+              const data = await response.json();
+              
+              if (response.ok && data.ok) {
+                // Recargar lista de emprendimientos
+                await cargarEmprendimientos();
+                Alert.alert("Éxito", "Emprendimiento eliminado correctamente");
+              } else {
+                throw new Error(data.mensaje || "Error al eliminar emprendimiento");
+              }
             } catch (error) {
               console.error("Error al eliminar emprendimiento:", error);
-              Alert.alert("Error", "No se pudo eliminar el emprendimiento");
+              Alert.alert("Error", error.message || "No se pudo eliminar el emprendimiento");
             }
           },
         },
@@ -1357,24 +1537,38 @@ const EmprendimientoScreen = () => {
 
   const actualizarEstadoEmprendimiento = async (id, isActive) => {
     try {
-      const nuevosEmprendimientos = emprendimientos.map(emp => {
-        if (emp.id === id) {
-          return {
-            ...emp,
-            status: isActive ? 'activo' : 'inactivo'
-          };
-        }
-        return emp;
-      });
+      const token = await AsyncStorage.getItem("token");
       
-      await AsyncStorage.setItem(
-        "emprendimientos",
-        JSON.stringify(nuevosEmprendimientos)
+      if (!token) {
+        Alert.alert("Error", "No hay sesión activa");
+        return;
+      }
+
+      const response = await fetch(
+        API_ENDPOINTS.EMPRENDIMIENTO_BY_ID(id),
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            estado: isActive ? 'activo' : 'inactivo'
+          }),
+        }
       );
-      setEmprendimientos(nuevosEmprendimientos);
+
+      const data = await response.json();
+      
+      if (response.ok && data.ok) {
+        // Recargar lista de emprendimientos
+        await cargarEmprendimientos();
+      } else {
+        throw new Error(data.mensaje || "Error al actualizar estado");
+      }
     } catch (error) {
       console.error("Error al actualizar estado:", error);
-      Alert.alert("Error", "No se pudo actualizar el estado del emprendimiento");
+      Alert.alert("Error", error.message || "No se pudo actualizar el estado del emprendimiento");
     }
   };
 
@@ -1438,7 +1632,7 @@ const EmprendimientoScreen = () => {
         </Text>
         <View style={styles.emprendimientoInfo}>
           <View style={styles.infoItem}>
-            <FontAwesome name="map-marker" size={14} color="#2A9D8F" />
+            <FontAwesome name="map-marker" size={14} color={currentTheme.primary} />
             <Text style={styles.infoText}>
               {item.direccion},{" "}
               {comunas.find((c) => c.id === item.comuna)?.nombre}
@@ -1446,7 +1640,7 @@ const EmprendimientoScreen = () => {
           </View>
   
           <View style={styles.infoItem}>
-            <FontAwesome name="phone" size={14} color="#2A9D8F" />
+            <FontAwesome name="phone" size={14} color={currentTheme.primary} />
             <Text style={styles.infoText}>{item.telefono}</Text>
           </View>
         </View>
@@ -1487,7 +1681,7 @@ const EmprendimientoScreen = () => {
               style={styles.actionButton}
               onPress={() => editarEmprendimiento(item)}
             >
-              <MaterialIcons name="edit" size={20} color="#2A9D8F" />
+              <MaterialIcons name="edit" size={20} color={currentTheme.primary} />
             </TouchableOpacity>
           )}
   
@@ -1612,9 +1806,9 @@ const EmprendimientoScreen = () => {
   };
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerTitleContainer}>
@@ -1623,10 +1817,10 @@ const EmprendimientoScreen = () => {
         </View>
       </LinearGradient>
 
-      <View style={styles.container}>
+      <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2A9D8F" />
+            <ActivityIndicator size="large" color={currentTheme.primary} />
           </View>
         ) : emprendimientos.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -1647,7 +1841,7 @@ const EmprendimientoScreen = () => {
 
         {/* Botón flotante para agregar */}
         <TouchableOpacity
-          style={styles.addButton}
+          style={[styles.addButton, { backgroundColor: currentTheme.primary, shadowColor: currentTheme.primary }]}
           onPress={() => {
             resetForm();
             setModalVisible(true);
@@ -1665,7 +1859,7 @@ const EmprendimientoScreen = () => {
         onRequestClose={() => setModalVisible(false)}
       >
         <LinearGradient
-          colors={["#2A9D8F", "#1D7874"]}
+          colors={[currentTheme.primary, currentTheme.secondary]}
           style={styles.modalHeaderGradient}
         >
           <View style={styles.modalHeader}>
@@ -1679,7 +1873,7 @@ const EmprendimientoScreen = () => {
           </View>
         </LinearGradient>
 
-        <ScrollView style={styles.modalContainer}>
+        <ScrollView style={[styles.modalContainer, { backgroundColor: currentTheme.background }]}>
           {/* Campo Nombre */}
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Nombre del Emprendimiento*</Text>
@@ -1969,7 +2163,7 @@ const EmprendimientoScreen = () => {
                 <Image source={{ uri: logo }} style={styles.imagePreview} />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <FontAwesome name="camera" size={24} color="#2A9D8F" />
+                  <FontAwesome name="camera" size={24} color={currentTheme.primary} />
                   <Text style={styles.imagePlaceholderText}>
                     Seleccionar logo
                   </Text>
@@ -1992,7 +2186,7 @@ const EmprendimientoScreen = () => {
                 />
               ) : (
                 <View style={styles.imagePlaceholder}>
-                  <FontAwesome name="image" size={24} color="#2A9D8F" />
+                  <FontAwesome name="image" size={24} color={currentTheme.primary} />
                   <Text style={styles.imagePlaceholderText}>
                     Seleccionar imagen de fondo
                   </Text>
@@ -2086,13 +2280,26 @@ const EmprendimientoScreen = () => {
 
           {/* Botón Guardar */}
           <TouchableOpacity
-            style={styles.saveButton}
+            style={[
+              styles.saveButton, 
+              { backgroundColor: currentTheme.primary },
+              (guardando || validandoDireccion) && styles.saveButtonDisabled
+            ]}
             onPress={guardarEmprendimiento}
-            disabled={validandoDireccion}
+            disabled={guardando || validandoDireccion}
           >
-            <Text style={styles.saveButtonText}>
-              {isEditing ? "Actualizar Emprendimiento" : "Enviar a evaluación"}
-            </Text>
+            {guardando ? (
+              <View style={styles.loadingButtonContent}>
+                <ActivityIndicator size="small" color="white" />
+                <Text style={styles.saveButtonText}>
+                  {isEditing ? "Actualizando..." : "Creando..."}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.saveButtonText}>
+                {isEditing ? "Actualizar Emprendimiento" : "Enviar a evaluación"}
+              </Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </Modal>
@@ -2511,10 +2718,19 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 30,
   },
+  saveButtonDisabled: {
+    backgroundColor: "#ccc",
+    opacity: 0.7,
+  },
+  loadingButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   saveButtonText: {
     color: "white",
     fontSize: 16,
     fontWeight: "bold",
+    marginLeft: 8,
   },
   mapContainer: {
     flex: 1,

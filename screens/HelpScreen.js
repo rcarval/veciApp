@@ -12,10 +12,12 @@ import {
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
+import { useTheme } from "../context/ThemeContext";
 
 const HelpScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
+  const { currentTheme } = useTheme();
   const usuario = route.params?.usuario ?? {};
   
   const [categoriaSeleccionada, setCategoriaSeleccionada] = useState(null);
@@ -198,7 +200,7 @@ const HelpScreen = () => {
   const renderCategoria = (categoria) => (
     <TouchableOpacity
       key={categoria.id}
-      style={[styles.categoriaCard, { borderLeftColor: categoria.color }]}
+      style={[styles.categoriaCard, { borderLeftColor: categoria.color, backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}
       onPress={() => setCategoriaSeleccionada(categoria)}
     >
       <View style={styles.categoriaHeader}>
@@ -206,12 +208,12 @@ const HelpScreen = () => {
           <FontAwesome name={categoria.icono} size={20} color="white" />
         </View>
         <View style={styles.categoriaInfo}>
-          <Text style={styles.categoriaTitulo}>{categoria.titulo}</Text>
-          <Text style={styles.categoriaDescripcion}>
+          <Text style={[styles.categoriaTitulo, { color: currentTheme.text }]}>{categoria.titulo}</Text>
+          <Text style={[styles.categoriaDescripcion, { color: currentTheme.textSecondary }]}>
             {categoria.preguntas.length} preguntas frecuentes
           </Text>
         </View>
-        <FontAwesome name="chevron-right" size={16} color="#bdc3c7" />
+        <FontAwesome name="chevron-right" size={16} color={currentTheme.textSecondary} />
       </View>
     </TouchableOpacity>
   );
@@ -226,21 +228,21 @@ const HelpScreen = () => {
             style={styles.backButton}
             onPress={() => setCategoriaSeleccionada(null)}
           >
-            <FontAwesome name="arrow-left" size={16} color="#2A9D8F" />
-            <Text style={styles.backText}>Volver</Text>
+            <FontAwesome name="arrow-left" size={16} color={currentTheme.primary} />
+            <Text style={[styles.backText, { color: currentTheme.primary }]}>Volver</Text>
           </TouchableOpacity>
-          <Text style={styles.preguntasTitulo}>{categoriaSeleccionada.titulo}</Text>
+          <Text style={[styles.preguntasTitulo, { color: currentTheme.text }]}>{categoriaSeleccionada.titulo}</Text>
         </View>
 
         <ScrollView style={styles.preguntasList}>
           {categoriaSeleccionada.preguntas.map((pregunta, index) => (
             <TouchableOpacity
               key={index}
-              style={styles.preguntaCard}
+              style={[styles.preguntaCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}
               onPress={() => abrirPregunta(categoriaSeleccionada, pregunta)}
             >
-              <Text style={styles.preguntaTexto}>{pregunta.pregunta}</Text>
-              <FontAwesome name="chevron-right" size={14} color="#bdc3c7" />
+              <Text style={[styles.preguntaTexto, { color: currentTheme.text }]}>{pregunta.pregunta}</Text>
+              <FontAwesome name="chevron-right" size={14} color={currentTheme.textSecondary} />
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -256,26 +258,26 @@ const HelpScreen = () => {
       onRequestClose={() => setModalVisible(false)}
     >
       <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
+        <View style={[styles.modalContent, { backgroundColor: currentTheme.cardBackground }]}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitulo}>{preguntaSeleccionada?.pregunta}</Text>
+            <Text style={[styles.modalTitulo, { color: currentTheme.text }]}>{preguntaSeleccionada?.pregunta}</Text>
             <TouchableOpacity
               style={styles.modalCloseButton}
               onPress={() => setModalVisible(false)}
             >
-              <FontAwesome name="times" size={20} color="#2A9D8F" />
+              <FontAwesome name="times" size={20} color={currentTheme.primary} />
             </TouchableOpacity>
           </View>
 
           <ScrollView style={styles.modalBody}>
-            <Text style={styles.respuestaTexto}>
+            <Text style={[styles.respuestaTexto, { color: currentTheme.text }]}>
               {preguntaSeleccionada?.respuesta}
             </Text>
           </ScrollView>
 
-          <View style={styles.modalFooter}>
+          <View style={[styles.modalFooter, { borderTopColor: currentTheme.border }]}>
             <TouchableOpacity
-              style={styles.contactarButton}
+              style={[styles.contactarButton, { backgroundColor: currentTheme.primary }]}
               onPress={() => {
                 setModalVisible(false);
                 contactarSoporte();
@@ -291,9 +293,9 @@ const HelpScreen = () => {
   );
 
   return (
-    <View style={styles.containerMaster}>
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
       <LinearGradient
-        colors={["#2A9D8F", "#1D7874"]}
+        colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
       >
         <View style={styles.headerContainer}>
@@ -313,9 +315,9 @@ const HelpScreen = () => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
         {!categoriaSeleccionada ? (
           <>
-            <View style={styles.bienvenidaContainer}>
-              <Text style={styles.bienvenidaTitulo}>¡Hola! ¿En qué podemos ayudarte?</Text>
-              <Text style={styles.bienvenidaDescripcion}>
+            <View style={[styles.bienvenidaContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              <Text style={[styles.bienvenidaTitulo, { color: currentTheme.text }]}>¡Hola! ¿En qué podemos ayudarte?</Text>
+              <Text style={[styles.bienvenidaDescripcion, { color: currentTheme.textSecondary }]}>
                 Encuentra respuestas rápidas a las preguntas más comunes sobre veciApp
               </Text>
             </View>
@@ -324,13 +326,13 @@ const HelpScreen = () => {
               {categoriasAyuda.map(renderCategoria)}
             </View>
 
-            <View style={styles.soporteContainer}>
-              <Text style={styles.soporteTitulo}>¿No encuentras lo que buscas?</Text>
-              <Text style={styles.soporteDescripcion}>
+            <View style={[styles.soporteContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              <Text style={[styles.soporteTitulo, { color: currentTheme.text }]}>¿No encuentras lo que buscas?</Text>
+              <Text style={[styles.soporteDescripcion, { color: currentTheme.textSecondary }]}>
                 Nuestro equipo de soporte está aquí para ayudarte
               </Text>
               <TouchableOpacity
-                style={styles.soporteButton}
+                style={[styles.soporteButton, { backgroundColor: currentTheme.primary }]}
                 onPress={contactarSoporte}
               >
                 <FontAwesome name="headphones" size={20} color="white" />
@@ -351,7 +353,6 @@ const HelpScreen = () => {
 const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
   },
   headerGradient: {
     paddingTop: 50,
@@ -418,11 +419,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   categoriaCard: {
-    backgroundColor: "white",
     borderRadius: 12,
     marginBottom: 12,
     borderLeftWidth: 4,
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -447,12 +446,10 @@ const styles = StyleSheet.create({
   categoriaTitulo: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#2c3e50",
     marginBottom: 4,
   },
   categoriaDescripcion: {
     fontSize: 14,
-    color: "#7f8c8d",
   },
   preguntasContainer: {
     flex: 1,
@@ -465,7 +462,6 @@ const styles = StyleSheet.create({
   preguntasTitulo: {
     fontSize: 20,
     fontWeight: "bold",
-    color: "#2c3e50",
     marginLeft: 15,
   },
   preguntasList: {
@@ -492,11 +488,9 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   soporteContainer: {
-    backgroundColor: "white",
     borderRadius: 15,
     padding: 20,
     alignItems: "center",
-    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -505,17 +499,14 @@ const styles = StyleSheet.create({
   soporteTitulo: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#2c3e50",
     marginBottom: 8,
   },
   soporteDescripcion: {
     fontSize: 14,
-    color: "#7f8c8d",
     textAlign: "center",
     marginBottom: 20,
   },
   soporteButton: {
-    backgroundColor: "#2A9D8F",
     paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 25,

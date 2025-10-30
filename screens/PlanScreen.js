@@ -7,20 +7,23 @@ import {
   ScrollView,
   Alert,
   Modal,
+  ActivityIndicator,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_ENDPOINTS } from "../config/api";
+import { useUser } from "../context/UserContext";
 
 const PlanScreen = () => {
   const navigation = useNavigation();
-  const route = useRoute();
-  const usuario = route.params?.usuario ?? {};
+  const { usuario, cargarUsuario, invalidarUsuario, actualizarUsuarioLocal } = useUser();
   
-  const [planActual, setPlanActual] = useState(usuario.plan_id ? "premium" : "basico");
+  const [planActual, setPlanActual] = useState("basico");
   const [modalVisible, setModalVisible] = useState(false);
   const [cargando, setCargando] = useState(false);
+  const [cargandoPlan, setCargandoPlan] = useState(true);
 
   const planes = {
     basico: {
@@ -71,6 +74,29 @@ const PlanScreen = () => {
     }
   };
 
+  // Cargar plan del usuario desde el contexto (usando cache si es válido)
+  useEffect(() => {
+    const cargarPlan = async () => {
+      try {
+        setCargandoPlan(true);
+        await cargarUsuario(false); // Usar cache si es válido
+      } catch (error) {
+        console.error("Error al cargar plan:", error);
+      } finally {
+        setCargandoPlan(false);
+      }
+    };
+    cargarPlan();
+  }, []);
+
+  // Actualizar planActual cuando cambia el usuario
+  useEffect(() => {
+    if (usuario) {
+      const plan = usuario.plan_id || null;
+      setPlanActual(plan === "premium" ? "premium" : "basico");
+    }
+  }, [usuario]);
+
   const handleSuscribirsePremium = () => {
     setModalVisible(true);
   };
@@ -78,6 +104,14 @@ const PlanScreen = () => {
   const confirmarSuscripcion = async () => {
     setCargando(true);
     try {
+      const token = await AsyncStorage.getItem("token");
+      
+      if (!token) {
+        Alert.alert("Error", "No hay sesión activa. Por favor inicia sesión.");
+        navigation.navigate("Login");
+        return;
+      }
+
       // Simular proceso de pago con tarjeta de prueba
       Alert.alert(
         "💳 Procesando Pago",
@@ -94,39 +128,54 @@ const PlanScreen = () => {
           {
             text: "Simular Pago Exitoso",
             onPress: async () => {
-              // Simular delay de procesamiento
-              await new Promise(resolve => setTimeout(resolve, 1500));
-              
-              // Actualizar el usuario con plan premium
-              const usuarioActualizado = {
-                ...usuario,
-                plan_id: "premium",
-                fecha_suscripcion: new Date().toISOString(),
-                estado_suscripcion: "activa"
-              };
+              try {
+                // Llamar al backend para suscribirse
+                const response = await fetch(API_ENDPOINTS.SUSCRIBIRSE_PREMIUM, {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "Authorization": `Bearer ${token}`,
+                  },
+                });
 
-              // Guardar en AsyncStorage
-              await AsyncStorage.setItem("usuario", JSON.stringify(usuarioActualizado));
-              
-              setPlanActual("premium");
-              setModalVisible(false);
-              setCargando(false);
-              
-              Alert.alert(
-                "¡Felicidades! 🎉",
-                "Te has suscrito exitosamente al Plan Premium. Ahora tienes acceso a todas las funcionalidades avanzadas.",
-                [
-                  {
-                    text: "Continuar"                    
-                  }
-                ]
-              );
+                const data = await response.json();
+
+                if (response.ok && data.ok) {
+                  // Actualizar contexto (esto actualiza el cache y todas las pantallas)
+                  actualizarUsuarioLocal(data.usuario);
+                  setPlanActual("premium");
+                  
+                  setModalVisible(false);
+                  setCargando(false);
+                  
+                  Alert.alert(
+                    "¡Felicidades! 🎉",
+                    data.mensaje || "Te has suscrito exitosamente al Plan Premium. Ahora tienes acceso a todas las funcionalidades avanzadas.",
+                    [
+                      {
+                        text: "Continuar"                    
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert("Error", data.mensaje || data.error || "No se pudo procesar la suscripción.");
+                  setCargando(false);
+                }
+              } catch (error) {
+                console.error("Error al suscribirse:", error);
+                Alert.alert(
+                  "Error de conexión",
+                  "No se pudo conectar al servidor. Verifica tu conexión a internet."
+                );
+                setCargando(false);
+              }
             }
           }
         ]
       );
     } catch (error) {
-      console.log("Error al suscribirse:", error);
+      console.error("Error al suscribirse:", error);
       Alert.alert("Error", "No se pudo procesar la suscripción. Inténtalo de nuevo.");
       setCargando(false);
     }
@@ -143,20 +192,46 @@ const PlanScreen = () => {
           style: "destructive",
           onPress: async () => {
             try {
-              const usuarioActualizado = {
-                ...usuario,
-                plan_id: null,
-                fecha_suscripcion: null,
-                estado_suscripcion: "cancelada"
-              };
-
-              await AsyncStorage.setItem("usuario", JSON.stringify(usuarioActualizado));
-              setPlanActual("basico");
+              setCargando(true);
+              const token = await AsyncStorage.getItem("token");
               
-              Alert.alert("Suscripción cancelada", "Has vuelto al Plan Básico.");
+              if (!token) {
+                Alert.alert("Error", "No hay sesión activa. Por favor inicia sesión.");
+                navigation.navigate("Login");
+                return;
+              }
+
+              // Llamar al backend para cancelar suscripción
+              const response = await fetch(API_ENDPOINTS.CANCELAR_SUSCRIPCION, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "Accept": "application/json",
+                  "Authorization": `Bearer ${token}`,
+                },
+              });
+
+              const data = await response.json();
+
+              if (response.ok && data.ok) {
+                // Actualizar contexto (esto actualiza el cache y todas las pantallas)
+                actualizarUsuarioLocal(data.usuario);
+                setPlanActual("basico");
+                
+                setCargando(false);
+                
+                Alert.alert("Suscripción cancelada", data.mensaje || "Has vuelto al Plan Básico.");
+              } else {
+                Alert.alert("Error", data.mensaje || data.error || "No se pudo cancelar la suscripción.");
+                setCargando(false);
+              }
             } catch (error) {
-              console.log("Error al cancelar:", error);
-              Alert.alert("Error", "No se pudo cancelar la suscripción.");
+              console.error("Error al cancelar:", error);
+              Alert.alert(
+                "Error de conexión",
+                "No se pudo conectar al servidor. Verifica tu conexión a internet."
+              );
+              setCargando(false);
             }
           }
         }
@@ -301,23 +376,35 @@ const PlanScreen = () => {
       </LinearGradient>
 
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.resumenContainer}>
-          <Text style={styles.resumenTitulo}>Resumen de tu Plan</Text>
-          <View style={styles.resumenCard}>
-            <FontAwesome 
-              name={planes[planActual].icono} 
-              size={32} 
-              color={planes[planActual].color} 
-            />
-            <View style={styles.resumenInfo}>
-              <Text style={styles.resumenPlan}>{planes[planActual].nombre}</Text>
-              <Text style={styles.resumenPrecio}>{planes[planActual].precio}</Text>
-              {planActual === "premium" && (
-                <Text style={styles.resumenPeriodo}>Facturación mensual</Text>
-              )}
-            </View>
+        {cargandoPlan ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2A9D8F" />
+            <Text style={styles.loadingText}>Cargando información del plan...</Text>
           </View>
-        </View>
+        ) : (
+          <>
+            <View style={styles.resumenContainer}>
+              <Text style={styles.resumenTitulo}>Resumen de tu Plan</Text>
+              <View style={styles.resumenCard}>
+                <FontAwesome 
+                  name={planes[planActual].icono} 
+                  size={32} 
+                  color={planes[planActual].color} 
+                />
+                <View style={styles.resumenInfo}>
+                  <Text style={styles.resumenPlan}>{planes[planActual].nombre}</Text>
+                  <Text style={styles.resumenPrecio}>{planes[planActual].precio}</Text>
+                  {planActual === "premium" && (
+                    <Text style={styles.resumenPeriodo}>Facturación mensual</Text>
+                  )}
+                  {usuario?.fecha_suscripcion && (
+                    <Text style={styles.resumenFecha}>
+                      Suscrito desde: {new Date(usuario.fecha_suscripcion).toLocaleDateString('es-CL')}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </View>
 
         <View style={styles.planesContainer}>
           <Text style={styles.planesTitulo}>Planes Disponibles</Text>
@@ -345,6 +432,8 @@ const PlanScreen = () => {
             </Text>
           </View>
         </View>
+          </>
+        )}
       </ScrollView>
 
       {/* Modal de confirmación */}
@@ -481,6 +570,23 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#7f8c8d",
     marginTop: 2,
+  },
+  resumenFecha: {
+    fontSize: 12,
+    color: "#95a5a6",
+    marginTop: 4,
+    fontStyle: "italic",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#7f8c8d",
   },
   planesContainer: {
     marginBottom: 30,

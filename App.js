@@ -6,6 +6,8 @@ import { createDrawerNavigator } from "@react-navigation/drawer";
 import { Easing } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { UserProvider } from "./context/UserContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import LoginScreen from "./screens/LoginScreen";
 import RegisterScreen from "./screens/RegisterScreen";
 import HomeScreen from "./screens/HomeScreen";
@@ -100,10 +102,22 @@ const zoomIn = ({ current }) => ({
 function AppNavigator({ usuario }) {
   const navigation = useNavigation();
   
+  console.log('🏗️ AppNavigator renderizando - usuario:', usuario ? 'EXISTE' : 'NULL');
+  
   return (
     <>
-      <PedidoPopup navigation={navigation} usuario={usuario} />
-      <Stack.Navigator initialRouteName="Login">
+      <PedidoPopup navigation={navigation} />
+      <Stack.Navigator 
+        initialRouteName="Login"
+        screenOptions={{
+          // Optimización: Detach previous screen cuando se navega para liberar memoria
+          detachPreviousScreen: true,
+          // Deshabilitar gestos si no queremos que el usuario pueda volver atrás con gestos
+          gestureEnabled: true,
+          // Limitar la profundidad del stack para evitar acumulación excesiva
+          headerMode: 'screen',
+        }}
+      >
         <Stack.Screen
           name="Login"
           component={LoginScreen}
@@ -152,10 +166,13 @@ function AppNavigator({ usuario }) {
         <Stack.Screen
           name="PedidoDetalle"
           component={PedidoDetalleScreen}
+          initialParams={usuario ? { usuario } : {}}
           options={{
             title: "Detalle",
             headerShown: false,
             cardStyleInterpolator: zoomIn,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -167,6 +184,10 @@ function AppNavigator({ usuario }) {
           options={{ 
             headerShown: false, 
             cardStyleInterpolator: forFade,
+            // Detach previous screen cuando navegas desde Home (libera memoria)
+            detachPreviousScreen: true,
+            // Prevenir que el usuario vuelva atrás desde Home (ya que es la pantalla principal)
+            gestureEnabled: false,
             transitionSpec: {
               open: {
                 animation: 'timing',
@@ -192,6 +213,9 @@ function AppNavigator({ usuario }) {
             title: "Ofertas",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
+            
           }}
         />
 
@@ -203,6 +227,8 @@ function AppNavigator({ usuario }) {
             title: "Favoritos",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -214,6 +240,8 @@ function AppNavigator({ usuario }) {
             title: "Busqueda",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -225,6 +253,8 @@ function AppNavigator({ usuario }) {
             title: "Comida",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -236,6 +266,8 @@ function AppNavigator({ usuario }) {
             title: "Servicios",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -247,6 +279,8 @@ function AppNavigator({ usuario }) {
             title: "Negocios",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -258,6 +292,8 @@ function AppNavigator({ usuario }) {
             title: "Belleza",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -269,6 +305,8 @@ function AppNavigator({ usuario }) {
             title: "Productos",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -280,6 +318,8 @@ function AppNavigator({ usuario }) {
             title: "Estadisticas",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -291,6 +331,8 @@ function AppNavigator({ usuario }) {
             title: "Mi Emprendimiento",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -301,6 +343,8 @@ function AppNavigator({ usuario }) {
             title: "Mis Direcciones",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -311,6 +355,8 @@ function AppNavigator({ usuario }) {
             title: "Mis Pedidos",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -322,6 +368,8 @@ function AppNavigator({ usuario }) {
             title: "Pedidos Recibidos",
             headerShown: false,
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
           }}
         />
 
@@ -329,52 +377,87 @@ function AppNavigator({ usuario }) {
           name="PlanScreen"
           component={PlanScreen}
           initialParams={usuario ? { usuario } : {}}
-          options={{ headerShown: false, cardStyleInterpolator: forFade }}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
+          }}
         />
 
-        {/* Stack anidado solo para Perfil */}
+
+        {/* Pantallas dentro del stack Perfil - directamente en el stack principal */}
         <Stack.Screen
           name="Perfil"
-          options={{
-            headerShown: false,
+          component={PerfilScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ 
+            headerShown: false, 
             cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
           }}
-        >
-          {() => (
-            <Stack.Navigator
-              screenOptions={{
-                drawerType: "slide",
-                overlayColor: "transparent",
-                drawerStyle: {
-                  backgroundColor: "#f5f5f5",
-                  width: "70%",
-                },
-                sceneContainerStyle: {
-                  backgroundColor: "#ffffff",
-                },
-              }}
-            >
-              <Stack.Screen
-                name="Perfil"
-                component={PerfilScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-              <Stack.Screen
-                name="InformacionPersonal"
-                component={InformacionPersonalScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-              <Stack.Screen
-                name="HelpScreen"
-                component={HelpScreen}
-                initialParams={usuario ? { usuario } : {}}
-                options={{ headerShown: false, cardStyleInterpolator: forFade }}
-              />
-            </Stack.Navigator>
-          )}
-        </Stack.Screen>
+        />
+        <Stack.Screen
+          name="InformacionPersonal"
+          component={InformacionPersonalScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+          }}
+        />
+        <Stack.Screen
+          name="HelpScreen"
+          component={HelpScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+          }}
+        />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
       </Stack.Navigator>
     </>
   );
@@ -382,6 +465,8 @@ function AppNavigator({ usuario }) {
 
 export default function App() {
   const [usuario, setUsuario] = useState(null);
+
+  console.log('🏗️ App principal - usuario:', usuario ? 'EXISTE' : 'NULL');
 
   useEffect(() => {
     const cargarUsuario = async () => {
@@ -403,11 +488,15 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer>
-        <AppWithBottomBar>
-          <AppNavigator usuario={usuario} />
-        </AppWithBottomBar>
-      </NavigationContainer>
+      <ThemeProvider>
+        <UserProvider>
+          <NavigationContainer>
+            <AppWithBottomBar>
+              <AppNavigator usuario={usuario} />
+            </AppWithBottomBar>
+          </NavigationContainer>
+        </UserProvider>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
