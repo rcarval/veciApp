@@ -190,6 +190,8 @@ const InformacionPersonalScreen = () => {
         telefono: telefono || null,
         comuna_id: comuna ? parseInt(comuna) : null,
       };
+      
+      console.log('📤 Actualizando perfil:', JSON.stringify(datosActualizar, null, 2));
 
       const response = await fetch(API_ENDPOINTS.ACTUALIZAR_PERFIL, {
         method: "PUT",
@@ -202,8 +204,10 @@ const InformacionPersonalScreen = () => {
       });
 
       const data = await response.json();
+      console.log('📥 Respuesta actualización:', JSON.stringify(data, null, 2));
 
       if (response.ok) {
+        console.log('✅ Perfil actualizado exitosamente');
         // Actualizar token en AsyncStorage si el backend lo devuelve
         if (data.token) {
           await AsyncStorage.setItem("token", data.token);
@@ -216,6 +220,7 @@ const InformacionPersonalScreen = () => {
         Alert.alert("Éxito", data.mensaje || "Tus datos han sido actualizados correctamente.");
         navigation.goBack();
       } else {
+        console.log('❌ Error actualizando perfil:', data.error || data.mensaje);
         Alert.alert("Error", data.mensaje || data.error || "No se pudieron guardar los cambios.");
       }
     } catch (error) {

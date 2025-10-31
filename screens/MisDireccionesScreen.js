@@ -115,6 +115,8 @@ const MisDireccionesScreen = () => {
         latitud: direccionValidada?.coordenadas?.lat || selectedLocation?.latitude || null,
         longitud: direccionValidada?.coordenadas?.lng || selectedLocation?.longitude || null,
       };
+      
+      console.log('📤 Enviando datos al backend:', JSON.stringify(datosDireccion, null, 2));
 
       let response;
       
@@ -143,11 +145,14 @@ const MisDireccionesScreen = () => {
       }
 
       const data = await response.json();
+      console.log('📥 Respuesta del backend:', JSON.stringify(data, null, 2));
 
       if (response.ok && data.ok) {
+        console.log('✅ Dirección guardada, recargando lista...');
         // Invalidar cache y recargar direcciones
         invalidarDirecciones();
-        await cargarDirecciones(true); // Forzar recarga para obtener datos actualizados
+        const direccionesActualizadas = await cargarDirecciones(true); // Forzar recarga para obtener datos actualizados
+        console.log('📋 Direcciones actualizadas:', direccionesActualizadas?.map(d => ({ id: d.id, nombre: d.nombre, esPrincipal: d.esPrincipal })));
         
         // Limpiar formulario
         limpiarFormulario();
@@ -211,6 +216,7 @@ const MisDireccionesScreen = () => {
                 return;
               }
 
+              console.log('🗑️ Eliminando dirección ID:', id);
               const response = await fetch(API_ENDPOINTS.DIRECCION_BY_ID(id), {
                 method: "DELETE",
                 headers: {
@@ -221,8 +227,10 @@ const MisDireccionesScreen = () => {
               });
 
               const data = await response.json();
+              console.log('📥 Respuesta DELETE:', JSON.stringify(data, null, 2));
 
               if (response.ok && data.ok) {
+                console.log('✅ Dirección eliminada, recargando lista...');
                 // Invalidar cache y recargar direcciones
                 invalidarDirecciones();
                 await cargarDirecciones(true); // Forzar recarga

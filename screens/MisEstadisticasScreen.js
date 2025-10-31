@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import { LineChart } from "react-native-chart-kit";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
+import { API_ENDPOINTS } from "../config/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const MisEstadisticasScreen = () => {
   const navigation = useNavigation();
@@ -25,55 +27,91 @@ const MisEstadisticasScreen = () => {
   const [fechaInicio, setFechaInicio] = useState(new Date());
   const [fechaFin, setFechaFin] = useState(new Date());
   const [labels, setLabels] = useState([]);
-  const [visualizaciones, setVisualizaciones] = useState([0]);
-  const [contactos, setContactos] = useState([0]);
+  const [visualizaciones, setVisualizaciones] = useState([]);
+  const [contactos, setContactos] = useState([]);
   
   // Estados para datos dinámicos
   const [datosPedidos, setDatosPedidos] = useState({});
-
-  // Calificaciones fijas (de todos los tiempos)
-  const datosCalificaciones = {
-    calificacionGeneral: 4.3,
-    totalVotantes: 28,
+  const [datosCalificaciones, setDatosCalificaciones] = useState({
+    calificacionGeneral: 0,
+    totalVotantes: 0,
     criterios: {
-      precio: { promedio: 4.1},
-      calidad: { promedio: 4.5},
-      servicio: { promedio: 4.2},
-      tiempoEntrega: { promedio: 4.4}
+      precio: { promedio: 0},
+      calidad: { promedio: 0},
+      servicio: { promedio: 0},
+      tiempoEntrega: { promedio: 0}
     }
-  };
+  });
+  const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
 
-  // Datos de pedidos organizados por período
-  const datosPedidosPorPeriodo = {
-    año: {
-      totalPedidos: 45,
-      montoTotal: 1250000,
-      promedioPedido: 27778,
-      pedidosPeriodo: 45,
-      montoPeriodo: 1250000
-    },
-    mes: {
-      totalPedidos: 45,
-      montoTotal: 1250000,
-      promedioPedido: 27778,
-      pedidosPeriodo: 12,
-      montoPeriodo: 340000
-    },
-    semana: {
-      totalPedidos: 45,
-      montoTotal: 1250000,
-      promedioPedido: 27778,
-      pedidosPeriodo: 3,
-      montoPeriodo: 85000
-    },
-    dia: {
-      totalPedidos: 45,
-      montoTotal: 1250000,
-      promedioPedido: 27778,
-      pedidosPeriodo: 1,
-      montoPeriodo: 25000
+  // Función para cargar estadísticas del backend
+  const cargarEstadisticas = useCallback(async () => {
+    try {
+      setCargandoEstadisticas(true);
+      console.log('📊 Cargando estadísticas del emprendimiento:', emprendimiento.id);
+      
+      const token = await AsyncStorage.getItem('token');
+      const url = API_ENDPOINTS.ESTADISTICAS_EMPRENDIMIENTO(emprendimiento.id);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      console.log('✅ Estadísticas cargadas:', data);
+      
+      if (response.ok && data.estadisticas) {
+        const { calificaciones, pedidos, visualizaciones, pedidos_grafico } = data.estadisticas;
+        
+        console.log('📊 Visualizaciones recibidas:', visualizaciones);
+        console.log('📊 Pedidos gráfico recibidos:', pedidos_grafico);
+        
+        // Actualizar calificaciones
+        setDatosCalificaciones({
+          calificacionGeneral: calificaciones.calificacion_promedio || 0,
+          totalVotantes: calificaciones.total_calificaciones || 0,
+          criterios: {
+            precio: { promedio: calificaciones.precio_promedio || 0 },
+            calidad: { promedio: calificaciones.calidad_promedio || 0 },
+            servicio: { promedio: calificaciones.servicio_promedio || 0 },
+            tiempoEntrega: { promedio: calificaciones.tiempo_entrega_promedio || 0 }
+          }
+        });
+        
+        // Actualizar datos de pedidos según el período actual
+        const pedidosPorPeriodo = {
+          totalPedidos: pedidos.total || 0,
+          montoTotal: pedidos.monto_total || 0,
+          promedioPedido: pedidos.promedio_pedido || 0,
+          pedidosPeriodo: pedidos.por_periodo[periodo].pedidos || 0,
+          montoPeriodo: pedidos.por_periodo[periodo].monto || 0
+        };
+        
+        setDatosPedidos(pedidosPorPeriodo);
+        
+        // Actualizar arrays de visualizaciones y pedidos para el gráfico
+        const visualizacionesArray = visualizaciones[periodo] || [];
+        const pedidosArray = pedidos_grafico[periodo] || [];
+        
+        console.log(`📊 Visualizaciones para período ${periodo}:`, visualizacionesArray);
+        console.log(`📊 Pedidos para período ${periodo}:`, pedidosArray);
+        
+        // Actualizar los estados con los datos del backend (pueden estar vacíos si no hay datos)
+        setVisualizaciones(visualizacionesArray);
+        setContactos(pedidosArray);
+        
+        console.log('✅ Datos de pedidos y calificaciones actualizados');
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar estadísticas:', error);
+    } finally {
+      setCargandoEstadisticas(false);
     }
-  };
+  }, [emprendimiento.id, periodo]);
 
   // Función para generar datos de prueba seguros
   const generarDatos = (labels, periodo) => {
@@ -109,6 +147,13 @@ const MisEstadisticasScreen = () => {
     return { visualizaciones, contactos };
   };
 
+  // Efecto para cargar estadísticas al montar el componente
+  useEffect(() => {
+    if (emprendimiento?.id) {
+      cargarEstadisticas();
+    }
+  }, [emprendimiento?.id, cargarEstadisticas]);
+
   // Efecto para calcular las fechas y datos
   useEffect(() => {
     const hoy = new Date();
@@ -128,17 +173,17 @@ const MisEstadisticasScreen = () => {
             const diasAMostrar = 30; // Últimos 30 días
             const puntosDeseados = 5; // Puntos óptimos para el gráfico
             
-            // Calcular agrupación dinámica
-            const agrupacion = Math.ceil(diasAMostrar / puntosDeseados); // Cada 2-3 días
+            // Calcular agrupación: 30 días divididos en 5 puntos = 6 días por punto
+            const agrupacion = 6; // Fijo: 6 días por punto
             
-            nuevosLabels = Array.from({ length: Math.ceil(diasAMostrar / agrupacion) }, (_, i) => {
+            nuevosLabels = Array.from({ length: puntosDeseados }, (_, i) => {
               const fechaInicio = new Date();
               fechaInicio.setDate(hoy.getDate() - diasAMostrar + 1 + (i * agrupacion));
               
               const fechaFin = new Date(fechaInicio);
               fechaFin.setDate(fechaInicio.getDate() + agrupacion - 1);
               
-              // Formato "3-5 Mar" o "28 Feb-2 Mar"
+              // Formato "3-8 Mar"
               return `${fechaInicio.getDate()} ${fechaInicio.toLocaleString('default', {month: 'short'})}`;
             });
             
@@ -166,13 +211,11 @@ const MisEstadisticasScreen = () => {
     setFechaFin(hoy);
     setLabels(nuevosLabels);
     
-    const { visualizaciones, contactos } = generarDatos(nuevosLabels, periodo);
-    setVisualizaciones(visualizaciones);
-    setContactos(contactos);
-    
-    // Actualizar solo datos de pedidos según el período
-    setDatosPedidos(datosPedidosPorPeriodo[periodo]);
-  }, [periodo]);
+    // Cargar datos reales desde el backend
+    if (emprendimiento?.id) {
+      cargarEstadisticas();
+    }
+  }, [periodo, emprendimiento?.id, cargarEstadisticas]);
 
   // Configuración segura del gráfico
   const chartConfig = {
@@ -212,7 +255,7 @@ const MisEstadisticasScreen = () => {
         strokeWidth: 2,
       },
     ],
-    legend: ["Visualizaciones", "Contactos WhatsApp"],
+    legend: ["Visualizaciones", "Pedidos"],
   };
 
   // Resumen de estadísticas
@@ -355,7 +398,7 @@ const MisEstadisticasScreen = () => {
                         </View>
                         <View style={additionalStyles.statItem}>
                           <Text style={additionalStyles.statNumber}>{contactos.reduce((a, b) => a + b, 0)}</Text>
-                          <Text style={additionalStyles.statLabel}>Contactos</Text>
+                          <Text style={additionalStyles.statLabel}>Pedidos</Text>
                         </View>
                       </View>
                     </View>
@@ -377,8 +420,8 @@ const MisEstadisticasScreen = () => {
             </View>
             <View style={[styles.statCard, { backgroundColor: "#F4A261" }]}>
               <Text style={styles.statValue}>{totalContactos}</Text>
-              <Text style={styles.statLabel}>Contactos WhatsApp</Text>
-              <FontAwesome name="whatsapp" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
+              <Text style={styles.statLabel}>Pedidos</Text>
+              <FontAwesome name="shopping-cart" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
             </View>
           </View>
           <View style={styles.statsRow}>

@@ -25,6 +25,7 @@ const PerfilScreen = () => {
   const { usuario, loading, cargarUsuario, actualizarUsuarioLocal } = useUser();
   const { currentTheme, changeTheme, getNextTheme, isChangingTheme } = useTheme();
   const [imagenPerfil, setImagenPerfil] = useState(null);
+  const [imagenError, setImagenError] = useState(false);
   const [subiendoAvatar, setSubiendoAvatar] = useState(false);
   const [perfilCargado, setPerfilCargado] = useState(false);
 
@@ -50,8 +51,18 @@ const PerfilScreen = () => {
   useEffect(() => {
     if (usuario) {
       cargarImagenPerfil();
+      setImagenError(false); // Reset error cuando cambia el usuario
     }
   }, [usuario?.avatar_url]); // Solo cuando cambie el avatar_url
+
+  // Recargar usuario cuando se regrese a la pantalla (solo si es necesario)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      cargarUsuario(false); // Usar cache si es válido, recargar si expiró
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   const cargarImagenPerfil = async () => {
     try {
@@ -91,12 +102,12 @@ const PerfilScreen = () => {
         console.log('🖼️ Usando avatar de AsyncStorage (legacy):', imagenGuardada);
         setImagenPerfil(imagenGuardada);
       } else {
-        console.log('🖼️ No hay avatar disponible');
-        setImagenPerfil(null);
+        console.log('🖼️ No hay avatar disponible, usando imagen genérica');
+        setImagenPerfil(null); // null = usar imagen genérica
       }
     } catch (error) {
       console.log('Error al cargar imagen del perfil:', error);
-      setImagenPerfil(null);
+      setImagenPerfil(null); // En caso de error, usar imagen genérica
     }
   };
 
@@ -340,14 +351,19 @@ const PerfilScreen = () => {
                   onPress={seleccionarImagenPerfil}
                   activeOpacity={0.8}
                 >
-                  {imagenPerfil ? (
+                  {imagenPerfil && !imagenError ? (
                     <Image 
                       source={{ uri: imagenPerfil }} 
                       style={[styles.avatarImage, { borderColor: currentTheme.primary }]}
+                      onError={(e) => {
+                        console.log('❌ Error cargando avatar, usando imagen genérica', e.nativeEvent.error);
+                        setImagenPerfil(null); // Resetear a null para mostrar genérica
+                        setImagenError(false);
+                      }}
                     />
                   ) : (
-                    <View style={[styles.avatarPlaceholder, { backgroundColor: currentTheme.primary + '20', borderColor: currentTheme.primary }]}>
-                      <Ionicons name="person" size={40} color={currentTheme.primary} />
+                    <View style={[styles.avatarImage, styles.avatarPlaceholder, { borderColor: currentTheme.primary }]}>
+                      <Ionicons name="person" size={50} color={currentTheme.primary} />
                     </View>
                   )}
                   {subiendoAvatar && (
@@ -507,12 +523,7 @@ const styles = StyleSheet.create({
     borderColor: '#2A9D8F',
   },
   avatarPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 3,
-    borderColor: '#2A9D8F',
-    backgroundColor: '#e8f4f3',
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -15,9 +15,12 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useTheme } from "../context/ThemeContext";
+import { useUser } from "../context/UserContext";
+import pedidoService from "../services/pedidoService";
+import { API_ENDPOINTS } from "../config/api";
 
 // Componente ItemGaleria completamente separado
-const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito, theme }) => {
+const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito, theme, isPreview = false }) => {
   const themeStyles = theme ? {
     backgroundColor: theme.cardBackground,
     textColor: theme.text,
@@ -91,47 +94,63 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
         </View>
       </TouchableOpacity>
 
-      {/* Controles del carrito */}
-      <View style={[styles.carritoControls, { borderTopColor: themeStyles.borderColor }]}>
-        {cantidadEnCarrito > 0 ? (
-          <View style={styles.cantidadContainer}>
+      {/* Controles del carrito - Solo mostrar si no es preview */}
+      {!isPreview && (
+        <View style={[styles.carritoControls, { borderTopColor: themeStyles.borderColor }]}>
+          {cantidadEnCarrito > 0 ? (
+            <View style={styles.cantidadContainer}>
+              <TouchableOpacity
+                style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
+                onPress={() => onQuitar(index, categoria)}
+              >
+                <FontAwesome name="minus" size={12} color={themeStyles.primaryColor} />
+              </TouchableOpacity>
+              <Text style={[styles.cantidadTexto, { color: themeStyles.textColor }]}>{cantidadEnCarrito}</Text>
+              <TouchableOpacity
+                style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
+                onPress={() => onAgregar(item, index, categoria)}
+              >
+                <FontAwesome name="plus" size={12} color={themeStyles.primaryColor} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.botonEliminar}
+                onPress={() => onEliminar(index, categoria)}
+              >
+                <FontAwesome name="trash" size={12} color="#e74c3c" />
+              </TouchableOpacity>
+            </View>
+          ) : (
             <TouchableOpacity
-              style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
-              onPress={() => onQuitar(index, categoria)}
-            >
-              <FontAwesome name="minus" size={12} color={themeStyles.primaryColor} />
-            </TouchableOpacity>
-            <Text style={[styles.cantidadTexto, { color: themeStyles.textColor }]}>{cantidadEnCarrito}</Text>
-            <TouchableOpacity
-              style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
+              style={[styles.botonAgregarCarrito, { backgroundColor: themeStyles.primaryColor }]}
               onPress={() => onAgregar(item, index, categoria)}
             >
-              <FontAwesome name="plus" size={12} color={themeStyles.primaryColor} />
+              <FontAwesome name="plus" size={14} color="white" />
+              <Text style={styles.botonAgregarTexto}>Agregar</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.botonEliminar}
-              onPress={() => onEliminar(index, categoria)}
-            >
-              <FontAwesome name="trash" size={12} color="#e74c3c" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={[styles.botonAgregarCarrito, { backgroundColor: themeStyles.primaryColor }]}
-            onPress={() => onAgregar(item, index, categoria)}
-          >
-            <FontAwesome name="plus" size={14} color="white" />
-            <Text style={styles.botonAgregarTexto}>Agregar</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+          )}
+        </View>
+      )}
     </View>
   );
 });
 
 const PedidoDetalleScreen = ({ route, navigation }) => {
-  const { producto } = route.params;
+  const { producto, isPreview = false } = route.params;
   const { currentTheme } = useTheme();
+  const { usuario, direcciones, direccionSeleccionada } = useUser();
+  
+  // Función helper para mapear estado del backend al frontend
+  const mapearEstado = (prod) => {
+    if (prod.estado_calculado === 'cierra_pronto') {
+      return 'Cierra Pronto';
+    } else if (prod.estado_calculado === 'abierto') {
+      return 'Abierto';
+    } else if (prod.estado_calculado === 'cerrado') {
+      return 'Cerrado';
+    }
+    // Fallback al estado original si no hay estado_calculado
+    return prod.estado === 'activo' || prod.estado === 'Abierto' ? 'Abierto' : 'Cerrado';
+  };
   const [modalVisible, setModalVisible] = useState(false);
   const [contactoAbierto, setContactoAbierto] = useState(false);
   const [distancia, setDistancia] = useState(null);
@@ -139,13 +158,14 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [direccionUsuario, setDireccionUsuario] = useState(null);
   const [modalImagenVisible, setModalImagenVisible] = useState(false);
   const [imagenSeleccionada, setImagenSeleccionada] = useState(null);
-  const [usuario, setUsuario] = useState(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState(null);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [calificacionesData, setCalificacionesData] = useState(null);
+  const [productosApi, setProductosApi] = useState([]);
+  const [cargandoProductos, setCargandoProductos] = useState(false);
   const carritoRef = useRef([]);
   const [, forceUpdate] = useState({});
 
@@ -164,14 +184,27 @@ const reportReasons = [
     producto.metodosEntrega.delivery ? "delivery" : "retiro"
   );
 
-  const imagenesPorCategoria = useMemo(() => ({
-    principal:
-      producto.galeria?.filter((item) => item.categoria === "principal") || [],
-    oferta:
-      producto.galeria?.filter((item) => item.categoria === "oferta") || [],
-    secundario:
-      producto.galeria?.filter((item) => item.categoria === "secundario") || [],
-  }), [producto.galeria]);
+  const imagenesPorCategoria = useMemo(() => {
+    // Si hay productos de la API, usarlos; si no, usar los mock del producto
+    const productos = productosApi.length > 0 ? productosApi : (producto.galeria || []);
+    
+    // Mapear productos de la API al formato esperado por ItemGaleria
+    const productosMapeados = productosApi.length > 0 ? productosApi.map(prod => ({
+      id: prod.id,
+      nombre: prod.nombre,
+      descripcion: prod.descripcion,
+      precio: prod.precio,
+      precioOferta: prod.oferta ? prod.precio_oferta : null,
+      categoria: prod.categoria,
+      imagen: prod.imagen_url ? { uri: prod.imagen_url } : require('../assets/icon.png')
+    })) : producto.galeria || [];
+    
+    return {
+      principal: productosMapeados.filter((item) => item.categoria === "principal") || [],
+      oferta: productosMapeados.filter((item) => item.categoria === "oferta") || [],
+      secundario: productosMapeados.filter((item) => item.categoria === "secundario") || [],
+    };
+  }, [productosApi, producto.galeria]);
 
   const cambiarModoEntrega = useCallback((modo) => {
     setModoEntrega(modo);
@@ -228,11 +261,36 @@ const reportReasons = [
   // Función para cargar calificaciones del emprendimiento
   const cargarCalificaciones = useCallback(async () => {
     try {
-      const calificacionesGuardadas = await AsyncStorage.getItem(`calificaciones_${producto.id}`);
-      if (calificacionesGuardadas) {
-        const data = JSON.parse(calificacionesGuardadas);
-        setCalificacionesData(data);
+      console.log('📊 Cargando calificaciones para emprendimiento:', producto.id);
+      const response = await pedidoService.obtenerCalificacionEmprendimiento(producto.id);
+      if (response.ok && response.calificacion) {
+        console.log('✅ Calificaciones encontradas:', response.calificacion);
+        // Mapear datos del backend al formato esperado por el frontend
+        const calificacionesData = {
+          totalVotantes: parseInt(response.calificacion.total_calificaciones) || 0,
+          calificacionGeneral: parseFloat(response.calificacion.calificacion_promedio) || 0,
+          criterios: {
+            precio: { 
+              promedio: parseFloat(response.calificacion.precio_promedio) || 0, 
+              votantes: parseInt(response.calificacion.total_calificaciones) || 0 
+            },
+            calidad: { 
+              promedio: parseFloat(response.calificacion.calidad_promedio) || 0, 
+              votantes: parseInt(response.calificacion.total_calificaciones) || 0 
+            },
+            servicio: { 
+              promedio: parseFloat(response.calificacion.servicio_promedio) || 0, 
+              votantes: parseInt(response.calificacion.total_calificaciones) || 0 
+            },
+            tiempoEntrega: { 
+              promedio: parseFloat(response.calificacion.tiempo_entrega_promedio) || 0, 
+              votantes: parseInt(response.calificacion.total_calificaciones) || 0 
+            }
+          }
+        };
+        setCalificacionesData(calificacionesData);
       } else {
+        console.log('ℹ️ No hay calificaciones previas, mostrando valores por defecto');
         // Datos por defecto si no existen calificaciones
         const calificacionesDefault = {
           totalVotantes: 0,
@@ -247,22 +305,79 @@ const reportReasons = [
         setCalificacionesData(calificacionesDefault);
       }
     } catch (error) {
-      console.log('Error al cargar calificaciones:', error);
+      console.log('❌ Error al cargar calificaciones:', error);
+      // Si hay error, establecer valores por defecto
+      setCalificacionesData({
+        totalVotantes: 0,
+        calificacionGeneral: 0,
+        criterios: {
+          precio: { promedio: 0, votantes: 0 },
+          calidad: { promedio: 0, votantes: 0 },
+          servicio: { promedio: 0, votantes: 0 },
+          tiempoEntrega: { promedio: 0, votantes: 0 }
+        }
+      });
+    }
+  }, [producto.id]);
+
+  // Función para cargar productos del emprendimiento desde la API
+  const cargarProductosEmprendimiento = useCallback(async () => {
+    try {
+      setCargandoProductos(true);
+      console.log('📦 Cargando productos del emprendimiento:', producto.id);
+      
+      const { API_ENDPOINTS } = require('../config/api');
+      const response = await fetch(API_ENDPOINTS.PRODUCTOS(producto.id));
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar productos');
+      }
+      
+      const data = await response.json();
+      if (data.ok && data.productos) {
+        console.log('✅ Productos cargados:', data.productos.length);
+        setProductosApi(data.productos);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar productos:', error);
+      // Si falla, mantener productos vacíos
+      setProductosApi([]);
+    } finally {
+      setCargandoProductos(false);
     }
   }, [producto.id]);
 
   // Función para renderizar estrellas con número de votantes
   const renderEstrellasConVotantes = () => {
-    if (!calificacionesData) return null;
+    if (!calificacionesData) {
+      return (
+        <View style={styles.estrellasContainer}>
+          <View style={styles.estrellasWrapper}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <FontAwesome
+                key={star}
+                name="star-o"
+                size={20}
+                color="#DDD"
+              />
+            ))}
+          </View>
+          <View style={styles.ratingInfo}>
+            <Text style={styles.ratingText}>0.0</Text>
+            <Text style={styles.votantesText}>(Sin calificaciones)</Text>
+          </View>
+        </View>
+      );
+    }
 
-    const { calificacionGeneral, totalVotantes } = calificacionesData;
+    const { calificacionGeneral = 0, totalVotantes = 0 } = calificacionesData;
     
     return (
       <View style={styles.estrellasContainer}>
         <View style={styles.estrellasWrapper}>
           {[1, 2, 3, 4, 5].map((star) => {
             // Redondeo especial: 4.2 → 4, 4.3 → 4.5
-            let rating = calificacionGeneral;
+            let rating = calificacionGeneral || 0;
             const decimal = rating - Math.floor(rating);
             if (decimal >= 0.3 && decimal < 0.7) {
               rating = Math.floor(rating) + 0.5;
@@ -299,14 +414,14 @@ const reportReasons = [
                   key={star}
                   name="star-o"
                   size={20}
-                  color="#FFD700"
+                  color="#DDD"
                 />
               );
             }
           })}
         </View>
         <View style={styles.ratingInfo}>
-          <Text style={styles.ratingText}>{calificacionGeneral.toFixed(1)}</Text>
+          <Text style={styles.ratingText}>{(calificacionGeneral || 0).toFixed(1)}</Text>
           <Text style={styles.votantesText}>({totalVotantes} votos)</Text>
         </View>
       </View>
@@ -315,30 +430,45 @@ const reportReasons = [
 
   const animatedValue = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    const cargarDireccionUsuario = async () => {
-      try {
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          const usuario = JSON.parse(usuarioGuardado);
-          setUsuario(usuario);
-          const direccionSeleccionada = usuario.direcciones.find(
-            (dir) => dir.id === usuario.direccionSeleccionada
-          );
-          if (direccionSeleccionada) {
-            setDireccionUsuario(
-              `${direccionSeleccionada.direccion}, ${direccionSeleccionada.comuna}`
-            );
-          }
-        }
-      } catch (error) {
-        console.error("Error al cargar dirección del usuario:", error);
+  // Función para registrar visualización del emprendimiento
+  const registrarVisualizacion = useCallback(async () => {
+    try {
+      if (!producto?.id) return;
+      console.log('👁️ Registrando visualización del emprendimiento:', producto.id);
+      
+      const url = API_ENDPOINTS.REGISTRAR_VISUALIZACION(producto.id);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        console.log('✅ Visualización registrada');
       }
-    };
+    } catch (error) {
+      console.error('❌ Error al registrar visualización:', error);
+    }
+  }, [producto?.id]);
 
-    cargarDireccionUsuario();
+  useEffect(() => {
+    // Cargar dirección desde el contexto de usuario
+    if (direcciones && direccionSeleccionada && direcciones.length > 0) {
+      const dirSeleccionada = direcciones.find((dir) => dir.id === direccionSeleccionada);
+      if (dirSeleccionada) {
+        // Buscar nombre de comuna si está disponible
+        const direccionCompleta = dirSeleccionada.comuna 
+          ? `${dirSeleccionada.direccion}, ${dirSeleccionada.comuna}`
+          : dirSeleccionada.direccion;
+        setDireccionUsuario(direccionCompleta);
+      }
+    }
+    
     cargarCalificaciones(); // Cargar calificaciones al iniciar
-  }, [cargarCalificaciones, route.params]);
+    cargarProductosEmprendimiento(); // Cargar productos del emprendimiento
+    registrarVisualizacion(); // Registrar visualización
+  }, [direcciones, direccionSeleccionada, cargarCalificaciones, cargarProductosEmprendimiento, registrarVisualizacion]);
 
   useEffect(() => {
     if (direccionUsuario) {
@@ -407,50 +537,82 @@ const reportReasons = [
     console.log('✅ CONFIRMANDO ENVÍO DE PEDIDO');
     setConfirmacionVisible(false);
     
-    // Guardar el pedido primero
-    await guardarPedido();
-    console.log('✅ Pedido guardado, activando popup...');
-    
-    // Activar el popup inmediatamente usando AsyncStorage
     try {
+      // Guardar el pedido primero
+      await guardarPedido();
+      console.log('✅ Pedido guardado, activando popup...');
+      
+      // Activar el popup inmediatamente usando AsyncStorage
       await AsyncStorage.setItem('popupTrigger', Date.now().toString());
       console.log('✅ Trigger de popup enviado');
+      
+      // Abrir WhatsApp
+      abrirWhatsApp();
     } catch (error) {
-      console.log('❌ Error al enviar trigger de popup:', error);
+      console.error('❌ Error al confirmar pedido:', error);
+      // No abrir WhatsApp si hay error
     }
-    
-    // Abrir WhatsApp
-    abrirWhatsApp();
   };
 
   const guardarPedido = async () => {
     try {
-      const fechaCreacion = new Date();
-      const pedido = {
-        id: Date.now().toString(),
-        negocio: producto.nombre,
-        fecha: fechaCreacion.toLocaleDateString('es-CL'),
-        fechaHoraReserva: fechaCreacion.toISOString(),
-        estado: 'pendiente',
-        total: obtenerTotalCarrito(),
-        direccion: direccionUsuario || 'Retiro en local',
+      console.log('📤 Creando pedido en el backend...');
+      console.log('🔍 producto.id:', producto.id);
+      console.log('🔍 producto.nombre:', producto.nombre);
+      console.log('🔍 carritoRef.current:', carritoRef.current);
+      
+      // Preparar datos para el backend
+      const pedidoData = {
+        emprendimiento_id: parseInt(producto.id), // ID del emprendimiento
         productos: carritoRef.current.map(item => ({
+          producto_id: item.id,
           nombre: item.nombre || item.descripcion,
           cantidad: item.cantidad,
-          precio: item.precio
+          precio_unitario: item.precio
         })),
-        modoEntrega: modoEntrega
+        direccion_entrega: modoEntrega === 'delivery' ? direccionUsuario : null,
+        telefono_cliente: usuario?.telefono || null,
+        modo_entrega: modoEntrega
       };
 
-      // Guardar en pedidos pendientes
-      const pedidosExistentes = await AsyncStorage.getItem('pedidosPendientes');
-      const pedidos = pedidosExistentes ? JSON.parse(pedidosExistentes) : [];
-      pedidos.push(pedido);
-      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidos));
+      console.log('📤 Datos del pedido:', JSON.stringify(pedidoData, null, 2));
 
-      console.log('Pedido guardado:', pedido);
+      // Crear pedido en el backend
+      const response = await pedidoService.crearPedido(pedidoData);
+      
+      if (response.ok) {
+        console.log('✅ Pedido creado exitosamente:', response.pedido);
+        
+        // También guardar en AsyncStorage para el popup
+        const fechaCreacion = new Date();
+        const pedidoLocal = {
+          id: Date.now().toString(),
+          negocio: producto.nombre,
+          fecha: fechaCreacion.toLocaleDateString('es-CL'),
+          fechaHoraReserva: fechaCreacion.toISOString(),
+          estado: 'pendiente',
+          total: obtenerTotalCarrito(),
+          direccion: direccionUsuario || 'Retiro en local',
+          productos: carritoRef.current.map(item => ({
+            nombre: item.nombre || item.descripcion,
+            cantidad: item.cantidad,
+            precio: item.precio
+          })),
+          modoEntrega: modoEntrega
+        };
+
+        const pedidosExistentes = await AsyncStorage.getItem('pedidosPendientes');
+        const pedidos = pedidosExistentes ? JSON.parse(pedidosExistentes) : [];
+        pedidos.push(pedidoLocal);
+        await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidos));
+        console.log('✅ Pedido guardado en AsyncStorage para el popup');
+      } else {
+        throw new Error(response.error || 'Error al crear el pedido');
+      }
     } catch (error) {
-      console.log('Error al guardar pedido:', error);
+      console.error('❌ Error al guardar pedido:', error);
+      Alert.alert('Error', error.message || 'No se pudo crear el pedido. Inténtalo de nuevo.');
+      throw error; // Lanzar el error para que no se abra WhatsApp si falla
     }
   };
 
@@ -540,7 +702,8 @@ const reportReasons = [
     "Sábado: 11:00 AM - 6:00 PM",
     "Domingo: Cerrado",
   ];
-  const isOpen = producto.estado;
+  const estadoMapeado = mapearEstado(producto);
+  const isOpen = estadoMapeado;
 
   // Funciones callback para ItemGaleria
   const handleImagenPress = useCallback((item) => {
@@ -957,44 +1120,46 @@ const reportReasons = [
         </TouchableOpacity>
 
         {/* 🔥 Botón de marcar favorito */}
-        <View style={styles.rightButtonsContainer}>
-            {/* Botón de Reporte */}
-          <TouchableOpacity
-            style={styles.botonReporte}
-            onPress={() => setReportModalVisible(true)}
-          >
-            <FontAwesome name="exclamation-triangle" size={24} color="white" />
-          </TouchableOpacity>
-          
-          {/* Botón del Carrito */}
-          <TouchableOpacity
-            style={styles.botonCarrito}
-            onPress={() => setMostrarCarrito(true)}
-          >
-            <FontAwesome name="shopping-cart" size={24} color="white" />
-            {obtenerCantidadTotalItems() > 0 && (
-              <View style={styles.badgeCarrito}>
-                <Text style={styles.badgeTexto}>{obtenerCantidadTotalItems()}</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-          
-          {/* Botón de WhatsApp */}
-          <TouchableOpacity
-            style={styles.botonContacto}
-            onPress={abrirWhatsApp}
-          >
-            <FontAwesome name="whatsapp" size={29} color="white" />
-          </TouchableOpacity>
+        {!isPreview && (
+          <View style={styles.rightButtonsContainer}>
+              {/* Botón de Reporte */}
+            <TouchableOpacity
+              style={styles.botonReporte}
+              onPress={() => setReportModalVisible(true)}
+            >
+              <FontAwesome name="exclamation-triangle" size={24} color="white" />
+            </TouchableOpacity>
+            
+            {/* Botón del Carrito */}
+            <TouchableOpacity
+              style={styles.botonCarrito}
+              onPress={() => setMostrarCarrito(true)}
+            >
+              <FontAwesome name="shopping-cart" size={24} color="white" />
+              {obtenerCantidadTotalItems() > 0 && (
+                <View style={styles.badgeCarrito}>
+                  <Text style={styles.badgeTexto}>{obtenerCantidadTotalItems()}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            
+            {/* Botón de WhatsApp */}
+            <TouchableOpacity
+              style={styles.botonContacto}
+              onPress={abrirWhatsApp}
+            >
+              <FontAwesome name="whatsapp" size={29} color="white" />
+            </TouchableOpacity>
 
-          {/* Botón de Favorito */}
-          <TouchableOpacity
-            style={styles.botonFavorito}
-            onPress={() => console.log("Marcado como favorito!")}
-          >
-            <FontAwesome name="heart" size={24} color="white" />
-          </TouchableOpacity>
-        </View>
+            {/* Botón de Favorito */}
+            <TouchableOpacity
+              style={styles.botonFavorito}
+              onPress={() => console.log("Marcado como favorito!")}
+            >
+              <FontAwesome name="heart" size={24} color="white" />
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* ✅ Contenedor superpuesto */}
@@ -1056,7 +1221,7 @@ const reportReasons = [
                   },
                 ]}
               >
-                {producto.estado}
+                {estadoMapeado}
               </Text>
             </View>
           </View>
@@ -1254,6 +1419,7 @@ const reportReasons = [
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "principal")}
                         theme={currentTheme}
+                        isPreview={isPreview}
                       />
                     ))}
                   </ScrollView>
@@ -1298,6 +1464,7 @@ const reportReasons = [
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "oferta")}
                         theme={currentTheme}
+                        isPreview={isPreview}
                       />
                     ))}
                   </ScrollView>
@@ -1342,6 +1509,7 @@ const reportReasons = [
                         onEliminar={handleEliminarItem}
                         cantidadEnCarrito={obtenerCantidadItem(index, "secundario")}
                         theme={currentTheme}
+                        isPreview={isPreview}
                       />
                     ))}
                   </View>

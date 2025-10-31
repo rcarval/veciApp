@@ -12,6 +12,7 @@ import { FontAwesome } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import pedidoService from '../services/pedidoService';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -68,29 +69,27 @@ const PedidoPopup = ({ navigation }) => {
             console.log('📱 Usuario recargado al volver:', usuarioData.nombre);
             setUsuario(usuarioData);
             
-            // Verificar pedidos pendientes
-            const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
-            const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
-            
-            console.log('📱 Pedidos guardados:', pedidosGuardados ? 'EXISTEN' : 'NO EXISTEN');
-            console.log('📱 Pedidos rechazados:', pedidosRechazadosGuardados ? 'EXISTEN' : 'NO EXISTEN');
-            
-            if (pedidosGuardados) {
-              const pedidos = JSON.parse(pedidosGuardados);
-              console.log('📱 Pedidos encontrados al volver:', pedidos.length);
-              setPedidosPendientes(pedidos);
+            // Verificar pedidos pendientes desde el backend
+            try {
+              console.log('📱 Cargando pedidos desde el backend al volver...');
+              const response = await pedidoService.obtenerPedidos();
+              
+              if (response.ok && response.pedidos) {
+                const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
+                const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+                
+                console.log(`📱 Pedidos encontrados al volver: ${pendientes.length} pendientes, ${rechazados.length} rechazados sin confirmar`);
+                
+                setPedidosPendientes(pendientes);
+                setPedidosRechazadosPendientes(rechazados);
+                
+                const totalPendientes = pendientes.length + rechazados.length;
+                console.log('📱 Total pendientes al volver:', totalPendientes);
+                setVisible(totalPendientes > 0);
+              }
+            } catch (error) {
+              console.log('Error al cargar pedidos al volver:', error);
             }
-            
-            if (pedidosRechazadosGuardados) {
-              const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
-              console.log('📱 Pedidos rechazados al volver:', pedidosRechazados.length);
-              setPedidosRechazadosPendientes(pedidosRechazados);
-            }
-            
-            const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
-                                   (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
-            console.log('📱 Total pendientes al volver:', totalPendientes);
-            setVisible(totalPendientes > 0);
           } else {
             console.log('📱 No hay usuario guardado, ocultando popup');
             setUsuario(null);
@@ -181,31 +180,36 @@ const PedidoPopup = ({ navigation }) => {
 
     const cargarPedidos = async () => {
       try {
-        const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
-        const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
-        console.log('📦 Pedidos guardados:', pedidosGuardados ? 'EXISTEN' : 'NO EXISTEN');
-        console.log('❌ Pedidos rechazados:', pedidosRechazadosGuardados ? 'EXISTEN' : 'NO EXISTEN');
+        console.log('📦 Cargando pedidos desde el backend...');
+        const response = await pedidoService.obtenerPedidos();
         
-        if (pedidosGuardados) {
-          const pedidos = JSON.parse(pedidosGuardados);
-          console.log('📦 Cantidad de pedidos:', pedidos.length);
-          console.log('📦 Detalles de pedidos:', pedidos);
-          setPedidosPendientes(pedidos);
+        console.log('📦 Response:', JSON.stringify(response, null, 2));
+        
+        if (response.ok && response.pedidos) {
+          console.log(`✅ Pedidos cargados: ${response.pedidos.length}`);
+          console.log('📦 Todos los pedidos:', JSON.stringify(response.pedidos, null, 2));
+          
+          // Filtrar solo pedidos pendientes
+          const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
+          const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+          
+          console.log(`📦 Pendientes: ${pendientes.length}, Rechazados sin confirmar: ${rechazados.length}`);
+          
+          setPedidosPendientes(pendientes);
+          setPedidosRechazadosPendientes(rechazados);
+          
+          const totalPendientes = pendientes.length + rechazados.length;
+          console.log('📊 Total pendientes:', totalPendientes);
+          console.log('👁️ Popup visible:', totalPendientes > 0);
+          setVisible(totalPendientes > 0);
+        } else {
+          console.log('⚠️ No se pudieron cargar pedidos. Response:', response);
+          setVisible(false);
         }
-        
-        if (pedidosRechazadosGuardados) {
-          const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
-          console.log('❌ Cantidad de pedidos rechazados:', pedidosRechazados.length);
-          setPedidosRechazadosPendientes(pedidosRechazados);
-        }
-        
-        const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
-                               (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
-        console.log('📊 Total pendientes:', totalPendientes);
-        setVisible(totalPendientes > 0);
-        console.log('👁️ Popup visible:', totalPendientes > 0);
       } catch (error) {
-        console.log('Error al cargar pedidos:', error);
+        console.log('❌ Error al cargar pedidos:', error);
+        console.log('❌ Error details:', error.message);
+        setVisible(false);
       }
     };
 
@@ -227,23 +231,24 @@ const PedidoPopup = ({ navigation }) => {
           console.log('🎯 TRIGGER DE POPUP DETECTADO');
           lastTrigger = trigger;
           
-          // Verificar pedidos inmediatamente
-          const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
-          const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+          // Cargar pedidos desde el backend inmediatamente
+          console.log('🎯 Cargando pedidos tras trigger...');
+          const response = await pedidoService.obtenerPedidos();
           
-          if (pedidosGuardados) {
-            const pedidos = JSON.parse(pedidosGuardados);
-            setPedidosPendientes(pedidos);
+          if (response.ok && response.pedidos) {
+            const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
+            const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+            
+            console.log(`📦 Pendientes: ${pendientes.length}, Rechazados sin confirmar: ${rechazados.length}`);
+            
+            setPedidosPendientes(pendientes);
+            setPedidosRechazadosPendientes(rechazados);
+            
+            const totalPendientes = pendientes.length + rechazados.length;
+            console.log('🎯 Total pendientes tras trigger:', totalPendientes);
+            console.log('🎯 Marcando popup visible:', totalPendientes > 0);
+            setVisible(totalPendientes > 0);
           }
-          
-          if (pedidosRechazadosGuardados) {
-            const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
-            setPedidosRechazadosPendientes(pedidosRechazados);
-          }
-          
-          const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
-                                 (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
-          setVisible(totalPendientes > 0);
         }
       } catch (error) {
         console.log('Error al verificar trigger:', error);
@@ -265,22 +270,19 @@ const PedidoPopup = ({ navigation }) => {
     // Función para verificar pedidos
     const verificarPedidos = async () => {
       try {
-        const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
-        const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+        console.log('🔄 Verificando pedidos periódicamente...');
+        const response = await pedidoService.obtenerPedidos();
         
-        if (pedidosGuardados) {
-          const pedidos = JSON.parse(pedidosGuardados);
-          setPedidosPendientes(pedidos);
+        if (response.ok && response.pedidos) {
+          const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
+          const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+          
+          setPedidosPendientes(pendientes);
+          setPedidosRechazadosPendientes(rechazados);
+          
+          const totalPendientes = pendientes.length + rechazados.length;
+          setVisible(totalPendientes > 0);
         }
-        
-        if (pedidosRechazadosGuardados) {
-          const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
-          setPedidosRechazadosPendientes(pedidosRechazados);
-        }
-        
-        const totalPendientes = (pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0) + 
-                               (pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
-        setVisible(totalPendientes > 0);
       } catch (error) {
         console.log('Error al verificar pedidos:', error);
       }

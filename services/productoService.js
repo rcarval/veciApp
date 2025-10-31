@@ -27,7 +27,7 @@ class ProductoService {
         throw new Error('No hay token de autenticación');
       }
 
-      const url = API_ENDPOINTS.PRODUCTOS(emprendimientoId);
+      const url = API_ENDPOINTS.MIS_PRODUCTOS(emprendimientoId);
       console.log('[Productos] GET', url);
       const response = await fetch(url, {
         method: 'GET',

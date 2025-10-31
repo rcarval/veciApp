@@ -215,10 +215,10 @@ export const UserProvider = ({ children }) => {
           nombre: dir.nombre,
           direccion: dir.direccion,
           referencia: dir.referencia || "",
-          esPrincipal: dir.es_principal || false,
-          coordenadas: dir.latitud && dir.longitud 
+          esPrincipal: dir.esPrincipal || dir.es_principal || false,
+          coordenadas: dir.coordenadas || (dir.latitud && dir.longitud 
             ? { lat: dir.latitud, lng: dir.longitud }
-            : null,
+            : null),
           fechaCreacion: dir.created_at
         }));
         

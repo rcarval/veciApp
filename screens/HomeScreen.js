@@ -21,6 +21,7 @@ import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
+import pedidoService from "../services/pedidoService";
 
 const HomeScreen = ({ navigation }) => {
   const userContext = useUser();
@@ -32,6 +33,11 @@ const HomeScreen = ({ navigation }) => {
   const [modalObligatorioVisible, setModalObligatorioVisible] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const intentosCargaRef = useRef(0);
+  const [emprendimientosDestacados, setEmprendimientosDestacados] = useState([]);
+  const [productosDestacados, setProductosDestacados] = useState([]);
+  const [productosOferta, setProductosOferta] = useState([]);
+  const [emprendimientosPorCategoria, setEmprendimientosPorCategoria] = useState({});
+  const [cargandoEmprendimientos, setCargandoEmprendimientos] = useState(false);
 
 
   // Helper para obtener el nombre de la comuna
@@ -233,11 +239,314 @@ const HomeScreen = ({ navigation }) => {
       BackHandler.removeEventListener("hardwareBackPress", handleBackPress);
   }, []);*/
 
-  const handleSeleccionDireccion = (id) => {
-    if (establecerDireccionSeleccionada) {
-      establecerDireccionSeleccionada(id);
+  // Función para mezclar array (Fisher-Yates shuffle)
+  const shuffleArray = (array) => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  // Función para seleccionar aleatoriamente priorizando premium (90% premium, 10% básico)
+  const seleccionarAleatoriosConPrioridad = (premiumList, basicoList, cantidad) => {
+    const seleccionados = [];
+    
+    // Calcular cuántos de cada tipo necesitamos
+    const cantidadPremium = Math.ceil(cantidad * 0.9);
+    const cantidadBasico = cantidad - cantidadPremium;
+    
+    // Mezclar ambas listas
+    const premiumShuffled = shuffleArray(premiumList);
+    const basicoShuffled = shuffleArray(basicoList);
+    
+    // Seleccionar de premium
+    for (let i = 0; i < Math.min(cantidadPremium, premiumShuffled.length); i++) {
+      seleccionados.push(premiumShuffled[i]);
+    }
+    
+    // Si aún necesitamos más, agregar de básico
+    const restantes = cantidad - seleccionados.length;
+    for (let i = 0; i < Math.min(restantes, basicoShuffled.length); i++) {
+      seleccionados.push(basicoShuffled[i]);
+    }
+    
+    // Mezclar el resultado final para que no esté todo junto
+    return shuffleArray(seleccionados);
+  };
+
+  // Función helper para mapear estado del backend al frontend
+  const mapearEstado = (emp) => {
+    if (emp.estado_calculado === 'cierra_pronto') {
+      return 'Cierra Pronto';
+    } else if (emp.estado_calculado === 'abierto') {
+      return 'Abierto';
+    } else if (emp.estado_calculado === 'cerrado') {
+      return 'Cerrado';
+    }
+    // Fallback al estado original si no hay estado_calculado
+    return emp.estado === 'activo' ? 'Abierto' : 'Cerrado';
+  };
+
+  // Función helper para cargar calificación de un emprendimiento
+  const cargarCalificacionEmprendimiento = async (empId) => {
+    try {
+      const response = await pedidoService.obtenerCalificacionEmprendimiento(empId);
+      if (response.ok && response.calificacion) {
+        return parseFloat(response.calificacion.calificacion_promedio) || 0;
+      }
+      return 0;
+    } catch (error) {
+      console.error(`Error cargando calificación para emprendimiento ${empId}:`, error);
+      return 0;
     }
   };
+
+  // Función para agrupar emprendimientos por categoría de negocio
+  const agruparEmprendimientosPorCategoria = async (emprendimientos) => {
+    const agrupados = {};
+    
+    for (const emp of emprendimientos) {
+      const categoria = emp.categoria_principal || 'otros';
+      
+      if (!agrupados[categoria]) {
+        agrupados[categoria] = [];
+      }
+      
+      // Cargar calificación del emprendimiento
+      const rating = await cargarCalificacionEmprendimiento(emp.id);
+      
+      agrupados[categoria].push({
+        id: emp.id,
+        nombre: emp.nombre,
+        descripcion: emp.descripcion_corta || emp.descripcion,
+        descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
+        imagen: emp.background_url || require('../assets/icon.png'),
+        logo: emp.logo_url || require('../assets/icon.png'),
+        estado: mapearEstado(emp),
+        telefono: emp.telefono,
+        direccion: emp.direccion,
+        metodosEntrega: emp.tipos_entrega || { delivery: true, retiro: true },
+        metodosPago: emp.medios_pago || { tarjeta: true, efectivo: true, transferencia: false },
+        rating: rating,
+        horarios: emp.horarios,
+        galeria: [] // Se cargará cuando sea necesario
+      });
+    }
+    
+    console.log('📂 Emprendimientos agrupados por categoría:', Object.keys(agrupados));
+    setEmprendimientosPorCategoria(agrupados);
+  };
+
+  // Función para cargar emprendimientos desde el backend
+  const cargarEmprendimientosHome = async () => {
+    try {
+      setCargandoEmprendimientos(true);
+      console.log('🏠 Cargando emprendimientos para Home...');
+      
+      const { API_ENDPOINTS } = require('../config/api');
+      const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTOS);
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar emprendimientos');
+      }
+      
+      const data = await response.json();
+      if (data.ok && data.emprendimientos) {
+        console.log('✅ Emprendimientos cargados:', data.emprendimientos.length);
+        
+        // Separar premium y básico
+        const premiumEmprendimientos = data.emprendimientos.filter(emp => {
+          // Buscar el usuario del emprendimiento para verificar su plan
+          return emp.usuario_plan_id === 2 || emp.usuario_plan_id === 'premium';
+        });
+        
+        const basicoEmprendimientos = data.emprendimientos.filter(emp => {
+          return emp.usuario_plan_id !== 2 && emp.usuario_plan_id !== 'premium';
+        });
+        
+        console.log(`Premium: ${premiumEmprendimientos.length}, Básico: ${basicoEmprendimientos.length}`);
+        
+        // Seleccionar emprendimientos aleatorios para destacados (max 5)
+        const destacadosSeleccionados = seleccionarAleatoriosConPrioridad(
+          premiumEmprendimientos,
+          basicoEmprendimientos,
+          5
+        );
+        
+        // Mapear emprendimientos a formato esperado por el Swiper con calificaciones
+        const emprendimientosMapeadosPromises = destacadosSeleccionados.map(async emp => {
+          // Cargar calificación del emprendimiento
+          const rating = await cargarCalificacionEmprendimiento(emp.id);
+          
+          return {
+            id: emp.id,
+            nombre: emp.nombre,
+            descripcion: emp.descripcion_corta || emp.descripcion,
+            descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
+            imagen: emp.background_url || require('../assets/icon.png'),
+            logo: emp.logo_url || require('../assets/icon.png'),
+            estado: mapearEstado(emp),
+            telefono: emp.telefono,
+            direccion: emp.direccion,
+            metodosEntrega: emp.tipos_entrega || { delivery: true, retiro: true },
+            metodosPago: emp.medios_pago || { tarjeta: true, efectivo: true, transferencia: false },
+            rating: rating,
+            horarios: emp.horarios,
+            galeria: [] // Se cargará cuando sea necesario
+          };
+        });
+        
+        const emprendimientosMapeados = await Promise.all(emprendimientosMapeadosPromises);
+        
+        // Agregar banner premium al principio si el usuario es emprendedor
+        const conBannerPremium = usuario?.tipo_usuario === "emprendedor" 
+          ? [{
+              id: -1,
+              imagen: require("../assets/premium.png"),
+            }, ...emprendimientosMapeados]
+          : emprendimientosMapeados;
+        
+        setEmprendimientosDestacados(conBannerPremium);
+        
+        // Agrupar emprendimientos por categoría de negocio
+        agruparEmprendimientosPorCategoria(data.emprendimientos);
+        
+        // Ahora cargar productos categorizados
+        await cargarProductosCategorizados(premiumEmprendimientos, basicoEmprendimientos);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar emprendimientos:', error);
+      // Si falla, mantener array vacío
+      setEmprendimientosDestacados([]);
+    } finally {
+      setCargandoEmprendimientos(false);
+    }
+  };
+
+  // Función para cargar productos categorizados
+  const cargarProductosCategorizados = async (premiumList, basicoList) => {
+    try {
+      console.log('🏠 Cargando productos categorizados...');
+      
+      const { API_ENDPOINTS } = require('../config/api');
+      
+      // Función helper para cargar productos de un emprendimiento
+      const cargarProductosDeEmprendimiento = async (empId) => {
+        try {
+          const response = await fetch(API_ENDPOINTS.PRODUCTOS(empId));
+          if (!response.ok) return [];
+          const data = await response.json();
+          return data.ok && data.productos ? data.productos : [];
+        } catch (error) {
+          console.error(`Error cargando productos de emprendimiento ${empId}:`, error);
+          return [];
+        }
+      };
+      
+      // Seleccionar emprendimientos aleatorios para cada categoría
+      const productosSeleccionados = seleccionarAleatoriosConPrioridad(
+        premiumList,
+        basicoList,
+        10
+      );
+      
+      // Cargar productos de cada emprendimiento seleccionado
+      const promesasProductos = productosSeleccionados.map(async (emp) => {
+        const productos = await cargarProductosDeEmprendimiento(emp.id);
+        return {
+          emprendimiento: emp,
+          productos: productos
+        };
+      });
+      
+      const resultadosProductos = await Promise.all(promesasProductos);
+      
+      // Agrupar productos por categoría
+      const productosPorCategoria = {
+        principal: [],
+        oferta: [],
+        secundario: [],
+        emprendimientos: [] // Para guardar emprendimientos completos con productos
+      };
+      
+      resultadosProductos.forEach(({ emprendimiento, productos }) => {
+        // Guardar el emprendimiento con sus productos
+        const emprendimientoConProductos = {
+          id: emprendimiento.id,
+          nombre: emprendimiento.nombre,
+          descripcion: emprendimiento.descripcion_corta || emprendimiento.descripcion,
+          descripcionLarga: emprendimiento.descripcion_larga || emprendimiento.descripcion_corta || '',
+          imagen: emprendimiento.background_url || require('../assets/icon.png'),
+          logo: emprendimiento.logo_url || require('../assets/icon.png'),
+          estado: mapearEstado(emprendimiento),
+          telefono: emprendimiento.telefono,
+          direccion: emprendimiento.direccion,
+          metodosEntrega: emprendimiento.tipos_entrega || { delivery: true, retiro: true },
+          metodosPago: emprendimiento.medios_pago || { tarjeta: true, efectivo: true, transferencia: false },
+          rating: 4.5,
+          horarios: emprendimiento.horarios,
+          galeria: productos.map(prod => ({
+            id: prod.id,
+            imagen: prod.imagen_url ? { uri: prod.imagen_url } : require('../assets/icon.png'),
+            nombre: prod.nombre,
+            descripcion: prod.descripcion || prod.nombre,
+            precio: prod.precio,
+            categoria: prod.categoria || 'secundario'
+          }))
+        };
+        
+        productosPorCategoria.emprendimientos.push(emprendimientoConProductos);
+        
+        // Mapear cada producto con su emprendimiento completo (para las secciones de productos)
+        productos.forEach(producto => {
+          const categoria = producto.categoria || 'secundario';
+          
+          productosPorCategoria[categoria].push({
+            // Incluir toda la info del emprendimiento completo
+            ...emprendimientoConProductos,
+            // Agregar la categoría al objeto
+            categoria: categoria,
+            // Sobrescribir solo lo específico del producto
+            productoSeleccionado: {
+              id: producto.id,
+              imagen: producto.imagen_url ? { uri: producto.imagen_url } : require('../assets/icon.png'),
+              nombre: producto.nombre,
+              descripcion: producto.descripcion || producto.nombre,
+              precio: producto.precio,
+              categoria: categoria
+            }
+          });
+        });
+      });
+      
+      console.log('✅ Productos categorizados cargados:', {
+        principal: productosPorCategoria.principal.length,
+        oferta: productosPorCategoria.oferta.length,
+        secundario: productosPorCategoria.secundario.length,
+        emprendimientos: productosPorCategoria.emprendimientos.length
+      });
+      
+      // Setear los productos
+      setProductosOferta(productosPorCategoria.oferta);
+      setProductosDestacados(productosPorCategoria.principal);
+      
+      // Los secundarios se mostrarán en las categorías
+      // Por ahora dejamos esto así, después veremos cómo organizarlos por categorías de negocio
+      
+    } catch (error) {
+      console.error('❌ Error al cargar productos categorizados:', error);
+    }
+  };
+
+  // useEffect para cargar emprendimientos cuando el componente se monta
+  useEffect(() => {
+    if (usuario && !loading) {
+      cargarEmprendimientosHome();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario, loading]);
 
   // Mostrar loading si está cargando o si no hay usuario aún
   // El componente se re-renderizará automáticamente cuando el contexto se actualice
@@ -251,6 +560,12 @@ const HomeScreen = ({ navigation }) => {
       </View>
     );
   }
+
+  const handleSeleccionDireccion = (id) => {
+    if (establecerDireccionSeleccionada) {
+      establecerDireccionSeleccionada(id);
+    }
+  };
 
   const direccionActual = direcciones && direcciones.length > 0 
     ? direcciones.find((dir) => dir.id === direccionSeleccionada)
@@ -291,353 +606,19 @@ const HomeScreen = ({ navigation }) => {
       subcategorias: ["Artesanía", "Publicidad", "Música y Eventos"],
     },
   ];
-
-  const emprendimientosDestacados = [
-    ...(usuario?.tipo_usuario === "emprendedor" 
-      ? [{
-          id: -1,
-          imagen: require("../assets/premium.png"),
-        }]
-      : []),
-    {
-      id: 1,
-      nombre: "Pizzeria Donatelo",
-      descripcion: "Pizzas de masa madre",
-      descripcionLarga:
-        "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-      imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-      logo: require("../assets/donatelo.png"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Manuel Rodríguez 885, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-      rating: 4.8,
-      galeria: [
-        {
-          imagen: require("../assets/pizza-margarita.jpg"),
-          nombre: "Pizza Margarita",
-          descripcion: "Pizza Margarita clásica con ingredientes frescos",
-          precio: 8990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/Pepperoni-pizza.webp"),
-          nombre: "Pizza Pepperoni",
-          descripcion: "Pizza Pepperoni con doble porción de pepperoni",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizza-iberica.webp"),
-          nombre: "Pizza Iberica",
-          descripcion: "Pizza Iberica con carne de cerdo y verduras",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizza-cuatro-quesos.jpg"),
-          nombre: "Pizza cuatro quesos",
-          descripcion: "Pizza cuatro quesos con extra queso",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizzaOferta.jpg"),
-          nombre: "Pizza promo",
-          descripcion: "Pizzas a elección 2 x 1",
-          precio: 12990,
-          categoria: "oferta"
-        },
-        {
-          imagen: require("../assets/bebidas.jpg"),
-          nombre: "Bebida en Lata",
-          descripcion: "Coca Cola, Fanta o Sprite",
-          precio: 1990,
-          categoria: "secundario"
-        },
-      ]
-    },
-    {
-      id: 2,
-      nombre: "Pelucan",
-      descripcion: "Estilismo profesional para perros.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/pelucan.webp"),
-      logo: require("../assets/pelucan_logo.png"),
-      estado: "Cerrado",
-      telefono: "+56994908047",
-      direccion: "Vista Hermosa 319, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: true },
-      rating: 4.6,
-    },
-    {
-      id: 3,
-      nombre: "Grill Burger",
-      descripcion: "Ricas hamburguesas caseras.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/burger.webp"),
-      logo: require("../assets/grillburger_logo.jpg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Balmaceda 1458, Talagante",
-      metodosEntrega: { delivery: false, retiro: true },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 3.9,
-    },
-    {
-      id: 4,
-      nombre: "Carniceria Los Chinitos",
-      descripcion: "Expertos en Carnes.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/carniceria.webp"),
-      logo: require("../assets/loschinitos_logo.jpg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "El Zorzal Nte. 608, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-      rating: 2.4,
-      galeria: [
-        {
-          imagen: require("../assets/huachalomo.webp"),
-          descripcion: "Huachalomo Categoría V 1 KG",
-          precio: 9990,
-          categoria: "principal"
-        }
-      ]
-    },
-    {
-      id: 5,
-      nombre: "Maestro José",
-      descripcion: "Reparación y Construcción.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/construccion.jpg"),
-      logo: require("../assets/maestrojose_logo.jpeg"),
-      estado: "Cierra Pronto",
-      telefono: "+56994908047",
-      direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: false },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 3.4,
-    },
-    {
-      id: 6,
-      nombre: "Gasfiter Experto",
-      descripcion: "Reparación de Cañerías.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/gasfiter.jpg"),
-      logo: require("../assets/gasfiter_logo.jpeg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Balmaceda 1458, Talagante",
-      metodosEntrega: { delivery: false, retiro: true },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 4.1,
-    }
-  ];
-  
-  const productosDestacados = [
-    {
-    id: 1,
-    nombre: "Pizzeria Donatelo",
-    descripcion: "Pizzas de masa madre",
-    categoria: "comida",
-    descripcionLarga:
-      "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-    imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-    logo: require("../assets/donatelo.png"),
-    estado: "Abierto",
-    telefono: "+56994908047",
-    direccion: "Manuel Rodríguez 885, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: true },
-    metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-    rating: 4.8,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 5,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "servicios",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 7,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "negocios",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 8,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "belleza",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  }
-];
-
-const productosOferta = [
-  {
-  id: 1,
-  nombre: "Pizzeria Donatelo",
-  descripcion: "Pizzas de masa madre",
-  categoria: "comida",
-  descripcionLarga:
-    "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-  imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-  logo: require("../assets/donatelo.png"),
-  estado: "Abierto",
-  telefono: "+56994908047",
-  direccion: "Manuel Rodríguez 885, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: true },
-  metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-  rating: 4.8,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      categoria: "oferta"
-    }
-  ]
-},
-{
-  id: 5,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "servicios",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      categoria: "oferta"
-    }
-  ]
-},
-{
-  id: 7,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "negocios",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      categoria: "oferta"
-    }
-  ]
-},
-{
-  id: 8,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "belleza",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      categoria: "oferta"
-    }
-  ]
-}
-];
-
-// Función para agrupar productos por categoría
 // Función para obtener icono según categoría
 const getIconForCategory = (categoria) => {
+  if (!categoria) return "tag"; // Si la categoría es undefined, usar tag por defecto
   const icons = {
     "comida": "cutlery",
     "belleza": "scissors",
     "servicio": "wrench",
-    "negocios": "shopping-bag"
+    "servicios": "wrench",
+    "negocios": "shopping-bag",
+    "principal": "star",
+    "oferta": "tag",
+    "secundario": "plus-circle",
+    "otros": "tag"
   };
   return icons[categoria.toLowerCase()] || "tag";
 };
@@ -961,149 +942,232 @@ const getIconForCategory = (categoria) => {
             </Swiper>
           </View>
           {/* Sección de Ofertas Destacadas */}
-<View style={styles.seccionOfertas}>
-  <View style={styles.headerSeccion}>
-    <View style={[styles.iconoSeccionContainer]}>
-      <FontAwesome name="tag" size={16}/>
+{productosOferta && productosOferta.length > 0 && (
+  <View style={styles.seccionOfertas}>
+    <View style={styles.headerSeccion}>
+      <View style={[styles.iconoSeccionContainer]}>
+        <FontAwesome name="tag" size={16}/>
+      </View>
+      <Text style={[styles.tituloSeccionGaleria]}>
+        OFERTAS DESTACADAS
+      </Text>
     </View>
-    <Text style={[styles.tituloSeccionGaleria]}>
-      OFERTAS DESTACADAS
-    </Text>
-  </View>
-  
-  <ScrollView 
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.galeriaScroll}
-  >
-    {productosOferta.map(producto => (
-      <TouchableOpacity 
-        key={producto.id}
-        style={styles.itemGaleria}
-        onPress={() => navigation.navigate("PedidoDetalle", { producto })}
-      >
-        {/* Imagen del producto */}
-        <View style={styles.imagenContainer}>
-          <Image 
-            source={producto.galeria[0].imagen} 
-            style={styles.imagenGaleria}
-            contentFit="cover"
-          />
-          <View style={[styles.etiquetaCategoria, {backgroundColor: '#FF5252'}]}>
-            <Text style={styles.etiquetaTextoOferta}>
-              OFERTA
-            </Text>
+    
+    <ScrollView 
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.galeriaScroll}
+    >
+      {productosOferta.map(producto => (
+        <TouchableOpacity 
+          key={producto.id}
+          style={styles.itemGaleria}
+          onPress={() => navigation.navigate("PedidoDetalle", { producto })}
+        >
+          {/* Imagen del producto */}
+          <View style={styles.imagenContainer}>
+            <Image 
+              source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon.png'))} 
+              style={styles.imagenGaleria}
+              contentFit="cover"
+            />
+            <View style={[styles.etiquetaCategoria, {backgroundColor: '#FF5252'}]}>
+              <Text style={styles.etiquetaTextoOferta}>
+                OFERTA
+              </Text>
+            </View>
           </View>
+          
+          {/* Información del producto */}
+          <View style={styles.infoGaleria}>
+            {/* Descripción */}
+            <Text style={styles.descripcionGaleria} numberOfLines={2}>
+              {producto.productoSeleccionado && producto.productoSeleccionado.descripcion ? producto.productoSeleccionado.descripcion : (producto.galeria && producto.galeria[0] ? producto.galeria[0].descripcion : producto.descripcion)}
+            </Text>
+            
+            {/* Precio */}
+            <Text style={styles.precioProducto}>
+              {producto.productoSeleccionado && producto.productoSeleccionado.precio ? 
+                `$${producto.productoSeleccionado.precio.toLocaleString("es-CL")}` : 
+                (producto.galeria && producto.galeria[0] && producto.galeria[0].precio ? 
+                  `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
+                  "Consulte")}
+            </Text>
+            
+            {/* Recuadro con logo y nombre de empresa */}
+            <View style={styles.empresaContainer}>
+              <Image 
+                source={producto.logo || require('../assets/icon.png')} 
+                style={styles.logoEmpresa}
+                contentFit="contain"
+              />
+              <Text style={styles.nombreEmpresa} numberOfLines={1}>
+                {producto.nombre}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  </View>
+)}
+{productosDestacados && productosDestacados.length > 0 && (
+  <View style={styles.seccionProductos}>
+    {/* Filtramos las categorías únicas */}
+    {Array.from(new Set(productosDestacados.map(p => p.categoria).filter(cat => cat))).map(categoria => (
+      <View key={categoria} style={styles.categoriaContainer}>
+        <View style={styles.headerSeccion}>
+          <View style={[
+            styles.iconoSeccionContainer,           
+          ]}>
+            <FontAwesome 
+              name={getIconForCategory(categoria)} 
+              size={16} 
+            />
+          </View>
+          <Text style={[styles.tituloSeccionGaleria]}>
+            {categoria ? categoria.toUpperCase() : 'DESTACADOS'}
+          </Text>
         </View>
         
-        {/* Información del producto */}
-        <View style={styles.infoGaleria}>
-          {/* Descripción */}
-          <Text style={styles.descripcionGaleria} numberOfLines={2}>
-            {producto.galeria[0].descripcion}
-          </Text>
-          
-          {/* Precio */}
-          <Text style={styles.precioProducto}>
-            {producto.galeria[0].precio ? 
-              `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
-              "Consulte"}
-          </Text>
-          
-          {/* Recuadro con logo y nombre de empresa */}
-          <View style={styles.empresaContainer}>
-            <Image 
-              source={producto.logo} 
-              style={styles.logoEmpresa}
-              contentFit="contain"
-            />
-            <Text style={styles.nombreEmpresa} numberOfLines={1}>
-              {producto.nombre}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    ))}
-  </ScrollView>
-</View>
-<View style={styles.seccionProductos}>
-  {/* Filtramos las categorías únicas */}
-  {Array.from(new Set(productosDestacados.map(p => p.categoria))).map(categoria => (
-    <View key={categoria} style={styles.categoriaContainer}>
-      <View style={styles.headerSeccion}>
-        <View style={[
-          styles.iconoSeccionContainer,           
-        ]}>
-          <FontAwesome 
-            name={getIconForCategory(categoria)} 
-            size={16} 
-          />
-        </View>
-        <Text style={[styles.tituloSeccionGaleria]}>
-          {categoria.toUpperCase()}
-        </Text>
-      </View>
-      
-      <ScrollView 
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.galeriaScroll}
-      >
-        {productosDestacados
-          .filter(producto => producto.categoria === categoria)
-          .map(producto => (
-            <TouchableOpacity 
-              key={producto.id}
-              style={styles.itemGaleria}
-              onPress={() => navigation.navigate("PedidoDetalle", { producto })}
-            >
-              {/* Imagen del producto */}
-              <View style={styles.imagenContainer}>
-                <Image 
-                  source={producto.galeria[0].imagen} 
-                  style={styles.imagenGaleria}
-                  contentFit="cover"
-                />
-                 <View style={styles.etiquetaCategoria}>
-                 <Text style={styles.etiquetaTexto}>
-                            DESTACADO
-                          </Text>
-                 </View>
-              </View>
-              
-              {/* Información del producto */}
-              <View style={styles.infoGaleria}>
-                {/* Descripción */}
-                <Text style={styles.descripcionGaleria} numberOfLines={2}>
-                  {producto.galeria[0].descripcion}
-                </Text>
-                
-                {/* Precio */}
-                <Text style={styles.precioProducto}>
-                  {producto.galeria[0].precio ? 
-                    `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
-                    "Consulte"}
-                </Text>
-                
-                {/* Recuadro con logo y nombre de empresa */}
-                <View style={styles.empresaContainer}>
+        <ScrollView 
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.galeriaScroll}
+        >
+          {productosDestacados
+            .filter(producto => producto.categoria === categoria)
+            .map(producto => (
+              <TouchableOpacity 
+                key={producto.id}
+                style={styles.itemGaleria}
+                onPress={() => navigation.navigate("PedidoDetalle", { producto })}
+              >
+                {/* Imagen del producto */}
+                <View style={styles.imagenContainer}>
                   <Image 
-                    source={producto.logo} 
-                    style={styles.logoEmpresa}
-                    contentFit="contain"
+                    source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon.png'))} 
+                    style={styles.imagenGaleria}
+                    contentFit="cover"
                   />
-                  <Text style={styles.nombreEmpresa} numberOfLines={1}>
-                    {producto.nombre}
-                  </Text>
+                   <View style={styles.etiquetaCategoria}>
+                   <Text style={styles.etiquetaTexto}>
+                              DESTACADO
+                            </Text>
+                   </View>
                 </View>
-              </View>
-            </TouchableOpacity>
-          ))
-        }
-      </ScrollView>
-    </View>
-  ))}
-</View>
+                
+                {/* Información del producto */}
+                <View style={styles.infoGaleria}>
+                  {/* Descripción */}
+                  <Text style={styles.descripcionGaleria} numberOfLines={2}>
+                    {producto.productoSeleccionado && producto.productoSeleccionado.descripcion ? producto.productoSeleccionado.descripcion : (producto.galeria && producto.galeria[0] ? producto.galeria[0].descripcion : producto.descripcion)}
+                  </Text>
+                  
+                  {/* Precio */}
+                  <Text style={styles.precioProducto}>
+                    {producto.productoSeleccionado && producto.productoSeleccionado.precio ? 
+                      `$${producto.productoSeleccionado.precio.toLocaleString("es-CL")}` : 
+                      (producto.galeria && producto.galeria[0] && producto.galeria[0].precio ? 
+                        `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
+                        "Consulte")}
+                  </Text>
+                  
+                  {/* Recuadro con logo y nombre de empresa */}
+                  <View style={styles.empresaContainer}>
+                    <Image 
+                      source={producto.logo || require('../assets/icon.png')} 
+                      style={styles.logoEmpresa}
+                      contentFit="contain"
+                    />
+                    <Text style={styles.nombreEmpresa} numberOfLines={1}>
+                      {producto.nombre}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          }
+        </ScrollView>
+      </View>
+    ))}
+  </View>
+)}
+          {/* Sección de Emprendimientos por Categoría de Negocio */}
+          {Object.keys(emprendimientosPorCategoria).length > 0 && (
+            <View style={styles.seccionProductos}>
+              {Object.entries(emprendimientosPorCategoria).map(([categoria, emprendimientos]) => {
+                // Seleccionar aleatoriamente hasta 5 emprendimientos de esta categoría
+                const emprendimientosMostrar = shuffleArray(emprendimientos).slice(0, 5);
+                
+                if (emprendimientosMostrar.length === 0) return null;
+                
+                return (
+                  <View key={categoria} style={styles.categoriaContainer}>
+                    <View style={styles.headerSeccion}>
+                      <View style={styles.iconoSeccionContainer}>
+                        <FontAwesome 
+                          name={getIconForCategory(categoria)} 
+                          size={16} 
+                        />
+                      </View>
+                      <Text style={[styles.tituloSeccionGaleria]}>
+                        {categoria.toUpperCase()}
+                      </Text>
+                    </View>
+                    
+                    <ScrollView 
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.galeriaScroll}
+                    >
+                      {emprendimientosMostrar.map(emp => (
+                        <TouchableOpacity 
+                          key={emp.id}
+                          style={styles.itemGaleria}
+                          onPress={() => navigation.navigate("PedidoDetalle", { producto: emp })}
+                        >
+                          {/* Imagen del emprendimiento */}
+                          <View style={styles.imagenContainer}>
+                            <Image 
+                              source={emp.imagen} 
+                              style={styles.imagenGaleria}
+                              contentFit="cover"
+                            />
+                          </View>
+                          
+                          {/* Información del emprendimiento */}
+                          <View style={styles.infoGaleria}>
+                            {/* Nombre */}
+                            <Text style={styles.descripcionGaleria} numberOfLines={2}>
+                              {emp.descripcion}
+                            </Text>
+                            
+                            {/* Estado */}
+                            <Text style={styles.precioProducto}>
+                              {emp.estado}
+                            </Text>
+                            
+                            {/* Recuadro con logo y nombre */}
+                            <View style={styles.empresaContainer}>
+                              <Image 
+                                source={emp.logo || require('../assets/icon.png')} 
+                                style={styles.logoEmpresa}
+                                contentFit="contain"
+                              />
+                              <Text style={styles.nombreEmpresa} numberOfLines={1}>
+                                {emp.nombre}
+                              </Text>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </ScrollView>
       </View>
 

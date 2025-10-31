@@ -125,6 +125,10 @@ const EmprendimientoScreen = () => {
         { id: "libreria", nombre: "Librería" },
         { id: "mascotas", nombre: "Mascotas" },
         { id: "bazar", nombre: "Bazar" },
+        { id: "ropa_bebe", nombre: "Ropa de Bebe" },
+        { id: "vestimenta", nombre: "Vestimenta" },
+        { id: "zapateria", nombre: "Zapatería" },
+        { id: "orfebreria", nombre: "Orfebrería" },
         { id: "otro", nombre: "Otro" },
       ],
     },
@@ -381,7 +385,8 @@ const EmprendimientoScreen = () => {
         <Text style={styles.listaHorariosTitulo}>Horarios Configurados</Text>
 
         {Object.entries(horarios).map(([dia, horariosDia]) => {
-          if (horariosDia.length === 0) return null;
+          // Verificar que horariosDia sea un array válido
+          if (!Array.isArray(horariosDia) || horariosDia.length === 0) return null;
 
           return (
             <View key={dia} style={styles.diaHorarioContainer}>
@@ -502,13 +507,13 @@ const EmprendimientoScreen = () => {
 
   const eliminarHorario = (dia, id) => {
     const nuevosHorarios = { ...horarios };
-    nuevosHorarios[dia] = nuevosHorarios[dia].filter((h) => h.id !== id);
+    nuevosHorarios[dia] = (nuevosHorarios[dia] || []).filter((h) => h.id !== id);
     setHorarios(nuevosHorarios);
   };
 
   const guardarHorario = ({ inicio, fin }) => {
     const dia = diaSeleccionado;
-    const horariosDia = [...horarios[dia]];
+    const horariosDia = [...(horarios[dia] || [])];
 
     const horariosParaValidar = horarioEditando
       ? horariosDia.filter((h) => h.id !== horarioEditando.id)
@@ -969,7 +974,7 @@ const EmprendimientoScreen = () => {
         return;
       }
 
-      const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTOS, {
+      const response = await fetch(API_ENDPOINTS.MIS_EMPRENDIMIENTOS, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -1105,32 +1110,11 @@ const EmprendimientoScreen = () => {
     });
 
     if (!result.canceled && result.assets[0]) {
-      // Si estamos editando un emprendimiento existente, subir inmediatamente
-      if (isEditing && currentEmprendimiento?.id) {
-        try {
-          const imageUrl = await subirImagenEmprendimiento(
-            result.assets[0].uri, 
-            tipo, 
-            currentEmprendimiento.id
-          );
-          
-          if (tipo === "logo") {
-            setLogo(imageUrl);
-          } else {
-            setBackground(imageUrl);
-          }
-          
-          Alert.alert('Éxito', `${tipo === 'logo' ? 'Logo' : 'Imagen de fondo'} subido correctamente`);
-        } catch (error) {
-          Alert.alert('Error', `No se pudo subir el ${tipo}: ${error.message}`);
-        }
+      // Guardar la URI localmente (se subirá al presionar "Guardar")
+      if (tipo === "logo") {
+        setLogo(result.assets[0].uri);
       } else {
-        // Si es nuevo, solo guardar la URI localmente (se subirá al guardar)
-        if (tipo === "logo") {
-          setLogo(result.assets[0].uri);
-        } else {
-          setBackground(result.assets[0].uri);
-        }
+        setBackground(result.assets[0].uri);
       }
     }
   };
@@ -1384,20 +1368,24 @@ const EmprendimientoScreen = () => {
                 emprendimientoCreado = data.emprendimiento;
               }
 
-              // Si hay imágenes locales (nuevo emprendimiento), subirlas
+              // Si hay imágenes locales seleccionadas, subirlas
               const emprendimientoId = emprendimientoCreado.id.toString();
               if (logo && !logo.startsWith('http')) {
                 try {
+                  console.log('📤 Subiendo logo...');
                   await subirImagenEmprendimiento(logo, 'logo', emprendimientoId);
+                  console.log('✅ Logo subido correctamente');
                 } catch (error) {
-                  console.error('Error al subir logo:', error);
+                  console.error('❌ Error al subir logo:', error);
                 }
               }
               if (background && !background.startsWith('http')) {
                 try {
+                  console.log('📤 Subiendo background...');
                   await subirImagenEmprendimiento(background, 'background', emprendimientoId);
+                  console.log('✅ Background subido correctamente');
                 } catch (error) {
-                  console.error('Error al subir background:', error);
+                  console.error('❌ Error al subir background:', error);
                 }
               }
 
@@ -1760,7 +1748,7 @@ const EmprendimientoScreen = () => {
         const horariosArray = [];
         Object.entries(emprendimiento.horarios).forEach(
           ([dia, horariosDia]) => {
-            if (horariosDia.length > 0) {
+            if (Array.isArray(horariosDia) && horariosDia.length > 0) {
               const horariosStr = horariosDia
                 .map((h) => `${h.inicio} - ${h.fin}`)
                 .join(", ");
@@ -1798,7 +1786,7 @@ const EmprendimientoScreen = () => {
         },
       };
 
-        navigation.navigate("PedidoDetalle", { producto: emprendimientoPreview });
+        navigation.navigate("PedidoDetalle", { producto: emprendimientoPreview, isPreview: true });
     } catch (error) {
       console.error("Error al preparar previsualización:", error);
       Alert.alert("Error", "No se pudo cargar la previsualización");

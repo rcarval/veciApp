@@ -95,7 +95,8 @@ const PlanScreen = () => {
   useEffect(() => {
     if (usuario) {
       const plan = usuario.plan_id || null;
-      setPlanActual(plan === "premium" ? "premium" : "basico");
+      // plan_id: null/1 = basico, 2 = premium
+      setPlanActual(plan === 2 ? "premium" : "basico");
     }
   }, [usuario]);
 
@@ -131,6 +132,7 @@ const PlanScreen = () => {
             text: "Simular Pago Exitoso",
             onPress: async () => {
               try {
+                console.log('📤 Suscribiéndose al plan premium...');
                 // Llamar al backend para suscribirse
                 const response = await fetch(API_ENDPOINTS.SUSCRIBIRSE_PREMIUM, {
                   method: "POST",
@@ -142,8 +144,10 @@ const PlanScreen = () => {
                 });
 
                 const data = await response.json();
+                console.log('📥 Respuesta suscripción:', JSON.stringify(data, null, 2));
 
                 if (response.ok && data.ok) {
+                  console.log('✅ Suscripción exitosa');
                   // Actualizar contexto (esto actualiza el cache y todas las pantallas)
                   actualizarUsuarioLocal(data.usuario);
                   setPlanActual("premium");
@@ -161,6 +165,7 @@ const PlanScreen = () => {
                     ]
                   );
                 } else {
+                  console.log('❌ Error al suscribirse:', data.error);
                   Alert.alert("Error", data.mensaje || data.error || "No se pudo procesar la suscripción.");
                   setCargando(false);
                 }
@@ -203,6 +208,7 @@ const PlanScreen = () => {
                 return;
               }
 
+              console.log('📤 Cancelando suscripción...');
               // Llamar al backend para cancelar suscripción
               const response = await fetch(API_ENDPOINTS.CANCELAR_SUSCRIPCION, {
                 method: "POST",
@@ -214,8 +220,10 @@ const PlanScreen = () => {
               });
 
               const data = await response.json();
+              console.log('📥 Respuesta cancelación:', JSON.stringify(data, null, 2));
 
               if (response.ok && data.ok) {
+                console.log('✅ Suscripción cancelada');
                 // Actualizar contexto (esto actualiza el cache y todas las pantallas)
                 actualizarUsuarioLocal(data.usuario);
                 setPlanActual("basico");
@@ -224,6 +232,7 @@ const PlanScreen = () => {
                 
                 Alert.alert("Suscripción cancelada", data.mensaje || "Has vuelto al Plan Básico.");
               } else {
+                console.log('❌ Error al cancelar:', data.error);
                 Alert.alert("Error", data.mensaje || data.error || "No se pudo cancelar la suscripción.");
                 setCargando(false);
               }
@@ -411,6 +420,17 @@ const PlanScreen = () => {
                       Suscrito desde: {new Date(usuario.fecha_suscripcion).toLocaleDateString('es-CL')}
                     </Text>
                   )}
+                  {usuario?.vigencia_hasta && (
+                    <Text style={[styles.resumenVigencia, { color: currentTheme.primary, fontWeight: 'bold' }]}>
+                      {usuario.estado_suscripcion === 'cancelada' ? '⚠️ ' : '✓ '}
+                      Vence el: {new Date(usuario.vigencia_hasta).toLocaleDateString('es-CL')}
+                    </Text>
+                  )}
+                  {usuario?.estado_suscripcion === 'cancelada' && usuario?.vigencia_hasta && (
+                    <Text style={[styles.resumenCancelada, { color: '#e74c3c', fontSize: 12 }]}>
+                      Después de esta fecha volverás al plan básico
+                    </Text>
+                  )}
                 </View>
               </View>
             </View>
@@ -592,6 +612,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#95a5a6",
     marginTop: 4,
+    fontStyle: "italic",
+  },
+  resumenVigencia: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginTop: 4,
+  },
+  resumenCancelada: {
+    fontSize: 12,
+    marginTop: 2,
     fontStyle: "italic",
   },
   loadingContainer: {

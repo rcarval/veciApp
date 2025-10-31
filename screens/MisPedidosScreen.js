@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import pedidoService from '../services/pedidoService';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
@@ -78,32 +79,66 @@ const MisPedidosScreen = () => {
 
   const cargarPedidos = async () => {
     try {
-      const pedidosGuardados = await AsyncStorage.getItem('pedidosPendientes');
-      const historialGuardado = await AsyncStorage.getItem('historialPedidos');
-      const pedidosRechazadosGuardados = await AsyncStorage.getItem('pedidosRechazadosPendientes');
+      console.log('🔍 DEBUG - Cargando pedidos desde el backend...');
       
-      console.log('🔍 DEBUG - Cargando pedidos:');
-      console.log('📦 Pedidos pendientes:', pedidosGuardados ? JSON.parse(pedidosGuardados).length : 0);
-      console.log('📚 Historial:', historialGuardado ? JSON.parse(historialGuardado).length : 0);
-      console.log('❌ Rechazados pendientes:', pedidosRechazadosGuardados ? JSON.parse(pedidosRechazadosGuardados).length : 0);
+      const response = await pedidoService.obtenerPedidos();
       
-      if (pedidosGuardados) {
-        const pedidosPend = JSON.parse(pedidosGuardados);
-        setPedidosPendientes(pedidosPend);
-      }
-      
-      if (historialGuardado) {
-        const pedidosHist = JSON.parse(historialGuardado);
-        setPedidosCompletados(pedidosHist);
-      }
-      
-      if (pedidosRechazadosGuardados) {
-        const pedidosRechazados = JSON.parse(pedidosRechazadosGuardados);
-        console.log('❌ DEBUG - Pedidos rechazados pendientes:', pedidosRechazados);
-        setPedidosRechazadosPendientes(pedidosRechazados);
+      if (response.ok && response.pedidos) {
+        console.log(`✅ Pedidos cargados: ${response.pedidos.length}`);
+        
+        // Mapear los datos del backend al formato esperado por el frontend
+        const pedidosMapeados = response.pedidos.map(pedido => ({
+          id: pedido.id,
+          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+          negocioId: pedido.emprendimiento_id, // Para guardar calificaciones
+          fecha: pedido.created_at,
+          fechaHoraReserva: pedido.created_at,
+          estado: pedido.estado,
+          total: parseFloat(pedido.total),
+          productos: pedido.detalle || [],
+          direccion: pedido.direccion_entrega,
+          modoEntrega: pedido.modo_entrega,
+          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+          motivoCancelacion: pedido.motivo_rechazo,
+          rechazo_confirmado: pedido.rechazo_confirmado || false,
+          entrega_confirmada: pedido.entrega_confirmada || false, // Nuevo campo
+        }));
+        
+        // Separar pedidos por estado
+        // Pendientes: estados activos + entregados SIN confirmar
+        const pendientes = pedidosMapeados.filter(p => 
+          ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
+          (p.estado === 'entregado' && !p.entrega_confirmada)
+        );
+        const rechazados = pedidosMapeados.filter(p => p.estado === 'rechazado');
+        
+        // Los rechazados confirmados van al historial junto con entregados confirmados/cerrados
+        const completados = pedidosMapeados.filter(p => 
+          (p.estado === 'entregado' && p.entrega_confirmada) || 
+          p.estado === 'cerrado' || 
+          (p.estado === 'rechazado' && p.rechazo_confirmado)
+        );
+        
+        // Solo mostrar rechazados NO confirmados en la pestaña rechazados
+        const rechazadosPendientes = pedidosMapeados.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+        
+        console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
+        
+        setPedidosPendientes(pendientes);
+        setPedidosCompletados(completados);
+        setPedidosRechazadosPendientes(rechazadosPendientes);
+      } else {
+        console.log('⚠️ No se pudieron cargar pedidos');
+        setPedidosPendientes([]);
+        setPedidosCompletados([]);
+        setPedidosRechazadosPendientes([]);
       }
     } catch (error) {
-      console.log('Error al cargar pedidos:', error);
+      console.log('❌ Error al cargar pedidos:', error);
+      Alert.alert('Error', 'No se pudieron cargar los pedidos');
+      setPedidosPendientes([]);
+      setPedidosCompletados([]);
+      setPedidosRechazadosPendientes([]);
     }
   };
 
@@ -185,18 +220,21 @@ const MisPedidosScreen = () => {
 
   const marcarRecibido = async (pedidoId) => {
     try {
-      const pedidosActualizados = pedidosPendientes.map(pedido => 
-        pedido.id === pedidoId ? { ...pedido, estado: 'cerrado' } : pedido
-      );
+      console.log('✅ Marcando pedido como recibido:', pedidoId);
       
       // Buscar el pedido a calificar (estado entregado)
       const pedidoParaCalificarObj = pedidosPendientes.find(p => p.id === pedidoId);
       if (pedidoParaCalificarObj && pedidoParaCalificarObj.estado === 'entregado') {
+        // Primero confirmar la entrega en el backend
+        await pedidoService.confirmarEntrega(pedidoId);
+        
+        // Luego abrir el modal de calificación
         setPedidoParaCalificar(pedidoParaCalificarObj);
         setModalCalificacionVisible(true);
       }
     } catch (error) {
-      console.log('Error al marcar recibido:', error);
+      console.log('❌ Error al marcar recibido:', error);
+      Alert.alert('Error', 'No se pudo confirmar la entrega. Inténtalo de nuevo.');
     }
   };
 
@@ -222,43 +260,23 @@ const MisPedidosScreen = () => {
     if (!pedidoParaCancelar) return;
 
     try {
-      const pedidoCancelado = { 
-        ...pedidoParaCancelar, 
-        estado: 'cancelado', 
-        motivoCancelacion: motivoFinal, 
-        fechaCancelacion: new Date().toISOString() 
-      };
-
-      const pedidosActualizados = pedidosPendientes.map(p => 
-        p.id === pedidoParaCancelar.id ? pedidoCancelado : p
-      );
+      console.log('📤 Cancelando pedido:', pedidoParaCancelar.id, 'con motivo:', motivoFinal);
       
-      setPedidosPendientes(pedidosActualizados);
-      
-      // Guardar pedidos pendientes (sin los cancelados)
-      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pedidosActualizados.filter(p => p.estado !== 'cancelado')));
-      
-      // Guardar pedido cancelado en historial del cliente
-      const historialExistente = await AsyncStorage.getItem('historialPedidos');
-      const historial = historialExistente ? JSON.parse(historialExistente) : [];
-      historial.push(pedidoCancelado);
-      await AsyncStorage.setItem('historialPedidos', JSON.stringify(historial));
-      
-      // Notificar al emprendedor: guardar en pedidos cancelados pendientes de confirmación
-      const pedidosCanceladosPendientes = await AsyncStorage.getItem('pedidosCanceladosPendientes');
-      const canceladosPendientes = pedidosCanceladosPendientes ? JSON.parse(pedidosCanceladosPendientes) : [];
-      canceladosPendientes.push(pedidoCancelado);
-      await AsyncStorage.setItem('pedidosCanceladosPendientes', JSON.stringify(canceladosPendientes));
+      // Llamar al backend para cambiar el estado a cancelado
+      await pedidoService.cambiarEstadoPedido(pedidoParaCancelar.id, 'cancelado', motivoFinal);
       
       setModalCancelacionVisible(false);
       setPedidoParaCancelar(null);
       setMotivoSeleccionado('');
       setMotivoPersonalizado('');
       
+      // Recargar pedidos desde el backend
+      await cargarPedidos();
+      
       Alert.alert('Pedido cancelado', 'El pedido ha sido cancelado exitosamente.');
     } catch (error) {
-      console.log('Error al cancelar pedido:', error);
-      Alert.alert('Error', 'No se pudo cancelar el pedido.');
+      console.log('❌ Error al cancelar pedido:', error);
+      Alert.alert('Error', error.message || 'No se pudo cancelar el pedido.');
     }
   };
 
@@ -315,72 +333,15 @@ const MisPedidosScreen = () => {
         return;
       }
 
-      // Calcular promedio general
-      const promedioGeneral = Object.values(calificacionesUsuario).reduce((sum, valor) => sum + valor, 0) / 4;
-
-      // Obtener calificaciones existentes o crear nuevas
-      const calificacionesExistentes = await AsyncStorage.getItem(`calificaciones_${pedidoParaCalificar.negocioId || '1'}`);
-      let calificacionesData;
+      console.log('📤 Guardando calificación del emprendimiento en el backend...');
       
-      if (calificacionesExistentes) {
-        calificacionesData = JSON.parse(calificacionesExistentes);
-      } else {
-        calificacionesData = {
-          totalVotantes: 0,
-          calificacionGeneral: 0,
-          criterios: {
-            precio: { promedio: 0, votantes: 0 },
-            calidad: { promedio: 0, votantes: 0 },
-            servicio: { promedio: 0, votantes: 0 },
-            tiempoEntrega: { promedio: 0, votantes: 0 }
-          }
-        };
-      }
-
-      // Actualizar calificaciones
-      const nuevasCalificaciones = {
-        ...calificacionesData,
-        totalVotantes: calificacionesData.totalVotantes + 1,
-        calificacionGeneral: ((calificacionesData.calificacionGeneral * calificacionesData.totalVotantes) + promedioGeneral) / (calificacionesData.totalVotantes + 1),
-        criterios: {
-          precio: {
-            promedio: ((calificacionesData.criterios.precio.promedio * calificacionesData.criterios.precio.votantes) + calificacionesUsuario.precio) / (calificacionesData.criterios.precio.votantes + 1),
-            votantes: calificacionesData.criterios.precio.votantes + 1
-          },
-          calidad: {
-            promedio: ((calificacionesData.criterios.calidad.promedio * calificacionesData.criterios.calidad.votantes) + calificacionesUsuario.calidad) / (calificacionesData.criterios.calidad.votantes + 1),
-            votantes: calificacionesData.criterios.calidad.votantes + 1
-          },
-          servicio: {
-            promedio: ((calificacionesData.criterios.servicio.promedio * calificacionesData.criterios.servicio.votantes) + calificacionesUsuario.servicio) / (calificacionesData.criterios.servicio.votantes + 1),
-            votantes: calificacionesData.criterios.servicio.votantes + 1
-          },
-          tiempoEntrega: {
-            promedio: ((calificacionesData.criterios.tiempoEntrega.promedio * calificacionesData.criterios.tiempoEntrega.votantes) + calificacionesUsuario.tiempoEntrega) / (calificacionesData.criterios.tiempoEntrega.votantes + 1),
-            votantes: calificacionesData.criterios.tiempoEntrega.votantes + 1
-          }
-        }
-      };
-
-      // Guardar en AsyncStorage
-      await AsyncStorage.setItem(`calificaciones_${pedidoParaCalificar.negocioId || '1'}`, JSON.stringify(nuevasCalificaciones));
-      
-      // Mover el pedido a historial (pedido cerrado)
-      const pedidoCerrado = {
-        ...pedidoParaCalificar,
-        estado: 'cerrado',
-        fechaCalificacion: new Date().toISOString()
-      };
-      
-      // Agregar a completados
-      const historialActualizado = [...pedidosCompletados, pedidoCerrado];
-      setPedidosCompletados(historialActualizado);
-      await AsyncStorage.setItem('historialPedidos', JSON.stringify(historialActualizado));
-      
-      // Remover de pendientes
-      const pendientesActualizados = pedidosPendientes.filter(p => p.id !== pedidoParaCalificar.id);
-      setPedidosPendientes(pendientesActualizados);
-      await AsyncStorage.setItem('pedidosPendientes', JSON.stringify(pendientesActualizados));
+      // Guardar calificación en el backend
+      await pedidoService.calificarEmprendimiento(pedidoParaCalificar.id, {
+        precio: calificacionesUsuario.precio,
+        calidad: calificacionesUsuario.calidad,
+        servicio: calificacionesUsuario.servicio,
+        tiempo_entrega: calificacionesUsuario.tiempoEntrega
+      });
       
       // Cerrar modal y resetear estados
       setModalCalificacionVisible(false);
@@ -391,6 +352,9 @@ const MisPedidosScreen = () => {
         servicio: 0,
         tiempoEntrega: 0
       });
+      
+      // Recargar pedidos desde el backend
+      await cargarPedidos();
 
       Alert.alert(
         "¡Gracias!",
@@ -399,10 +363,10 @@ const MisPedidosScreen = () => {
       );
 
     } catch (error) {
-      console.log('Error al guardar calificación:', error);
+      console.log('❌ Error al guardar calificación:', error);
       Alert.alert(
         "Error",
-        "No se pudo guardar tu calificación. Inténtalo de nuevo.",
+        error.message || "No se pudo guardar tu calificación. Inténtalo de nuevo.",
         [{ text: "OK" }]
       );
     }
@@ -410,34 +374,18 @@ const MisPedidosScreen = () => {
 
   const confirmarRechazo = async (pedidoRechazado) => {
     try {
-      // Mover pedido rechazado al historial del cliente
-      const pedidoConRechazo = { 
-        ...pedidoRechazado, 
-        estado: 'rechazado', 
-        fechaConfirmacionRechazo: new Date().toISOString() 
-      };
+      console.log('✅ Confirmando rechazo del pedido:', pedidoRechazado.id);
       
-      // Remover de pedidos rechazados pendientes
-      const nuevosRechazadosPendientes = pedidosRechazadosPendientes.filter(p => p.id !== pedidoRechazado.id);
-      setPedidosRechazadosPendientes(nuevosRechazadosPendientes);
-      await AsyncStorage.setItem('pedidosRechazadosPendientes', JSON.stringify(nuevosRechazadosPendientes));
+      // Llamar al backend para marcar el rechazo como confirmado
+      await pedidoService.confirmarRechazo(pedidoRechazado.id);
       
-      // Agregar al historial del cliente (evitar duplicados)
-      const historialExistente = await AsyncStorage.getItem('historialPedidos');
-      const historial = historialExistente ? JSON.parse(historialExistente) : [];
+      // Recargar pedidos desde el backend
+      await cargarPedidos();
       
-      // Verificar que no esté ya en el historial
-      const yaExiste = historial.some(p => p.id === pedidoRechazado.id);
-      if (!yaExiste) {
-        historial.push(pedidoConRechazo);
-        await AsyncStorage.setItem('historialPedidos', JSON.stringify(historial));
-        setPedidosCompletados(historial);
-      }
-      
-      Alert.alert('Confirmado', 'Has confirmado el rechazo del pedido.');
+      Alert.alert('Confirmado', 'El pedido rechazado ha sido movido al historial.');
     } catch (error) {
-      console.log('Error al confirmar rechazo:', error);
-      Alert.alert('Error', 'No se pudo confirmar el rechazo.');
+      console.log('❌ Error al confirmar rechazo:', error);
+      Alert.alert('Error', error.message || 'No se pudo confirmar el rechazo.');
     }
   };
 
@@ -474,7 +422,7 @@ const MisPedidosScreen = () => {
         <Text style={[styles.pedidoTotal, { color: currentTheme.primary }]}>Total: ${pedido.total.toLocaleString()}</Text>
         <Text style={styles.motivoRechazo}>
           <Text style={styles.motivoLabel}>Motivo: </Text>
-          {pedido.motivoRechazo}
+          {pedido.motivoCancelacion}
         </Text>
         
         {pedido.horaEntregaEstimada && (

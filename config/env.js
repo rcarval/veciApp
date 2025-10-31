@@ -7,7 +7,7 @@
 
 // URL base del backend API
 // Se carga desde .env.development o .env.production según el entorno
-const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.API_BASE_URL || 'http://192.168.18.100:3000/api';
 
 // Validar que la URL esté configurada
 if (!API_BASE_URL) {
