@@ -538,13 +538,9 @@ const reportReasons = [
     setConfirmacionVisible(false);
     
     try {
-      // Guardar el pedido primero
+      // Guardar el pedido primero (WebSocket actualizará automáticamente)
       await guardarPedido();
-      console.log('✅ Pedido guardado, activando popup...');
-      
-      // Activar el popup inmediatamente usando AsyncStorage
-      await AsyncStorage.setItem('popupTrigger', Date.now().toString());
-      console.log('✅ Trigger de popup enviado');
+      console.log('✅ Pedido guardado - WebSocket actualizará automáticamente');
       
       // Abrir WhatsApp
       abrirWhatsApp();

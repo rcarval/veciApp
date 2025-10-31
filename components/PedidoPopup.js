@@ -13,6 +13,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import pedidoService from '../services/pedidoService';
+import io from 'socket.io-client';
+import env from '../config/env';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -168,133 +170,66 @@ const PedidoPopup = ({ navigation }) => {
     return () => clearInterval(interval);
   }, [usuario, hasLoggedIn]);
 
-  // Cargar pedidos pendientes solo si el usuario está logueado y ya hizo login en esta sesión
+
+  // Conectar WebSocket y escuchar eventos en tiempo real
   useEffect(() => {
-    console.log('📦 Cargando pedidos - Usuario:', usuario ? 'EXISTE' : 'NULL', 'hasLoggedIn:', hasLoggedIn);
-    
     if (!usuario || !hasLoggedIn) {
-      console.log('❌ No cargando pedidos - condiciones no cumplidas');
-      setVisible(false);
+      console.log('❌ WebSocket no conectado - usuario:', !!usuario, 'hasLoggedIn:', hasLoggedIn);
       return;
     }
-
+    
+    console.log('🔌 Conectando WebSocket para usuario:', usuario.id);
+    const socket = io(env.WS_URL, {
+      transports: ['websocket'],
+      forceNew: true
+    });
+    
+    // Función para cargar pedidos actuales
     const cargarPedidos = async () => {
       try {
-        console.log('📦 Cargando pedidos desde el backend...');
+        console.log('📦 [WebSocket] Cargando pedidos desde el backend...');
         const response = await pedidoService.obtenerPedidos();
         
-        console.log('📦 Response:', JSON.stringify(response, null, 2));
-        
         if (response.ok && response.pedidos) {
-          console.log(`✅ Pedidos cargados: ${response.pedidos.length}`);
-          console.log('📦 Todos los pedidos:', JSON.stringify(response.pedidos, null, 2));
-          
-          // Filtrar solo pedidos pendientes
           const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
           const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
           
-          console.log(`📦 Pendientes: ${pendientes.length}, Rechazados sin confirmar: ${rechazados.length}`);
+          console.log(`📦 [WebSocket] Pedidos: ${pendientes.length} pendientes, ${rechazados.length} rechazados`);
           
           setPedidosPendientes(pendientes);
           setPedidosRechazadosPendientes(rechazados);
           
           const totalPendientes = pendientes.length + rechazados.length;
-          console.log('📊 Total pendientes:', totalPendientes);
-          console.log('👁️ Popup visible:', totalPendientes > 0);
+          console.log('📊 [WebSocket] Total pendientes:', totalPendientes, 'Visible:', totalPendientes > 0);
           setVisible(totalPendientes > 0);
-        } else {
-          console.log('⚠️ No se pudieron cargar pedidos. Response:', response);
-          setVisible(false);
         }
       } catch (error) {
-        console.log('❌ Error al cargar pedidos:', error);
-        console.log('❌ Error details:', error.message);
-        setVisible(false);
+        console.log('❌ [WebSocket] Error al cargar pedidos:', error);
       }
     };
-
+    
+    // Cargar pedidos iniciales
     cargarPedidos();
-  }, [usuario, hasLoggedIn]);
-
-  // Monitorear trigger de popup usando AsyncStorage
-  useEffect(() => {
-    if (!usuario || !hasLoggedIn) {
-      return;
-    }
-
-    let lastTrigger = null;
     
-    const verificarTrigger = async () => {
-      try {
-        const trigger = await AsyncStorage.getItem('popupTrigger');
-        if (trigger && trigger !== lastTrigger) {
-          console.log('🎯 TRIGGER DE POPUP DETECTADO');
-          lastTrigger = trigger;
-          
-          // Cargar pedidos desde el backend inmediatamente
-          console.log('🎯 Cargando pedidos tras trigger...');
-          const response = await pedidoService.obtenerPedidos();
-          
-          if (response.ok && response.pedidos) {
-            const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
-            const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
-            
-            console.log(`📦 Pendientes: ${pendientes.length}, Rechazados sin confirmar: ${rechazados.length}`);
-            
-            setPedidosPendientes(pendientes);
-            setPedidosRechazadosPendientes(rechazados);
-            
-            const totalPendientes = pendientes.length + rechazados.length;
-            console.log('🎯 Total pendientes tras trigger:', totalPendientes);
-            console.log('🎯 Marcando popup visible:', totalPendientes > 0);
-            setVisible(totalPendientes > 0);
-          }
-        }
-      } catch (error) {
-        console.log('Error al verificar trigger:', error);
-      }
+    // Escuchar eventos de cambio de estado del pedido
+    socket.on(`pedido:estado:${usuario.id}`, (data) => {
+      console.log('📡 [WebSocket] Evento recibido pedido:estado:', data);
+      // Recargar pedidos cuando llegue un cambio
+      cargarPedidos();
+    });
+    
+    socket.on('connect', () => {
+      console.log('✅ [WebSocket] Conectado - ID:', socket.id);
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('❌ [WebSocket] Desconectado');
+    });
+    
+    return () => {
+      console.log('🔌 [WebSocket] Desconectando...');
+      socket.disconnect();
     };
-
-    // Verificar trigger cada 500ms para reducir logs
-    const interval = setInterval(verificarTrigger, 500);
-    
-    return () => clearInterval(interval);
-  }, [usuario, hasLoggedIn]);
-
-  // Escuchar cambios en pedidos solo si el usuario está logueado y ya hizo login en esta sesión
-  useEffect(() => {
-    if (!usuario || !hasLoggedIn) {
-      return;
-    }
-    
-    // Función para verificar pedidos
-    const verificarPedidos = async () => {
-      try {
-        console.log('🔄 Verificando pedidos periódicamente...');
-        const response = await pedidoService.obtenerPedidos();
-        
-        if (response.ok && response.pedidos) {
-          const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
-          const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
-          
-          setPedidosPendientes(pendientes);
-          setPedidosRechazadosPendientes(rechazados);
-          
-          const totalPendientes = pendientes.length + rechazados.length;
-          setVisible(totalPendientes > 0);
-        }
-      } catch (error) {
-        console.log('Error al verificar pedidos:', error);
-      }
-    };
-
-    // Verificar inmediatamente
-    verificarPedidos();
-    
-    // Luego verificar cada 5 segundos para reducir logs
-    const interval = setInterval(verificarPedidos, 5000);
-
-    return () => clearInterval(interval);
   }, [usuario, hasLoggedIn]);
 
   // Animación de entrada cuando se vuelve visible

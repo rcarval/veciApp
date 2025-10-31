@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -16,12 +16,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import { useUser } from '../context/UserContext';
 import pedidoService from '../services/pedidoService';
+import io from 'socket.io-client';
+import env from '../config/env';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { currentTheme } = useTheme();
+  const { usuario } = useUser();
   const [pedidos, setPedidos] = useState([]);
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
@@ -65,19 +69,8 @@ const MisPedidosScreen = () => {
     return logosEmpresas[nombreNegocio] || null;
   };
 
-  useEffect(() => {
-    cargarPedidos();
-  }, []);
-
-  // Recargar datos cuando la pantalla reciba el foco
-  useFocusEffect(
-    React.useCallback(() => {
-      console.log('🔄 MisPedidosScreen recibió foco, recargando datos...');
-      cargarPedidos();
-    }, [])
-  );
-
-  const cargarPedidos = async () => {
+  // Función para cargar pedidos del backend
+  const cargarPedidos = useCallback(async () => {
     try {
       console.log('🔍 DEBUG - Cargando pedidos desde el backend...');
       
@@ -101,7 +94,8 @@ const MisPedidosScreen = () => {
           tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
           motivoCancelacion: pedido.motivo_rechazo,
           rechazo_confirmado: pedido.rechazo_confirmado || false,
-          entrega_confirmada: pedido.entrega_confirmada || false, // Nuevo campo
+          entrega_confirmada: pedido.entrega_confirmada || false,
+          cancelacion_confirmada: pedido.cancelacion_confirmada || false, // Nuevo campo
         }));
         
         // Separar pedidos por estado
@@ -112,15 +106,19 @@ const MisPedidosScreen = () => {
         );
         const rechazados = pedidosMapeados.filter(p => p.estado === 'rechazado');
         
-        // Los rechazados confirmados van al historial junto con entregados confirmados/cerrados
+        // Los rechazados/cancelados confirmados van al historial junto con entregados confirmados/cerrados
         const completados = pedidosMapeados.filter(p => 
           (p.estado === 'entregado' && p.entrega_confirmada) || 
           p.estado === 'cerrado' || 
-          (p.estado === 'rechazado' && p.rechazo_confirmado)
+          (p.estado === 'rechazado' && p.rechazo_confirmado) ||
+          (p.estado === 'cancelado' && p.cancelacion_confirmada)
         );
         
-        // Solo mostrar rechazados NO confirmados en la pestaña rechazados
-        const rechazadosPendientes = pedidosMapeados.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
+        // Solo mostrar rechazados/cancelados NO confirmados en la pestaña rechazados
+        const rechazadosPendientes = pedidosMapeados.filter(p => 
+          (p.estado === 'rechazado' && !p.rechazo_confirmado) ||
+          (p.estado === 'cancelado' && !p.cancelacion_confirmada)
+        );
         
         console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
         
@@ -140,7 +138,50 @@ const MisPedidosScreen = () => {
       setPedidosCompletados([]);
       setPedidosRechazadosPendientes([]);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    cargarPedidos();
+  }, [cargarPedidos]);
+
+  // Recargar datos cuando la pantalla reciba el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('🔄 MisPedidosScreen recibió foco, recargando datos...');
+      cargarPedidos();
+    }, [cargarPedidos])
+  );
+
+  // Escuchar eventos WebSocket para cambios de estado
+  useEffect(() => {
+    if (!usuario?.id) return;
+
+    console.log('🔌 Conectando WebSocket para MisPedidos...');
+    const socket = io(env.WS_URL, {
+      transports: ['websocket'],
+      forceNew: true
+    });
+
+    socket.on('connect', () => {
+      console.log('✅ WebSocket conectado en MisPedidos');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket desconectado en MisPedidos');
+    });
+
+    // Escuchar cambios de estado de pedidos para el cliente
+    socket.on(`pedido:estado:${usuario.id}`, (data) => {
+      console.log('📡 Cambio de estado recibido via WebSocket en MisPedidos:', data);
+      // Recargar la lista de pedidos
+      cargarPedidos();
+    });
+
+    return () => {
+      console.log('🔌 Desconectando WebSocket de MisPedidos...');
+      socket.disconnect();
+    };
+  }, [usuario?.id, cargarPedidos]);
 
   const obtenerEstadoColor = (estado) => {
     switch (estado) {
@@ -414,7 +455,7 @@ const MisPedidosScreen = () => {
             </Text>
           </View>
           <View style={[styles.estadoBadge, { backgroundColor: '#e74c3c' }]}>
-            <Text style={styles.estadoTexto}>Rechazado</Text>
+            <Text style={styles.estadoTexto}>{pedido.estado === 'cancelado' ? 'Cancelado' : 'Rechazado'}</Text>
           </View>
         </View>
       
@@ -424,6 +465,26 @@ const MisPedidosScreen = () => {
           <Text style={styles.motivoLabel}>Motivo: </Text>
           {pedido.motivoCancelacion}
         </Text>
+        
+        {/* Mostrar botón de confirmar solo si no está confirmado */}
+        {!pedido.cancelacion_confirmada && !pedido.rechazo_confirmado && (
+          <TouchableOpacity 
+            style={[styles.accionButtonNuevaLinea, { backgroundColor: currentTheme.primary }]} 
+            onPress={() => {
+              if (pedido.estado === 'cancelado') {
+                // TODO: Agregar función para confirmar cancelación del cliente
+                Alert.alert('Info', 'El emprendedor debe confirmar tu cancelación primero.');
+              } else {
+                confirmarRechazo(pedido);
+              }
+            }}
+          >
+            <FontAwesome name="check" size={14} color="white" />
+            <Text style={styles.accionTextoNuevaLinea}>
+              {pedido.estado === 'cancelado' ? 'Esperando confirmación' : 'Confirmar Rechazo'}
+            </Text>
+          </TouchableOpacity>
+        )}
         
         {pedido.horaEntregaEstimada && (
           <View style={styles.horaEntregaContainer}>
@@ -437,14 +498,6 @@ const MisPedidosScreen = () => {
           </View>
         )}
       </View>
-      
-      <TouchableOpacity
-        style={styles.confirmarRechazoButton}
-        onPress={() => confirmarRechazo(pedido)}
-      >
-        <FontAwesome name="check" size={16} color="white" />
-        <Text style={styles.confirmarRechazoTexto}>Confirmar Rechazo</Text>
-      </TouchableOpacity>
       </View>
     );
   };

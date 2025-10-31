@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,8 @@ import * as Location from "expo-location";
 import { Picker } from '@react-native-picker/picker';
 import { useTheme } from '../context/ThemeContext';
 import pedidoService from '../services/pedidoService';
+import io from 'socket.io-client';
+import env from '../config/env';
 
 const PedidosRecibidosScreen = () => {
   const navigation = useNavigation();
@@ -86,9 +88,98 @@ const PedidosRecibidosScreen = () => {
     { key: 'cooperacion', label: 'Cooperación', icon: 'users' }
   ];
 
+  // Función para cargar pedidos recibidos del backend
+  const cargarPedidosRecibidos = useCallback(async () => {
+    try {
+      setCargando(true);
+      
+      console.log('📥 Cargando pedidos recibidos desde el backend...');
+      const response = await pedidoService.obtenerPedidosRecibidos();
+      
+      if (response.ok && response.pedidos) {
+        console.log(`✅ Pedidos recibidos cargados: ${response.pedidos.length}`);
+        
+        // Mapear los datos del backend al formato esperado por el frontend
+        const pedidosMapeados = response.pedidos.map(pedido => {
+          // Generar datos adicionales del cliente solo si faltan datos del backend
+          const datosCliente = generarDatosCliente();
+          
+          return {
+            id: pedido.id,
+            clienteId: pedido.usuario_id, // ID del cliente para cargar calificación
+            negocio: pedido.emprendimiento_nombre || 'Mi Negocio',
+            fecha: pedido.created_at,
+            fechaHoraReserva: pedido.created_at,
+            estado: pedido.estado,
+            cliente: pedido.cliente_nombre || datosCliente.nombre,
+            telefonoCliente: pedido.cliente_telefono || datosCliente.telefono,
+            fotoPerfilCliente: pedido.cliente_avatar || datosCliente.fotoPerfil,
+            pedidosRealizadosCliente: pedido.total_pedidos || 1, // Usar datos reales del backend
+            clienteDesde: pedido.primera_compra ? new Date(pedido.primera_compra).toLocaleDateString('es-CL') : datosCliente.clienteDesde, // Usar fecha real del backend
+            direccion: pedido.direccion_entrega,
+            modoEntrega: pedido.modo_entrega,
+            total: parseFloat(pedido.total),
+            productos: pedido.detalle || [],
+            tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+            motivoCancelacion: pedido.motivo_rechazo,
+            cancelacion_confirmada: pedido.cancelacion_confirmada || false, // Nuevo campo
+          };
+        });
+        
+        setPedidosRecibidos(pedidosMapeados);
+      } else {
+        console.log('⚠️ No se pudieron cargar pedidos');
+        setPedidosRecibidos([]);
+      }
+    } catch (error) {
+      console.log('❌ Error al cargar pedidos recibidos:', error);
+      Alert.alert('Error', 'No se pudieron cargar los pedidos recibidos');
+      setPedidosRecibidos([]);
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
   useEffect(() => {
     cargarPedidosRecibidos();
-  }, []);
+  }, [cargarPedidosRecibidos]);
+
+  // Escuchar eventos WebSocket para nuevos pedidos
+  useEffect(() => {
+    if (!usuario?.id) return;
+
+    console.log('🔌 Conectando WebSocket para PedidosRecibidos...');
+    const socket = io(env.WS_URL, {
+      transports: ['websocket'],
+      forceNew: true
+    });
+
+    socket.on('connect', () => {
+      console.log('✅ WebSocket conectado en PedidosRecibidos');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket desconectado en PedidosRecibidos');
+    });
+
+    // Escuchar nuevos pedidos para el emprendedor
+    socket.on(`pedido:nuevo:${usuario.id}`, (data) => {
+      console.log('📡 Nuevo pedido recibido via WebSocket:', data);
+      // Recargar la lista de pedidos
+      cargarPedidosRecibidos();
+    });
+
+    // También escuchar cambios de estado (si el emprendedor está viendo la pantalla)
+    socket.on(`pedido:estado:${usuario.id}`, (data) => {
+      console.log('📡 Cambio de estado recibido via WebSocket:', data);
+      cargarPedidosRecibidos();
+    });
+
+    return () => {
+      console.log('🔌 Desconectando WebSocket de PedidosRecibidos...');
+      socket.disconnect();
+    };
+  }, [usuario?.id, cargarPedidosRecibidos]);
 
   // Función temporal para limpiar AsyncStorage (eliminar después de usar)
   const limpiarAsyncStorage = async () => {
@@ -215,56 +306,6 @@ const PedidosRecibidosScreen = () => {
       return coordenadasFallback;
     } finally {
       setCargandoMapa(false);
-    }
-  };
-
-  const cargarPedidosRecibidos = async () => {
-    try {
-      setCargando(true);
-      
-      console.log('📥 Cargando pedidos recibidos desde el backend...');
-      const response = await pedidoService.obtenerPedidosRecibidos();
-      
-      if (response.ok && response.pedidos) {
-        console.log(`✅ Pedidos recibidos cargados: ${response.pedidos.length}`);
-        
-        // Mapear los datos del backend al formato esperado por el frontend
-        const pedidosMapeados = response.pedidos.map(pedido => {
-          // Generar datos adicionales del cliente solo si faltan datos del backend
-          const datosCliente = generarDatosCliente();
-          
-          return {
-            id: pedido.id,
-            clienteId: pedido.usuario_id, // ID del cliente para cargar calificación
-            negocio: pedido.emprendimiento_nombre || 'Mi Negocio',
-            fecha: pedido.created_at,
-            fechaHoraReserva: pedido.created_at,
-            estado: pedido.estado,
-            cliente: pedido.cliente_nombre || datosCliente.nombre,
-            telefonoCliente: pedido.cliente_telefono || datosCliente.telefono,
-            fotoPerfilCliente: pedido.cliente_avatar || datosCliente.fotoPerfil,
-            pedidosRealizadosCliente: pedido.total_pedidos || 1, // Usar datos reales del backend
-            clienteDesde: pedido.primera_compra ? new Date(pedido.primera_compra).toLocaleDateString('es-CL') : datosCliente.clienteDesde, // Usar fecha real del backend
-            direccion: pedido.direccion_entrega,
-            modoEntrega: pedido.modo_entrega,
-            total: parseFloat(pedido.total),
-            productos: pedido.detalle || [],
-            tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
-            motivoCancelacion: pedido.motivo_rechazo,
-          };
-        });
-        
-        setPedidosRecibidos(pedidosMapeados);
-      } else {
-        console.log('⚠️ No se pudieron cargar pedidos');
-        setPedidosRecibidos([]);
-      }
-    } catch (error) {
-      console.log('❌ Error al cargar pedidos recibidos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los pedidos recibidos');
-      setPedidosRecibidos([]);
-    } finally {
-      setCargando(false);
     }
   };
 
@@ -473,13 +514,18 @@ const PedidosRecibidosScreen = () => {
 
   const confirmarCancelacion = async (pedido) => {
     try {
-      // Simplemente recargar datos desde el backend
+      console.log('📤 Confirmando cancelación del pedido:', pedido.id);
+      
+      // Llamar al backend para marcar la cancelación como confirmada
+      await pedidoService.confirmarCancelacion(pedido.id);
+      
+      // Recargar pedidos desde el backend
       await cargarPedidosRecibidos();
       
-      Alert.alert('Cancelación confirmada', 'La cancelación del pedido ha sido confirmada.');
+      Alert.alert('Cancelación confirmada', 'El pedido cancelado ha sido movido al historial.');
     } catch (error) {
       console.log('❌ Error al confirmar cancelación:', error);
-      Alert.alert('Error', 'No se pudo confirmar la cancelación.');
+      Alert.alert('Error', error.message || 'No se pudo confirmar la cancelación.');
     }
   };
 
@@ -551,15 +597,18 @@ const PedidosRecibidosScreen = () => {
         ['pendiente', 'confirmado', 'preparando', 'listo'].includes(pedido.estado)
       );
     } else if (tabActivo === "cancelados") {
-      // Filtrar solo pedidos cancelados que tengan motivo de cancelación
+      // Filtrar solo pedidos cancelados NO confirmados (pendientes de confirmar)
       pedidosFiltrados = pedidosRecibidos.filter(pedido => 
-        pedido.estado === 'cancelado' && pedido.motivoCancelacion
+        pedido.estado === 'cancelado' && pedido.motivoCancelacion && !pedido.cancelacion_confirmada
       );
     } else {
-      // Historial: solo entregados y rechazados, excluyendo cancelados
-      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
-        ['entregado', 'rechazado'].includes(pedido.estado) && pedido.estado !== 'cancelado'
-      );
+      // Historial: entregados, rechazados y cancelados CONFIRMADOS
+      pedidosFiltrados = pedidosRecibidos.filter(pedido => {
+        if (pedido.estado === 'entregado') return true;
+        if (pedido.estado === 'rechazado') return true;
+        if (pedido.estado === 'cancelado' && pedido.cancelacion_confirmada) return true;
+        return false;
+      });
     }
     
     // Ordenar del más nuevo al más antiguo por fechaHoraReserva
@@ -965,7 +1014,7 @@ const PedidosRecibidosScreen = () => {
           </Text>
           <View style={[styles.tabBadge, { backgroundColor: tabActivo === "cancelados" ? "rgba(255,255,255,0.3)" : '#e74c3c' + '20' }]}>
             <Text style={[styles.tabBadgeTexto, { color: tabActivo === "cancelados" ? "white" : '#e74c3c' }]}>
-              {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion).length}
+              {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada).length}
             </Text>
           </View>
         </TouchableOpacity>
@@ -979,7 +1028,12 @@ const PedidosRecibidosScreen = () => {
           </Text>
           <View style={[styles.tabBadge, { backgroundColor: tabActivo === "historial" ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
             <Text style={[styles.tabBadgeTexto, { color: tabActivo === "historial" ? "white" : currentTheme.primary }]}>
-              {pedidosRecibidos.filter(p => ['entregado', 'rechazado'].includes(p.estado) && p.estado !== 'cancelado').length}
+              {pedidosRecibidos.filter(p => {
+                if (p.estado === 'entregado') return true;
+                if (p.estado === 'rechazado') return true;
+                if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
+                return false;
+              }).length}
             </Text>
           </View>
         </TouchableOpacity>

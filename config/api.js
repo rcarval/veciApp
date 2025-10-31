@@ -59,6 +59,7 @@ export const API_ENDPOINTS = {
   CONFIRMAR_PEDIDO: (id) => `${API_BASE_URL}/pedidos/${id}/confirmar`,
   CAMBIAR_ESTADO_PEDIDO: (id) => `${API_BASE_URL}/pedidos/${id}/estado`,
   CONFIRMAR_RECHAZO: (id) => `${API_BASE_URL}/pedidos/${id}/confirmar-rechazo`,
+  CONFIRMAR_CANCELACION: (id) => `${API_BASE_URL}/pedidos/${id}/confirmar-cancelacion`,
   CONFIRMAR_ENTREGA: (id) => `${API_BASE_URL}/pedidos/${id}/confirmar-entrega`,
   CALIFICAR_CLIENTE: (id) => `${API_BASE_URL}/pedidos/${id}/calificar-cliente`,
   CALIFICACION_CLIENTE: (clienteId) => `${API_BASE_URL}/pedidos/cliente/${clienteId}/calificacion`,

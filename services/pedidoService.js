@@ -228,6 +228,39 @@ class PedidoService {
   }
 
   /**
+   * Confirma que el emprendedor aceptó la cancelación del pedido
+   */
+  async confirmarCancelacion(id) {
+    try {
+      const token = await this.getAuthToken();
+      const url = API_ENDPOINTS.CONFIRMAR_CANCELACION(id);
+      
+      console.log('[Pedido] PATCH CONFIRMAR CANCELACION', url);
+      
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      console.log('[Pedido] PATCH CONFIRMAR CANCELACION status:', response.status, 'ok:', response.ok);
+      
+      if (!response.ok) {
+        console.log('[Pedido] PATCH CONFIRMAR CANCELACION body:', data);
+        throw new Error(data.mensaje || 'Error al confirmar la cancelación');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error en confirmarCancelacion:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Confirma que el cliente recibió el pedido
    */
   async confirmarEntrega(id) {
