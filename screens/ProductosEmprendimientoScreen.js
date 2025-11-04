@@ -692,23 +692,27 @@ const ProductosEmprendimientoScreen = () => {
                 <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Categoría*</Text>
               </View>
               <View style={styles.categoriasContainerModerno}>
-                {categoriasProducto.map((cat) => (
-                  <TouchableOpacity
-                    key={cat.id}
-                    style={[
+              {categoriasProducto.map((cat) => (
+                <TouchableOpacity
+                  key={cat.id}
+                  style={[
                       styles.categoriaButtonModerno,
-                      { borderColor: currentTheme.primary },
+                    { borderColor: currentTheme.primary },
                       categoria === cat.id && [styles.categoriaSelectedModerno, { backgroundColor: currentTheme.primary }],
-                    ]}
+                  ]}
                     onPress={() => {
                       setCategoria(cat.id);
                       // Si cambia de Oferta a otra categoría, limpiar precio de oferta
                       if (cat.id !== 'oferta') {
                         setPrecioOferta("");
                       }
+                      // Si selecciona Oferta y está activo "Precio a cotizar", desactivarlo
+                      if (cat.id === 'oferta' && precioACotizar) {
+                        setPrecioACotizar(false);
+                      }
                     }}
                     activeOpacity={0.7}
-                  >
+                >
                     <FontAwesome
                       name={cat.icon}
                       size={16}

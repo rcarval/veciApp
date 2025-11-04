@@ -1536,7 +1536,7 @@ const EmprendimientoScreen = () => {
   const eliminarEmprendimiento = (id) => {
     Alert.alert(
       "Confirmar eliminación",
-      "¿Estás seguro de que deseas eliminar este emprendimiento?",
+      "¿Estás seguro de que deseas eliminar este emprendimiento? El emprendimiento y todos sus productos quedarán inactivos.",
       [
         { text: "Cancelar", style: "cancel" },
         {
