@@ -116,6 +116,7 @@ class ProductoService {
       formData.append('precio', productoData.precio.toString());
       formData.append('categoria', productoData.categoria || 'principal');
       formData.append('oferta', productoData.oferta ? 'true' : 'false');
+      formData.append('precio_a_cotizar', productoData.precio_a_cotizar ? 'true' : 'false');
       
       if (productoData.precio_oferta) {
         formData.append('precio_oferta', productoData.precio_oferta.toString());
@@ -183,9 +184,10 @@ class ProductoService {
       // Agregar datos del producto
       if (productoData.nombre) formData.append('nombre', productoData.nombre);
       if (productoData.descripcion) formData.append('descripcion', productoData.descripcion);
-      if (productoData.precio) formData.append('precio', productoData.precio.toString());
+      if (productoData.precio !== undefined) formData.append('precio', productoData.precio.toString());
       if (productoData.categoria) formData.append('categoria', productoData.categoria);
       if (productoData.oferta !== undefined) formData.append('oferta', productoData.oferta ? 'true' : 'false');
+      if (productoData.precio_a_cotizar !== undefined) formData.append('precio_a_cotizar', productoData.precio_a_cotizar ? 'true' : 'false');
       if (productoData.activo !== undefined) formData.append('activo', productoData.activo ? 'true' : 'false');
       
       if (productoData.precio_oferta) {
@@ -230,6 +232,51 @@ class ProductoService {
       return data;
     } catch (error) {
       console.error('Error en actualizarProducto:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Toggle estado activo/inactivo de un producto
+   * @param {number} emprendimientoId - ID del emprendimiento
+   * @param {number} productoId - ID del producto
+   * @param {boolean} activo - Nuevo estado
+   * @returns {Promise<Object>} Respuesta de la API
+   */
+  async toggleProducto(emprendimientoId, productoId, activo) {
+    try {
+      const token = await this.getAuthToken();
+      if (!token) {
+        throw new Error('No hay token de autenticación');
+      }
+
+      const url = API_ENDPOINTS.PRODUCTO_BY_ID(emprendimientoId, productoId);
+      console.log('[Producto] PATCH (toggle)', url, { activo });
+      
+      const formData = new FormData();
+      formData.append('activo', activo ? 'true' : 'false');
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      console.log('[Producto] PATCH status:', response.status, 'ok:', response.ok);
+      if (!response.ok) {
+        console.log('[Producto] PATCH body:', data);
+      }
+
+      if (!response.ok) {
+        throw new Error(data.mensaje || 'Error al cambiar estado del producto');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error en toggleProducto:', error);
       throw error;
     }
   }

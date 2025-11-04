@@ -25,6 +25,10 @@ export const API_ENDPOINTS = {
   COMUNAS: `${API_BASE_URL}/comunas`,
   COMUNA_BY_ID: (id) => `${API_BASE_URL}/comunas/${id}`,
   
+  // Categorías
+  CATEGORIAS: `${API_BASE_URL}/categorias`,
+  CATEGORIA_BY_CODIGO: (codigo) => `${API_BASE_URL}/categorias/${codigo}`,
+  
   // Perfil
   ACTUALIZAR_PERFIL: `${API_BASE_URL}/auth/perfil`,
   
@@ -45,11 +49,28 @@ export const API_ENDPOINTS = {
   EMPRENDIMIENTO_BY_ID: (id) => `${API_BASE_URL}/emprendimientos/${id}`,
   SUBIR_LOGO_EMPRENDIMIENTO: (id) => `${API_BASE_URL}/emprendimientos/${id}/logo`,
   SUBIR_BACKGROUND_EMPRENDIMIENTO: (id) => `${API_BASE_URL}/emprendimientos/${id}/background`,
+  ENVIAR_CODIGO_VERIFICACION: (id) => `${API_BASE_URL}/emprendimientos/${id}/enviar-codigo`,
+  VERIFICAR_CODIGO_EMPRENDIMIENTO: (id) => `${API_BASE_URL}/emprendimientos/${id}/verificar-codigo`,
+  
+  // Vendedores
+  CREAR_VENDEDOR: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/vendedor`,
+  OBTENER_VENDEDOR: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/vendedor`,
+  ELIMINAR_VENDEDOR: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/vendedor`,
   
   // Productos
   PRODUCTOS: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/productos`,
   MIS_PRODUCTOS: (emprendimientoId) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/mis-productos`,
   PRODUCTO_BY_ID: (emprendimientoId, id) => `${API_BASE_URL}/emprendimientos/${emprendimientoId}/productos/${id}`,
+  OFERTAS: `${API_BASE_URL}/ofertas`,
+  
+  // Búsqueda
+  BUSCAR: `${API_BASE_URL}/busqueda`,
+  
+  // Favoritos
+  FAVORITOS: `${API_BASE_URL}/favoritos`,
+  AGREGAR_FAVORITO: `${API_BASE_URL}/favoritos`,
+  ELIMINAR_FAVORITO: (emprendimientoId) => `${API_BASE_URL}/favoritos/${emprendimientoId}`,
+  VERIFICAR_FAVORITO: (emprendimientoId) => `${API_BASE_URL}/favoritos/check/${emprendimientoId}`,
   
   // Pedidos
   MIS_PEDIDOS: `${API_BASE_URL}/pedidos`,
