@@ -5,53 +5,37 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  useWindowDimensions,
+  ActivityIndicator,
 } from "react-native";
-import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { LineChart } from "react-native-chart-kit";
+import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { API_ENDPOINTS } from "../config/api";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const MisEstadisticasScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { emprendimiento } = route.params;
-  const { width } = useWindowDimensions();
   const { currentTheme } = useTheme();
 
   // Estados
-  const [periodo, setPeriodo] = useState("año");
-  const [fechaInicio, setFechaInicio] = useState(new Date());
-  const [fechaFin, setFechaFin] = useState(new Date());
-  const [labels, setLabels] = useState([]);
-  const [visualizaciones, setVisualizaciones] = useState([]);
-  const [contactos, setContactos] = useState([]);
-  
-  // Estados para datos dinámicos
-  const [datosPedidos, setDatosPedidos] = useState({});
-  const [datosCalificaciones, setDatosCalificaciones] = useState({
-    calificacionGeneral: 0,
-    totalVotantes: 0,
-    criterios: {
-      precio: { promedio: 0},
-      calidad: { promedio: 0},
-      servicio: { promedio: 0},
-      tiempoEntrega: { promedio: 0}
-    }
-  });
-  const [cargandoEstadisticas, setCargandoEstadisticas] = useState(false);
+  const [periodo, setPeriodo] = useState("mes");
+  const [cargando, setCargando] = useState(true);
+  const [estadisticas, setEstadisticas] = useState(null);
+  const [insights, setInsights] = useState([]);
+  const [recomendaciones, setRecomendaciones] = useState([]);
 
-  // Función para cargar estadísticas del backend
+  // Función para cargar estadísticas avanzadas
   const cargarEstadisticas = useCallback(async () => {
     try {
-      setCargandoEstadisticas(true);
-      console.log('📊 Cargando estadísticas del emprendimiento:', emprendimiento.id);
+      setCargando(true);
+      console.log('📊 Cargando estadísticas avanzadas:', emprendimiento.id, periodo);
       
       const token = await AsyncStorage.getItem('token');
-      const url = API_ENDPOINTS.ESTADISTICAS_EMPRENDIMIENTO(emprendimiento.id);
+      const url = API_ENDPOINTS.ESTADISTICAS_AVANZADAS(emprendimiento.id, periodo);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -62,628 +46,741 @@ const MisEstadisticasScreen = () => {
       });
 
       const data = await response.json();
-      console.log('✅ Estadísticas cargadas:', data);
+      console.log('✅ Estadísticas avanzadas cargadas:', data);
       
       if (response.ok && data.estadisticas) {
-        const { calificaciones, pedidos, visualizaciones, pedidos_grafico } = data.estadisticas;
-        
-        console.log('📊 Visualizaciones recibidas:', visualizaciones);
-        console.log('📊 Pedidos gráfico recibidos:', pedidos_grafico);
-        
-        // Actualizar calificaciones
-        setDatosCalificaciones({
-          calificacionGeneral: calificaciones.calificacion_promedio || 0,
-          totalVotantes: calificaciones.total_calificaciones || 0,
-          criterios: {
-            precio: { promedio: calificaciones.precio_promedio || 0 },
-            calidad: { promedio: calificaciones.calidad_promedio || 0 },
-            servicio: { promedio: calificaciones.servicio_promedio || 0 },
-            tiempoEntrega: { promedio: calificaciones.tiempo_entrega_promedio || 0 }
-          }
-        });
-        
-        // Actualizar datos de pedidos según el período actual
-        const pedidosPorPeriodo = {
-          totalPedidos: pedidos.total || 0,
-          montoTotal: pedidos.monto_total || 0,
-          promedioPedido: pedidos.promedio_pedido || 0,
-          pedidosPeriodo: pedidos.por_periodo[periodo].pedidos || 0,
-          montoPeriodo: pedidos.por_periodo[periodo].monto || 0
-        };
-        
-        setDatosPedidos(pedidosPorPeriodo);
-        
-        // Actualizar arrays de visualizaciones y pedidos para el gráfico
-        const visualizacionesArray = visualizaciones[periodo] || [];
-        const pedidosArray = pedidos_grafico[periodo] || [];
-        
-        console.log(`📊 Visualizaciones para período ${periodo}:`, visualizacionesArray);
-        console.log(`📊 Pedidos para período ${periodo}:`, pedidosArray);
-        
-        // Actualizar los estados con los datos del backend (pueden estar vacíos si no hay datos)
-        setVisualizaciones(visualizacionesArray);
-        setContactos(pedidosArray);
-        
-        console.log('✅ Datos de pedidos y calificaciones actualizados');
+        setEstadisticas(data.estadisticas);
+        setInsights(data.insights || []);
+        setRecomendaciones(data.recomendaciones || []);
       }
     } catch (error) {
       console.error('❌ Error al cargar estadísticas:', error);
     } finally {
-      setCargandoEstadisticas(false);
+      setCargando(false);
     }
   }, [emprendimiento.id, periodo]);
 
-  // Función para generar datos de prueba seguros
-  const generarDatos = (labels, periodo) => {
-    let baseVisualizaciones, baseContactos;
-    
-    switch(periodo) {
-      case "dia":
-        baseVisualizaciones = 10;
-        baseContactos = 2;
-        break;
-      case "semana":
-        baseVisualizaciones = 30;
-        baseContactos = 6;
-        break;
-      case "mes":
-        baseVisualizaciones = 20;
-        baseContactos = 4;
-        break;
-      case "año":
-      default:
-        baseVisualizaciones = 50;
-        baseContactos = 10;
-    }
-    
-    const visualizaciones = labels.map((_, i) => 
-      Math.max(0, Math.floor(baseVisualizaciones * (1 + Math.sin(i * 0.5)) + Math.floor(Math.random() * (baseVisualizaciones/2)))
-    ));
-    
-    const contactos = labels.map((_, i) => 
-      Math.max(0, Math.floor(baseContactos * (1 + Math.sin(i * 0.3)) + Math.floor(Math.random() * (baseContactos/2)))
-    ));
-    
-    return { visualizaciones, contactos };
-  };
-
-  // Efecto para cargar estadísticas al montar el componente
+  // Cargar estadísticas cuando cambia el período
   useEffect(() => {
     if (emprendimiento?.id) {
       cargarEstadisticas();
     }
-  }, [emprendimiento?.id, cargarEstadisticas]);
-
-  // Efecto para calcular las fechas y datos
-  useEffect(() => {
-    const hoy = new Date();
-    let nuevosLabels = [];
-    
-    switch (periodo) {
-      case "año":
-        nuevosLabels = Array.from({ length: 12 }, (_, i) => {
-          const fecha = new Date();
-          fecha.setMonth(hoy.getMonth() - (11 - i));
-          return fecha.toLocaleString('default', { month: 'short' });
-        });
-        setFechaInicio(new Date(hoy.getFullYear() - 1, hoy.getMonth(), hoy.getDate()));
-        break;
-        
-        case "mes":
-            const diasAMostrar = 30; // Últimos 30 días
-            const puntosDeseados = 5; // Puntos óptimos para el gráfico
-            
-            // Calcular agrupación: 30 días divididos en 5 puntos = 6 días por punto
-            const agrupacion = 6; // Fijo: 6 días por punto
-            
-            nuevosLabels = Array.from({ length: puntosDeseados }, (_, i) => {
-              const fechaInicio = new Date();
-              fechaInicio.setDate(hoy.getDate() - diasAMostrar + 1 + (i * agrupacion));
-              
-              const fechaFin = new Date(fechaInicio);
-              fechaFin.setDate(fechaInicio.getDate() + agrupacion - 1);
-              
-              // Formato "3-8 Mar"
-              return `${fechaInicio.getDate()} ${fechaInicio.toLocaleString('default', {month: 'short'})}`;
-            });
-            
-            setFechaInicio(new Date(hoy.getTime() - (diasAMostrar * 24 * 60 * 60 * 1000)));
-            break;
-        
-      case "semana":
-        nuevosLabels = Array.from({ length: 7 }, (_, i) => {
-          const fecha = new Date();
-          fecha.setDate(hoy.getDate() - (6 - i));
-          return fecha.toLocaleString('default', { weekday: 'short' });
-        });
-        setFechaInicio(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 6));
-        break;
-        
-      case "dia":
-        nuevosLabels = Array.from({ length: 8 }, (_, i) => {
-          const hora = hoy.getHours() - (7 - i) * 3;
-          return `${hora > 0 ? hora : 24 + hora}:00`;
-        });
-        setFechaInicio(new Date(hoy.getTime() - (24 * 60 * 60 * 1000)));
-        break;
-    }
-
-    setFechaFin(hoy);
-    setLabels(nuevosLabels);
-    
-    // Cargar datos reales desde el backend
-    if (emprendimiento?.id) {
-      cargarEstadisticas();
-    }
-  }, [periodo, emprendimiento?.id, cargarEstadisticas]);
-
-  // Configuración segura del gráfico
-  const chartConfig = {
-    backgroundColor: currentTheme.primary,
-    backgroundGradientFrom: currentTheme.primary,
-    backgroundGradientTo: currentTheme.secondary,
-    decimalPlaces: 0,
-    color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    labelColor: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-    style: {
-      borderRadius: 16,
-    },
-    propsForDots: {
-      r: "4",
-      strokeWidth: "2",
-      stroke: "#fff",
-    },
-    formatYLabel: (value) => {
-      const num = Number(value);
-      return isNaN(num) ? "0" : Math.round(num).toString();
-    },
-    formatXLabel: (value) => value || "",
-  };
-
-  // Datos para el gráfico
-  const chartData = {
-    labels: labels,
-    datasets: [
-      {
-        data: visualizaciones,
-        color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
-        strokeWidth: 2,
-      },
-      {
-        data: contactos,
-        color: (opacity = 1) => `rgba(255, 215, 0, ${opacity})`,
-        strokeWidth: 2,
-      },
-    ],
-    legend: ["Visualizaciones", "Pedidos"],
-  };
-
-  // Resumen de estadísticas
-  const totalVisualizaciones = visualizaciones.reduce((a, b) => a + b, 0) || 0;
-  const totalContactos = contactos.reduce((a, b) => a + b, 0) || 0;
-  const tasaConversion = totalContactos > 0 ? 
-    ((totalContactos / totalVisualizaciones) * 100).toFixed(1) : 
-    "0.0";
-
-  // Formatear rango de fechas
-  const formatearFecha = (fecha) => {
-    try {
-      return fecha.toLocaleDateString('es-CL', {
-        day: 'numeric',
-        month: 'short',
-        year: periodo === "año" ? 'numeric' : undefined
-      });
-    } catch {
-      return "";
-    }
-  };
+  }, [emprendimiento?.id, periodo, cargarEstadisticas]);
 
   // Función para formatear montos
   const formatearMonto = (monto) => {
-    return `$${monto.toLocaleString('es-CL')}`;
+    if (!monto) return '$0';
+    return `$${Math.round(monto).toLocaleString('es-CL', { useGrouping: true }).replace(/,/g, '.')}`;
   };
 
-  // Función para renderizar estrellas
-  const renderEstrellas = (calificacion) => {
-    const estrellas = [];
-    const calificacionRedondeada = Math.round(calificacion * 2) / 2; // Redondear a 0.5
-    
-    for (let i = 1; i <= 5; i++) {
-      if (i <= Math.floor(calificacionRedondeada)) {
-        // Estrella completa
-        estrellas.push(
-          <FontAwesome key={i} name="star" size={16} color="#FFD700" />
-        );
-      } else if (i - 0.5 <= calificacionRedondeada && calificacionRedondeada < i) {
-        // Media estrella
-        estrellas.push(
-          <FontAwesome key={i} name="star-half-o" size={16} color="#FFD700" />
-        );
-      } else {
-        // Estrella vacía
-        estrellas.push(
-          <FontAwesome key={i} name="star-o" size={16} color="#DDD" />
-        );
-      }
+  // Obtener ícono según tipo de insight
+  const getInsightIcon = (tipo) => {
+    switch (tipo) {
+      case 'alerta': return 'warning';
+      case 'advertencia': return 'alert-circle';
+      case 'info': return 'information-circle';
+      case 'exito': return 'checkmark-circle';
+      default: return 'bulb';
     }
-    
-    return estrellas;
   };
+
+  // Obtener color según tipo de insight
+  const getInsightColor = (tipo) => {
+    switch (tipo) {
+      case 'alerta': return '#e74c3c';
+      case 'advertencia': return '#f39c12';
+      case 'info': return '#3498db';
+      case 'exito': return '#27ae60';
+      default: return '#2A9D8F';
+    }
+  };
+
+  if (cargando) {
+    return (
+      <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+        <LinearGradient
+          colors={['#2A9D8F', '#1a7a6e']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <View style={styles.headerContainer}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <View style={styles.headerTitleContainer}>
+              <View style={styles.headerIconContainer}>
+                <Ionicons name="stats-chart" size={28} color="white" />
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.tituloPrincipal}>Estadísticas</Text>
+                <Text style={styles.subtituloPrincipal} numberOfLines={1}>
+                  {emprendimiento.nombre}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+        
+        <View style={styles.loadingContainer}>
+          <LoadingVeciApp size={120} color={currentTheme.primary} />
+          <Text style={[styles.loadingText, { color: currentTheme.textSecondary, marginTop: 30 }]}>
+            Analizando datos...
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!estadisticas) {
+    return (
+      <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+        <LinearGradient
+          colors={['#2A9D8F', '#1a7a6e']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.headerGradient}
+        >
+          <View style={styles.headerContainer}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <View style={styles.headerTitleContainer}>
+              <View style={styles.headerIconContainer}>
+                <Ionicons name="stats-chart" size={28} color="white" />
+              </View>
+              <View style={styles.headerTextContainer}>
+                <Text style={styles.tituloPrincipal}>Estadísticas</Text>
+                <Text style={styles.subtituloPrincipal} numberOfLines={1}>
+                  {emprendimiento.nombre}
+                </Text>
+              </View>
+            </View>
+          </View>
+        </LinearGradient>
+        
+        <View style={styles.emptyContainer}>
+          <Ionicons name="bar-chart-outline" size={80} color="#bdc3c7" />
+          <Text style={styles.emptyText}>No hay datos disponibles</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={cargarEstadisticas}
+          >
+            <Text style={styles.retryButtonText}>Reintentar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const { rendimiento, productos, rechazos, horarios_pico, clientes, visualizaciones } = estadisticas;
 
   return (
     <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+      {/* Header Moderno */}
       <LinearGradient
-        colors={[currentTheme.primary, currentTheme.secondary]}
+        colors={['#2A9D8F', '#1a7a6e']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
       >
-        <View style={styles.headerTitleContainer}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+        <View style={styles.headerContainer}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
-          <Text style={styles.tituloPrincipal}>Estadísticas de {emprendimiento.nombre}</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerTitleContainer}>
+            <View style={styles.headerIconContainer}>
+              <Ionicons name="stats-chart" size={28} color="white" />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.tituloPrincipal}>Estadísticas</Text>
+              <Text style={styles.subtituloPrincipal} numberOfLines={1}>
+                {emprendimiento.nombre}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Selector de Período */}
+        <View style={styles.periodoContainer}>
+          {['dia', 'semana', 'mes', 'año'].map((p) => (
+            <TouchableOpacity
+              key={p}
+              style={[
+                styles.periodoButton,
+                periodo === p && styles.periodoButtonActive
+              ]}
+              onPress={() => setPeriodo(p)}
+              activeOpacity={0.7}
+            >
+              <Text style={[
+                styles.periodoButtonText,
+                periodo === p && styles.periodoButtonTextActive
+              ]}>
+                {p === 'dia' ? 'Día' : p === 'semana' ? 'Semana' : p === 'mes' ? 'Mes' : 'Año'}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </LinearGradient>
 
       <ScrollView 
-        style={[styles.container, { backgroundColor: currentTheme.background }]}
+        style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Selector de período */}
-        <View style={styles.periodoContainer}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Periodo de análisis</Text>
-          <View style={styles.periodoButtons}>
-            <TouchableOpacity
-              style={[styles.periodoButton, periodo === "año" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
-              onPress={() => setPeriodo("año")}
+        {/* KPIs Principales */}
+        <View style={styles.kpisContainer}>
+          <View style={styles.kpiRow}>
+            <LinearGradient
+              colors={['#667eea', '#764ba2']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.kpiCard, { flex: 1.2 }]}
             >
-              <Text style={[styles.periodoButtonText, periodo === "año" && styles.periodoButtonTextActive, { color: periodo === "año" ? "white" : currentTheme.text }]}>Año</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.periodoButton, periodo === "mes" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
-              onPress={() => setPeriodo("mes")}
-            >
-              <Text style={[styles.periodoButtonText, periodo === "mes" && styles.periodoButtonTextActive, { color: periodo === "mes" ? "white" : currentTheme.text }]}>Mes</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.periodoButton, periodo === "semana" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
-              onPress={() => setPeriodo("semana")}
-            >
-              <Text style={[styles.periodoButtonText, periodo === "semana" && styles.periodoButtonTextActive, { color: periodo === "semana" ? "white" : currentTheme.text }]}>Semana</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.periodoButton, periodo === "dia" && [styles.periodoButtonActive, { backgroundColor: currentTheme.primary }]]}
-              onPress={() => setPeriodo("dia")}
-            >
-              <Text style={[styles.periodoButtonText, periodo === "dia" && styles.periodoButtonTextActive, { color: periodo === "dia" ? "white" : currentTheme.text }]}>Día</Text>
-            </TouchableOpacity>
-          </View>
-          
-          <Text style={[styles.rangoFechas, { color: currentTheme.textSecondary }]}>
-            {formatearFecha(fechaInicio)} - {formatearFecha(fechaFin)}
-          </Text>
-        </View>
-
-        {/* Gráfico */}
-        <View style={[styles.chartContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Evolución de interacciones</Text>
-          {visualizaciones.length > 0 && contactos.length > 0 && (
-            <>
-              {(() => {
-                try {
-                  return (
-                    <LineChart
-                      data={chartData}
-                      width={width - 70}
-                      height={220}
-                      chartConfig={chartConfig}
-                      bezier
-                      style={styles.chart}
-                      withVerticalLines={periodo !== "dia"}
-                      withHorizontalLines={true}
-                      segments={4}
-                      fromZero
-                    />
-                  );
-                } catch (error) {
-                  console.log("Error en gráfico:", error);
-                  return (
-                    <View style={additionalStyles.simpleChart}>
-                      <Text style={additionalStyles.chartTitle}>Gráfico no disponible</Text>
-                      <Text style={additionalStyles.chartSubtitle}>Datos: {visualizaciones.reduce((a, b) => a + b, 0)} visualizaciones</Text>
-                      <View style={additionalStyles.statsGrid}>
-                        <View style={additionalStyles.statItem}>
-                          <Text style={additionalStyles.statNumber}>{visualizaciones.reduce((a, b) => a + b, 0)}</Text>
-                          <Text style={additionalStyles.statLabel}>Visualizaciones</Text>
-                        </View>
-                        <View style={additionalStyles.statItem}>
-                          <Text style={additionalStyles.statNumber}>{contactos.reduce((a, b) => a + b, 0)}</Text>
-                          <Text style={additionalStyles.statLabel}>Pedidos</Text>
-                        </View>
-                      </View>
-                    </View>
-                  );
-                }
-              })()}
-            </>
-          )}
-        </View>
-
-        {/* Resumen de estadísticas */}
-        <View style={styles.statsContainer}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Resumen</Text>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: currentTheme.primary }]}>
-              <Text style={styles.statValue}>{totalVisualizaciones}</Text>
-              <Text style={styles.statLabel}>Visualizaciones</Text>
-              <FontAwesome name="eye" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
-            </View>
-            <View style={[styles.statCard, { backgroundColor: "#F4A261" }]}>
-              <Text style={styles.statValue}>{totalContactos}</Text>
-              <Text style={styles.statLabel}>Pedidos</Text>
-              <FontAwesome name="shopping-cart" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
-            </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: "#E76F51", flex: 1 }]}>
-              <Text style={styles.statValue}>{tasaConversion}%</Text>
-              <Text style={styles.statLabel}>Tasa de conversión</Text>
-              <FontAwesome name="percent" size={20} color="rgba(255,255,255,0.7)" style={styles.statIcon} />
-            </View>
-          </View>
-        </View>
-
-        {/* Sección de Pedidos */}
-        <View style={styles.pedidosContainer}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>💰 Información de Pedidos</Text>
-          <View style={styles.pedidosGrid}>
-            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="shopping-cart" size={24} color={currentTheme.primary} style={styles.pedidoIcon} />
-              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{datosPedidos.totalPedidos || 0}</Text>
-              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Total Pedidos</Text>
-            </View>
-            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="dollar" size={24} color="#F4A261" style={styles.pedidoIcon} />
-              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.montoTotal || 0)}</Text>
-              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Monto Total</Text>
-            </View>
-          </View>
-          <View style={styles.pedidosGrid}>
-            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="calculator" size={24} color="#E76F51" style={styles.pedidoIcon} />
-              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.promedioPedido || 0)}</Text>
-              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>Promedio por Pedido</Text>
-            </View>
-            <View style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="calendar" size={24} color="#9C27B0" style={styles.pedidoIcon} />
-              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{datosPedidos.pedidosPeriodo || 0}</Text>
-              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>
-                Pedidos este {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
-              </Text>
-            </View>
-          </View>
-          <View style={styles.pedidosGrid}>
-            <View style={[styles.pedidoCard, { flex: 1, backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="line-chart" size={24} color="#4CAF50" style={styles.pedidoIcon} />
-              <Text style={[styles.pedidoValue, { color: currentTheme.primary }]}>{formatearMonto(datosPedidos.montoPeriodo || 0)}</Text>
-              <Text style={[styles.pedidoLabel, { color: currentTheme.textSecondary }]}>
-                Monto del {periodo === 'año' ? 'Año' : periodo === 'mes' ? 'Mes' : periodo === 'semana' ? 'Semana' : 'Día'}
-              </Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Sección de Calificaciones */}
-        <View style={styles.calificacionesContainer}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>⭐ Calificaciones de Clientes</Text>
-          
-          {/* Calificación General */}
-          <View style={[styles.calificacionGeneralCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-            <View style={styles.calificacionGeneralHeader}>
-              <Text style={[styles.calificacionGeneralTitulo, { color: currentTheme.text }]}>Calificación General</Text>
-              <Text style={[styles.calificacionGeneralVotantes, { color: currentTheme.textSecondary }]}>({datosCalificaciones.totalVotantes} votos)</Text>
-            </View>
-            <View style={styles.calificacionGeneralContent}>
-              <View style={styles.estrellasContainer}>
-                {renderEstrellas(datosCalificaciones.calificacionGeneral)}
-              </View>
-              <Text style={[styles.calificacionGeneralNumero, { color: currentTheme.primary }]}>
-                {datosCalificaciones.calificacionGeneral.toFixed(1)}
-              </Text>
-            </View>
-          </View>
-
-          {/* Criterios Individuales */}
-          <View style={[styles.criteriosContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-            <Text style={[styles.criteriosTitulo, { color: currentTheme.text }]}>Calificación por Criterios</Text>
+              <Ionicons name="cart" size={24} color="white" style={styles.kpiIcon} />
+              <Text style={styles.kpiValue}>{rendimiento.total_pedidos}</Text>
+              <Text style={styles.kpiLabel}>Pedidos</Text>
+            </LinearGradient>
             
-            <View style={styles.criterioItem}>
-              <View style={styles.criterioInfo}>
-                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>💰 Precio</Text>
-              </View>
-              <View style={styles.criterioCalificacion}>
-                <View style={styles.estrellasContainer}>
-                  {renderEstrellas(datosCalificaciones.criterios.precio.promedio)}
+            <LinearGradient
+              colors={['#f39c12', '#e67e22']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.kpiCard, { flex: 1 }]}
+            >
+              <Ionicons name="cash" size={24} color="white" style={styles.kpiIcon} />
+              <Text style={styles.kpiValue}>{formatearMonto(rendimiento.ingresos_totales)}</Text>
+              <Text style={styles.kpiLabel}>Ingresos</Text>
+            </LinearGradient>
+          </View>
+
+          <View style={styles.kpiRow}>
+            <LinearGradient
+              colors={rendimiento.tasa_exito >= 85 ? ['#27ae60', '#229954'] : ['#e74c3c', '#c0392b']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.kpiCard, { flex: 1 }]}
+            >
+              <Ionicons 
+                name={rendimiento.tasa_exito >= 85 ? "checkmark-circle" : "close-circle"} 
+                size={24} 
+                color="white" 
+                style={styles.kpiIcon} 
+              />
+              <Text style={styles.kpiValue}>{rendimiento.tasa_exito}%</Text>
+              <Text style={styles.kpiLabel}>Éxito</Text>
+            </LinearGradient>
+
+            <LinearGradient
+              colors={['#3498db', '#2980b9']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.kpiCard, { flex: 1 }]}
+            >
+              <Ionicons name="people" size={24} color="white" style={styles.kpiIcon} />
+              <Text style={styles.kpiValue}>{clientes.clientes_unicos}</Text>
+              <Text style={styles.kpiLabel}>Clientes</Text>
+            </LinearGradient>
+
+            <LinearGradient
+              colors={['#9b59b6', '#8e44ad']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={[styles.kpiCard, { flex: 1 }]}
+            >
+              <Ionicons name="eye" size={24} color="white" style={styles.kpiIcon} />
+              <Text style={styles.kpiValue}>{visualizaciones.total_periodo}</Text>
+              <Text style={styles.kpiLabel}>Visitas</Text>
+            </LinearGradient>
+          </View>
+        </View>
+
+        {/* Insights Automáticos */}
+        {insights.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="bulb" size={20} color="#2A9D8F" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Análisis Automático
+              </Text>
+            </View>
+
+            {insights.map((insight, index) => (
+              <View 
+                key={index} 
+                style={[
+                  styles.insightCard,
+                  { 
+                    backgroundColor: currentTheme.cardBackground,
+                    borderLeftColor: getInsightColor(insight.tipo)
+                  }
+                ]}
+              >
+                <View style={[
+                  styles.insightIconContainer,
+                  { backgroundColor: getInsightColor(insight.tipo) + '20' }
+                ]}>
+                  <Ionicons 
+                    name={getInsightIcon(insight.tipo)} 
+                    size={20} 
+                    color={getInsightColor(insight.tipo)} 
+                  />
                 </View>
-                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
-                  {datosCalificaciones.criterios.precio.promedio.toFixed(1)}
+                <View style={styles.insightContent}>
+                  <Text style={[styles.insightTitulo, { color: currentTheme.text }]}>
+                    {insight.titulo}
+                  </Text>
+                  <Text style={[styles.insightDescripcion, { color: currentTheme.textSecondary }]}>
+                    {insight.descripcion}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Recomendaciones */}
+        {recomendaciones.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="rocket" size={20} color="#2A9D8F" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Recomendaciones
+              </Text>
+            </View>
+
+            {recomendaciones.map((rec, index) => (
+              <View 
+                key={index} 
+                style={[styles.recomendacionCard, { backgroundColor: currentTheme.cardBackground }]}
+              >
+                <View style={styles.recomendacionIcono}>
+                  <Ionicons name="checkmark" size={16} color="#2A9D8F" />
+                </View>
+                <Text style={[styles.recomendacionTexto, { color: currentTheme.text }]}>
+                  {rec}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Estadísticas Detalladas */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="pie-chart" size={20} color="#2A9D8F" />
+            <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+              Rendimiento Detallado
+            </Text>
+          </View>
+
+          <View style={styles.detailGrid}>
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#27ae60' + '20' }]}>
+                <Ionicons name="checkmark-done" size={20} color="#27ae60" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {rendimiento.pedidos_entregados}
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                Entregados
+              </Text>
+            </View>
+
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#e74c3c' + '20' }]}>
+                <Ionicons name="close-circle" size={20} color="#e74c3c" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {rendimiento.pedidos_rechazados}
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                Rechazados
+              </Text>
+            </View>
+
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#95a5a6' + '20' }]}>
+                <Ionicons name="ban" size={20} color="#95a5a6" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {rendimiento.pedidos_cancelados}
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                Cancelados
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.detailGrid}>
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#f39c12' + '20' }]}>
+                <Ionicons name="calculator" size={20} color="#f39c12" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {formatearMonto(rendimiento.ticket_promedio)}
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                Ticket Promedio
+              </Text>
+            </View>
+
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#3498db' + '20' }]}>
+                <Ionicons name="time" size={20} color="#3498db" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {Math.round(rendimiento.tiempo_entrega_promedio || 0)}'
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                Tiempo Entrega
+              </Text>
+            </View>
+
+            <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={[styles.detailIconContainer, { backgroundColor: '#9b59b6' + '20' }]}>
+                <Ionicons name="speedometer" size={20} color="#9b59b6" />
+              </View>
+              <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                {rendimiento.cumplimiento_tiempo}%
+              </Text>
+              <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                A Tiempo
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Análisis de Tiempos de Entrega */}
+        {rendimiento.cumplimiento_tiempo > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="timer" size={20} color="#3498db" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Análisis de Tiempos de Entrega
+              </Text>
+            </View>
+
+            <View style={styles.detailGrid}>
+              <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+                <View style={[styles.detailIconContainer, { backgroundColor: '#3498db' + '20' }]}>
+                  <Ionicons name="hourglass" size={20} color="#3498db" />
+                </View>
+                <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                  {Math.round(rendimiento.tiempo_comprometido_promedio || 0)}'
+                </Text>
+                <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                  Tiempo Prometido
+                </Text>
+              </View>
+
+              <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+                <View style={[styles.detailIconContainer, { backgroundColor: rendimiento.diferencia_tiempo_promedio <= 0 ? '#27ae60' + '20' : '#e74c3c' + '20' }]}>
+                  <Ionicons name="stopwatch" size={20} color={rendimiento.diferencia_tiempo_promedio <= 0 ? '#27ae60' : '#e74c3c'} />
+                </View>
+                <Text style={[styles.detailValue, { color: currentTheme.text }]}>
+                  {Math.round(rendimiento.tiempo_real_promedio || 0)}'
+                </Text>
+                <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                  Tiempo Real
+                </Text>
+              </View>
+
+              <View style={[styles.detailCard, { backgroundColor: currentTheme.cardBackground }]}>
+                <View style={[styles.detailIconContainer, { backgroundColor: rendimiento.diferencia_tiempo_promedio <= 0 ? '#27ae60' + '20' : '#e74c3c' + '20' }]}>
+                  <Ionicons 
+                    name={rendimiento.diferencia_tiempo_promedio <= 0 ? "arrow-down" : "arrow-up"} 
+                    size={20} 
+                    color={rendimiento.diferencia_tiempo_promedio <= 0 ? '#27ae60' : '#e74c3c'} 
+                  />
+                </View>
+                <Text style={[styles.detailValue, { color: rendimiento.diferencia_tiempo_promedio <= 0 ? '#27ae60' : '#e74c3c' }]}>
+                  {rendimiento.diferencia_tiempo_promedio > 0 ? '+' : ''}{Math.round(rendimiento.diferencia_tiempo_promedio || 0)}'
+                </Text>
+                <Text style={[styles.detailLabel, { color: currentTheme.textSecondary }]}>
+                  Diferencia
                 </Text>
               </View>
             </View>
 
-            <View style={styles.criterioItem}>
-              <View style={styles.criterioInfo}>
-                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>⭐ Calidad</Text>
-              </View>
-              <View style={styles.criterioCalificacion}>
-                <View style={styles.estrellasContainer}>
-                  {renderEstrellas(datosCalificaciones.criterios.calidad.promedio)}
-                </View>
-                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
-                  {datosCalificaciones.criterios.calidad.promedio.toFixed(1)}
+            {rendimiento.diferencia_tiempo_promedio > 0 && (
+              <View style={[styles.infoBox, { backgroundColor: '#e74c3c' + '15', borderLeftColor: '#e74c3c' }]}>
+                <Ionicons name="alert-circle" size={18} color="#e74c3c" />
+                <Text style={[styles.infoBoxText, { color: '#c0392b' }]}>
+                  En promedio te estás tardando {Math.round(Math.abs(rendimiento.diferencia_tiempo_promedio))} minutos más de lo prometido. Considera aumentar el tiempo de entrega comprometido.
                 </Text>
               </View>
+            )}
+            {rendimiento.diferencia_tiempo_promedio <= 0 && (
+              <View style={[styles.infoBox, { backgroundColor: '#27ae60' + '15', borderLeftColor: '#27ae60' }]}>
+                <Ionicons name="checkmark-circle" size={18} color="#27ae60" />
+                <Text style={[styles.infoBoxText, { color: '#229954' }]}>
+                  ¡Excelente! Estás cumpliendo o superando los tiempos prometidos. {rendimiento.cumplimiento_tiempo}% de entregas a tiempo.
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Productos Top */}
+        {productos.top_vendidos && productos.top_vendidos.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="trophy" size={20} color="#2A9D8F" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Productos Más Vendidos
+              </Text>
             </View>
 
-            <View style={styles.criterioItem}>
-              <View style={styles.criterioInfo}>
-                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>👥 Servicio al Cliente</Text>
-              </View>
-              <View style={styles.criterioCalificacion}>
-                <View style={styles.estrellasContainer}>
-                  {renderEstrellas(datosCalificaciones.criterios.servicio.promedio)}
+            {productos.top_vendidos.slice(0, 5).map((producto, index) => (
+              <View 
+                key={index}
+                style={[styles.productoCard, { backgroundColor: currentTheme.cardBackground }]}
+              >
+                <View style={styles.productoRank}>
+                  <LinearGradient
+                    colors={index === 0 ? ['#f39c12', '#e67e22'] : index === 1 ? ['#95a5a6', '#7f8c8d'] : ['#cd7f32', '#b36b28']}
+                    style={styles.rankBadge}
+                  >
+                    <Text style={styles.rankText}>#{index + 1}</Text>
+                  </LinearGradient>
                 </View>
-                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
-                  {datosCalificaciones.criterios.servicio.promedio.toFixed(1)}
-                </Text>
+                <View style={styles.productoInfo}>
+                  <Text style={[styles.productoNombre, { color: currentTheme.text }]} numberOfLines={1}>
+                    {producto.nombre}
+                  </Text>
+                  <View style={styles.productoStats}>
+                    <Text style={[styles.productoStat, { color: currentTheme.textSecondary }]}>
+                      {producto.cantidad_vendida} vendidos
+                    </Text>
+                    <Text style={[styles.productoStat, { color: '#2A9D8F', fontWeight: '700' }]}>
+                      {formatearMonto(producto.ingresos)}
+                    </Text>
+                  </View>
+                </View>
               </View>
+            ))}
+          </View>
+        )}
+
+        {/* Motivos de Rechazo */}
+        {rechazos.top_motivos && rechazos.top_motivos.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="warning" size={20} color="#e74c3c" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Motivos de Rechazo
+              </Text>
             </View>
 
-            <View style={styles.criterioItem}>
-              <View style={styles.criterioInfo}>
-                <Text style={[styles.criterioLabel, { color: currentTheme.text }]}>⏰ Tiempo de Entrega</Text>
-              </View>
-              <View style={styles.criterioCalificacion}>
-                <View style={styles.estrellasContainer}>
-                  {renderEstrellas(datosCalificaciones.criterios.tiempoEntrega.promedio)}
+            {rechazos.top_motivos.map((motivo, index) => (
+              <View 
+                key={index}
+                style={[styles.motivoCard, { backgroundColor: currentTheme.cardBackground }]}
+              >
+                <View style={styles.motivoHeader}>
+                  <Text style={[styles.motivoTexto, { color: currentTheme.text }]} numberOfLines={2}>
+                    {motivo.motivo}
+                  </Text>
+                  <Text style={styles.motivoPorcentaje}>
+                    {motivo.porcentaje}%
+                  </Text>
                 </View>
-                <Text style={[styles.criterioNumero, { color: currentTheme.primary }]}>
-                  {datosCalificaciones.criterios.tiempoEntrega.promedio.toFixed(1)}
+                <View style={styles.motivoBarraContainer}>
+                  <View 
+                    style={[
+                      styles.motivoBarra,
+                      { width: `${motivo.porcentaje}%` }
+                    ]}
+                  />
+                </View>
+                <Text style={[styles.motivoCantidad, { color: currentTheme.textSecondary }]}>
+                  {motivo.cantidad} {motivo.cantidad === 1 ? 'pedido' : 'pedidos'}
                 </Text>
               </View>
+            ))}
+          </View>
+        )}
+
+        {/* Horarios Pico */}
+        {horarios_pico && horarios_pico.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="time" size={20} color="#2A9D8F" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Horarios con Más Pedidos
+              </Text>
+            </View>
+
+            {horarios_pico.slice(0, 3).map((horario, index) => (
+              <View 
+                key={index}
+                style={[styles.horarioCard, { backgroundColor: currentTheme.cardBackground }]}
+              >
+                <View style={styles.horarioInfo}>
+                  <Ionicons name="time-outline" size={22} color="#2A9D8F" />
+                  <Text style={[styles.horarioHora, { color: currentTheme.text }]}>
+                    {horario.hora}:00 hrs
+                  </Text>
+                </View>
+                <View style={styles.horarioStats}>
+                  <View style={styles.horarioStat}>
+                    <Ionicons name="cart-outline" size={14} color={currentTheme.textSecondary} />
+                    <Text style={[styles.horarioStatTexto, { color: currentTheme.textSecondary }]}>
+                      {horario.pedidos} pedidos
+                    </Text>
+                  </View>
+                  <Text style={[styles.horarioMonto, { color: '#2A9D8F' }]}>
+                    {formatearMonto(horario.ingresos)}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Clientes */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="people-circle" size={20} color="#2A9D8F" />
+            <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+              Análisis de Clientes
+            </Text>
+          </View>
+
+          <View style={[styles.clientesCard, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={styles.clienteRow}>
+              <View style={styles.clienteInfo}>
+                <Ionicons name="person" size={18} color="#3498db" />
+                <Text style={[styles.clienteLabel, { color: currentTheme.text }]}>
+                  Clientes únicos
+                </Text>
+              </View>
+              <Text style={[styles.clienteValue, { color: '#3498db' }]}>
+                {clientes.clientes_unicos}
+              </Text>
+            </View>
+
+            <View style={styles.clienteRow}>
+              <View style={styles.clienteInfo}>
+                <Ionicons name="repeat" size={18} color="#27ae60" />
+                <Text style={[styles.clienteLabel, { color: currentTheme.text }]}>
+                  Clientes recurrentes
+                </Text>
+              </View>
+              <Text style={[styles.clienteValue, { color: '#27ae60' }]}>
+                {clientes.clientes_recurrentes}
+              </Text>
+            </View>
+
+            <View style={styles.clienteRow}>
+              <View style={styles.clienteInfo}>
+                <Ionicons name="heart" size={18} color="#e74c3c" />
+                <Text style={[styles.clienteLabel, { color: currentTheme.text }]}>
+                  Tasa de fidelización
+                </Text>
+              </View>
+              <Text style={[styles.clienteValue, { color: '#e74c3c' }]}>
+                {clientes.tasa_recurrencia}%
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Consejos basados en estadísticas */}
-        <View style={styles.tipsContainer}>
-          <Text style={[styles.sectionTitle, { color: currentTheme.primary }]}>Consejos para mejorar</Text>
-          
-          {/* Consejos basados en tasa de conversión */}
-          {parseFloat(tasaConversion) < 5 ? (
-            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="exclamation-circle" size={20} color="#E76F51" style={styles.tipIcon} />
-              <Text style={[styles.tipText, { color: currentTheme.text }]}>
-                Tu tasa de conversión es baja. Considera mejorar la descripción de tu emprendimiento o agregar más fotos atractivas.
-              </Text>
-            </View>
-          ) : (
-            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="check-circle" size={20} color={currentTheme.primary} style={styles.tipIcon} />
-              <Text style={[styles.tipText, { color: currentTheme.text }]}>
-                ¡Buen trabajo! Tu tasa de conversión es saludable. Sigue así o prueba pequeñas mejoras para aumentar aún más.
-              </Text>
-            </View>
-          )}
-          
-          {/* Consejos basados en horarios */}
-          {periodo === "dia" && visualizaciones.slice(6, 8).some(v => v > 0) && (
-            <View style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-              <FontAwesome name="lightbulb-o" size={20} color="#F4A261" style={styles.tipIcon} />
-              <Text style={[styles.tipText, { color: currentTheme.text }]}>
-                Tienes visitas en horario nocturno. Considera extender tu horario de atención si es posible.
-              </Text>
-            </View>
-          )}
+        {/* Conversión */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="trending-up" size={20} color="#2A9D8F" />
+            <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+              Conversión
+            </Text>
+          </View>
 
-          {/* Consejos inteligentes basados en calificaciones */}
-          {(() => {
-            const calGeneral = datosCalificaciones.calificacionGeneral;
-            const criterios = datosCalificaciones.criterios;
-            
-            // Encontrar el criterio más bajo y más alto
-            const criteriosArray = Object.entries(criterios);
-            const criterioMasBajo = criteriosArray.reduce((min, [key, value]) => 
-              value.promedio < min.promedio ? { key, ...value } : min, 
-              { promedio: 5, key: '' }
-            );
-            const criterioMasAlto = criteriosArray.reduce((max, [key, value]) => 
-              value.promedio > max.promedio ? { key, ...value } : max, 
-              { promedio: 0, key: '' }
-            );
-            
-            const consejos = [];
-            
-            // Rango 1-2: Muy malo
-            if (calGeneral >= 1 && calGeneral < 2.5) {
-              consejos.push({
-                icon: "exclamation-triangle",
-                color: "#E76F51",
-                text: `Tu calificación general es muy baja (${calGeneral.toFixed(1)}/5). Necesitas una revisión completa de todos los aspectos de tu negocio. Enfócate especialmente en ${criterioMasBajo.key === 'precio' ? 'precios más competitivos' : criterioMasBajo.key === 'calidad' ? 'mejorar la calidad de tus productos/servicios' : criterioMasBajo.key === 'servicio' ? 'mejorar la atención al cliente' : 'optimizar los tiempos de entrega'}.`
-              });
-            }
-            
-            // Rango 2.5-3.5: Malo
-            else if (calGeneral >= 2.5 && calGeneral < 3.5) {
-              consejos.push({
-                icon: "warning",
-                color: "#F4A261",
-                text: `Tu calificación general necesita mejoras (${calGeneral.toFixed(1)}/5). Trabaja en mejorar la experiencia general del cliente. Tu punto más débil es ${criterioMasBajo.key === 'precio' ? 'el precio' : criterioMasBajo.key === 'calidad' ? 'la calidad' : criterioMasBajo.key === 'servicio' ? 'el servicio al cliente' : 'el tiempo de entrega'}.`
-              });
-            }
-            
-            // Rango 3.5-4.0: Regular
-            else if (calGeneral >= 3.5 && calGeneral < 4.0) {
-              consejos.push({
-                icon: "info-circle",
-                color: "#2A9D8F",
-                text: `Tienes una calificación decente (${calGeneral.toFixed(1)}/5). Estás en el camino correcto, pero hay espacio para mejorar. Enfócate en ${criterioMasBajo.key === 'precio' ? 'comunicar mejor el valor de tus productos' : criterioMasBajo.key === 'calidad' ? 'mantener la consistencia en la calidad' : criterioMasBajo.key === 'servicio' ? 'ser más proactivo en la atención' : 'optimizar tus procesos de entrega'}.`
-              });
-            }
-            
-            // Rango 4.0-4.3: Bueno
-            else if (calGeneral >= 4.0 && calGeneral < 4.3) {
-              consejos.push({
-                icon: "thumbs-up",
-                color: "#2A9D8F",
-                text: `Tienes buenas calificaciones (${calGeneral.toFixed(1)}/5). Sigue manteniendo la calidad y considera pequeñas mejoras para llegar al siguiente nivel.`
-              });
-            }
-            
-            // Rango 4.3-4.7: Muy bueno
-            else if (calGeneral >= 4.3 && calGeneral < 4.7) {
-              consejos.push({
-                icon: "star",
-                color: "#4CAF50",
-                text: `¡Excelente trabajo! Tu calificación es muy buena (${calGeneral.toFixed(1)}/5). Mantén este nivel y considera usar tus fortalezas en marketing.`
-              });
-              
-              // Destacar fortaleza específica si es notablemente alta
-              if (criterioMasAlto.promedio >= 4.5 && criterioMasAlto.promedio > calGeneral + 0.3) {
-                consejos.push({
-                  icon: "trophy",
-                  color: "#FFD700",
-                  text: `Tu punto fuerte es ${criterioMasAlto.key === 'precio' ? 'los precios competitivos' : criterioMasAlto.key === 'calidad' ? 'la calidad excepcional' : criterioMasAlto.key === 'servicio' ? 'el servicio al cliente' : 'la puntualidad en entregas'} (${criterioMasAlto.promedio.toFixed(1)}/5). Úsalo como diferenciador.`
-                });
-              }
-            }
-            
-            // Rango 4.7-5.0: Excepcional
-            else if (calGeneral >= 4.7) {
-              consejos.push({
-                icon: "star",
-                color: "#FFD700",
-                text: `¡Felicitaciones! Tienes calificaciones excepcionales (${calGeneral.toFixed(1)}/5). Eres un ejemplo a seguir. Considera pedir a tus clientes satisfechos que te recomienden.`
-              });
-            }
-            
-            // Destacar debilidad específica si es notablemente baja
-            if (criterioMasBajo.promedio < calGeneral - 0.5 && criterioMasBajo.promedio < 4.0) {
-              consejos.push({
-                icon: "exclamation-circle",
-                color: "#E76F51",
-                text: `Atención especial: Tu ${criterioMasBajo.key === 'precio' ? 'precio' : criterioMasBajo.key === 'calidad' ? 'calidad' : criterioMasBajo.key === 'servicio' ? 'servicio al cliente' : 'tiempo de entrega'} está por debajo del promedio (${criterioMasBajo.promedio.toFixed(1)}/5). Enfócate en mejorar este aspecto específico.`
-              });
-            }
-            
-            return consejos.map((consejo, index) => (
-              <View key={index} style={[styles.tipCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-                <FontAwesome name={consejo.icon} size={20} color={consejo.color} style={styles.tipIcon} />
-                <Text style={[styles.tipText, { color: currentTheme.text }]}>{consejo.text}</Text>
-              </View>
-            ));
-          })()}
+          <LinearGradient
+            colors={['#667eea', '#764ba2']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.conversionCard}
+          >
+            <Text style={styles.conversionLabel}>
+              {visualizaciones.total_periodo} visitas
+            </Text>
+            <Ionicons name="arrow-down" size={24} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.conversionTasa}>
+              {visualizaciones.tasa_conversion}%
+            </Text>
+            <Ionicons name="arrow-down" size={24} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.conversionLabel}>
+              {rendimiento.total_pedidos} pedidos
+            </Text>
+          </LinearGradient>
         </View>
+
+        {/* Productos por Categoría */}
+        {productos.por_categoria && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="grid" size={20} color="#2A9D8F" />
+              <Text style={[styles.sectionTitle, { color: currentTheme.text }]}>
+                Productos por Categoría
+              </Text>
+            </View>
+
+            <View style={[styles.categoriasContainer, { backgroundColor: currentTheme.cardBackground }]}>
+              <View style={styles.categoriaItem}>
+                <View style={styles.categoriaInfo}>
+                  <View style={[styles.categoriaBadge, { backgroundColor: '#667eea' + '20' }]}>
+                    <Ionicons name="star" size={16} color="#667eea" />
+                  </View>
+                  <Text style={[styles.categoriaLabel, { color: currentTheme.text }]}>
+                    Principal
+                  </Text>
+                </View>
+                <Text style={[styles.categoriaValue, { color: '#667eea' }]}>
+                  {productos.por_categoria.principal}
+                </Text>
+              </View>
+
+              <View style={styles.categoriaItem}>
+                <View style={styles.categoriaInfo}>
+                  <View style={[styles.categoriaBadge, { backgroundColor: '#3498db' + '20' }]}>
+                    <Ionicons name="cube" size={16} color="#3498db" />
+                  </View>
+                  <Text style={[styles.categoriaLabel, { color: currentTheme.text }]}>
+                    Secundario
+                  </Text>
+                </View>
+                <Text style={[styles.categoriaValue, { color: '#3498db' }]}>
+                  {productos.por_categoria.secundario}
+                </Text>
+              </View>
+
+              <View style={styles.categoriaItem}>
+                <View style={styles.categoriaInfo}>
+                  <View style={[styles.categoriaBadge, { backgroundColor: '#f39c12' + '20' }]}>
+                    <Ionicons name="pricetag" size={16} color="#f39c12" />
+                  </View>
+                  <Text style={[styles.categoriaLabel, { color: currentTheme.text }]}>
+                    Oferta
+                  </Text>
+                </View>
+                <Text style={[styles.categoriaValue, { color: '#f39c12' }]}>
+                  {productos.por_categoria.oferta}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -692,452 +789,528 @@ const MisEstadisticasScreen = () => {
 const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
-    backgroundColor: "#FAFAF9",
+    backgroundColor: "#f8f9fa",
   },
+  // Header
   headerGradient: {
-    paddingTop: 50,
+    paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  headerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 15,
   },
   headerTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    flex: 1,
+  },
+  headerIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
   },
   tituloPrincipal: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: "800",
     color: "white",
-    textAlign: "center",
-    flex: 1,
+    letterSpacing: 0.5,
   },
-  container: {
-    flex: 1,
-    backgroundColor: "#FAFAF9",
-    paddingHorizontal: 20,
-    paddingBottom: 130, // Espacio para la barra inferior
+  subtituloPrincipal: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.85)",
+    marginTop: 2,
+    fontWeight: "500",
   },
-  scrollContent: {
-    paddingBottom: 150, // Espacio para la barra inferior + margen extra
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2A9D8F",
-    marginBottom: 15,
-  },
+  // Selector de período
   periodoContainer: {
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  periodoButtons: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
+    gap: 8,
+    marginTop: 5,
   },
   periodoButton: {
     flex: 1,
-    padding: 10,
-    marginHorizontal: 5,
-    borderRadius: 8,
-    backgroundColor: "#f0f0f0", // Fondo por defecto, se sobrescribe con el tema cuando está activo
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    paddingVertical: 8,
+    borderRadius: 12,
     alignItems: "center",
   },
   periodoButtonActive: {
-    backgroundColor: "#2A9D8F",
+    backgroundColor: "rgba(255, 255, 255, 0.35)",
   },
   periodoButtonText: {
-    color: "#555",
-    fontWeight: "500",
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 13,
+    fontWeight: "600",
   },
   periodoButtonTextActive: {
     color: "white",
+    fontWeight: "800",
   },
-  rangoFechas: {
-    fontSize: 14,
-    color: "#777",
-    textAlign: "center",
-    marginTop: 10,
+  // Loading
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  chartContainer: {
-    marginVertical: 20,
-    backgroundColor: "white",
+  loadingCircle: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: "hidden",
+    marginBottom: 20,
+    shadowColor: "#2A9D8F",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loadingGradient: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#7f8c8d",
+    fontWeight: "500",
+  },
+  // Empty state
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#7f8c8d",
+    marginTop: 15,
+    marginBottom: 25,
+  },
+  retryButton: {
+    backgroundColor: "#2A9D8F",
+    paddingHorizontal: 30,
+    paddingVertical: 12,
     borderRadius: 12,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
-  chart: {
-    borderRadius: 8,
-    marginTop: 10,
+  retryButtonText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "700",
   },
-  statsContainer: {
+  // Scroll
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 150,
+  },
+  // Secciones
+  section: {
     marginBottom: 20,
   },
-  statsRow: {
+  sectionHeader: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
+    alignItems: "center",
+    marginBottom: 12,
+    gap: 8,
   },
-  statCard: {
-    flex: 1,
-    borderRadius: 10,
-    padding: 15,
-    marginHorizontal: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#2c3e50",
   },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "white",
-    marginBottom: 5,
+  // KPIs
+  kpisContainer: {
+    marginBottom: 20,
   },
-  statLabel: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.9)",
+  kpiRow: {
+    flexDirection: "row",
+    gap: 10,
     marginBottom: 10,
   },
-  statIcon: {
-    position: "absolute",
-    top: 15,
-    right: 15,
-  },
-  tipsContainer: {
-    marginBottom: 30,
-  },
-  tipCard: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    padding: 15,
-    flexDirection: "row",
-    alignItems: "center",
+  kpiCard: {
+    padding: 14,
+    borderRadius: 14,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 15,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
   },
-  tipIcon: {
-    marginRight: 10,
+  kpiIcon: {
+    marginBottom: 6,
+    opacity: 0.9,
   },
-  tipText: {
-    flex: 1,
-    color: "#555",
-  },
-  // Estilos para la sección de pedidos
-  pedidosContainer: {
-    marginBottom: 20,
-  },
-  pedidosGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-  pedidoCard: {
-    flex: 1,
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 15,
-    marginHorizontal: 5,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  pedidoIcon: {
-    marginBottom: 8,
-  },
-  pedidoValue: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2A9D8F",
-    marginBottom: 4,
-  },
-  pedidoLabel: {
-    fontSize: 12,
-    color: "#666",
-    textAlign: "center",
-  },
-  // Estilos para la sección de calificaciones
-  calificacionesContainer: {
-    marginBottom: 20,
-  },
-  calificacionGeneralCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  calificacionGeneralHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
-  calificacionGeneralTitulo: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  calificacionGeneralVotantes: {
-    fontSize: 14,
-    color: "#666",
-  },
-  calificacionGeneralContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  estrellasContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  calificacionGeneralNumero: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2A9D8F",
-  },
-  criteriosContainer: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 15,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  criteriosTitulo: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 15,
-  },
-  criterioItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0", // Se mantiene para consistencia visual
-  },
-  criterioInfo: {
-    flex: 1,
-  },
-  criterioLabel: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#333",
+  kpiValue: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "white",
     marginBottom: 2,
   },
-  criterioVotantes: {
+  kpiLabel: {
     fontSize: 12,
-    color: "#666",
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "600",
   },
-  criterioCalificacion: {
+  // Insights
+  insightCard: {
     flexDirection: "row",
-    alignItems: "center",
-  },
-  criterioNumero: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2A9D8F",
-    marginLeft: 8,
-  },
-});
-
-/**
- * 
- {
-  "emprendimiento_id": "12345",
-  "ultima_actualizacion": "2023-12-15T10:30:00Z",
-  "datos": {
-    "año": {
-      "fecha_inicio": "2022-12-01",
-      "fecha_fin": "2023-11-30",
-      "labels": ["Dic", "Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov"],
-      "visualizaciones": [120, 150, 140, 160, 180, 170, 190, 200, 210, 200, 220, 230],
-      "contactos": [30, 35, 32, 38, 40, 38, 42, 45, 48, 45, 50, 52]
-    },
-    "mes": {
-      "fecha_inicio": "2023-11-01",
-      "fecha_fin": "2023-11-30",
-      "labels": ["1", "5", "10", "15", "20", "25", "30"],
-      "visualizaciones": [45, 60, 55, 70, 65, 80, 75],
-      "contactos": [10, 15, 12, 18, 16, 20, 19]
-    },
-    "semana": {
-      "fecha_inicio": "2023-11-23",
-      "fecha_fin": "2023-11-29",
-      "labels": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
-      "visualizaciones": [30, 35, 32, 40, 45, 38, 28],
-      "contactos": [8, 9, 7, 10, 12, 9, 6]
-    },
-    "dia": {
-      "fecha_inicio": "2023-11-30T00:00:00",
-      "fecha_fin": "2023-11-30T23:59:59",
-      "labels": ["8:00", "11:00", "14:00", "17:00", "20:00", "23:00"],
-      "visualizaciones": [15, 25, 20, 30, 35, 18],
-      "contactos": [3, 5, 4, 7, 8, 4]
-    }
-  },
-  "totales": {
-    "año": {
-      "visualizaciones": 2150,
-      "contactos": 465,
-      "tasa_conversion": 21.6
-    },
-    "mes": {
-      "visualizaciones": 450,
-      "contactos": 110,
-      "tasa_conversion": 24.4
-    },
-    "semana": {
-      "visualizaciones": 248,
-      "contactos": 61,
-      "tasa_conversion": 24.6
-    },
-    "dia": {
-      "visualizaciones": 133,
-      "contactos": 31,
-      "tasa_conversion": 23.3
-    }
-  }
-}
-
-const MisEstadisticasScreen = () => {
-  // ... otros estados ...
-  const [datosCompletos, setDatosCompletos] = useState(null);
-  const [cargando, setCargando] = useState(true);
-
-  // Cargar todos los datos al entrar a la pantalla
-  useEffect(() => {
-    const cargarDatosCompletos = async () => {
-      try {
-        setCargando(true);
-        const response = await fetch(`https://tuservicio.com/api/estadisticas/${emprendimiento.id}/completo`);
-        const data = await response.json();
-        setDatosCompletos(data);
-        
-        // Inicializar con datos del año
-        setLabels(data.datos.año.labels);
-        setVisualizaciones(data.datos.año.visualizaciones);
-        setContactos(data.datos.año.contactos);
-        setFechaInicio(new Date(data.datos.año.fecha_inicio));
-        setFechaFin(new Date(data.datos.año.fecha_fin));
-        
-      } catch (error) {
-        console.error("Error al cargar estadísticas:", error);
-        // Manejo de errores
-      } finally {
-        setCargando(false);
-      }
-    };
-
-    cargarDatosCompletos();
-  }, [emprendimiento.id]);
-
-  // Manejar cambio de período
-  const handleCambioPeriodo = (nuevoPeriodo) => {
-    if (!datosCompletos) return;
-    
-    setPeriodo(nuevoPeriodo);
-    setLabels(datosCompletos.datos[nuevoPeriodo].labels);
-    setVisualizaciones(datosCompletos.datos[nuevoPeriodo].visualizaciones);
-    setContactos(datosCompletos.datos[nuevoPeriodo].contactos);
-    setFechaInicio(new Date(datosCompletos.datos[nuevoPeriodo].fecha_inicio));
-    setFechaFin(new Date(datosCompletos.datos[nuevoPeriodo].fecha_fin));
-  };
-
-  // Obtener totales según el período actual
-  const totalVisualizaciones = datosCompletos?.totales[periodo]?.visualizaciones || 0;
-  const totalContactos = datosCompletos?.totales[periodo]?.contactos || 0;
-  const tasaConversion = datosCompletos?.totales[periodo]?.tasa_conversion || "0.0";
-
-  // Render condicional mientras carga
-  if (cargando) {
-    return (
-      <View style={styles.cargandoContainer}>
-        <ActivityIndicator size="large" color="#2A9D8F" />
-        <Text style={styles.cargandoTexto}>Cargando estadísticas...</Text>
-      </View>
-    );
-  }
-
-  if (!datosCompletos) {
-    return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorTexto}>No se pudieron cargar los datos</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.botonError}>Volver</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // ... resto del render igual pero usando handleCambioPeriodo en los botones ...
-
- */
-
-// Estilos adicionales para gráfico simplificado
-const additionalStyles = StyleSheet.create({
-  simpleChart: {
     backgroundColor: "white",
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    borderLeftWidth: 4,
+  },
+  insightIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  insightContent: {
+    flex: 1,
+  },
+  insightTitulo: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2c3e50",
+    marginBottom: 3,
+  },
+  insightDescripcion: {
+    fontSize: 12,
+    color: "#7f8c8d",
+    lineHeight: 17,
+  },
+  // Recomendaciones
+  recomendacionCard: {
+    flexDirection: "row",
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  recomendacionIcono: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#2A9D8F' + '20',
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 10,
+  },
+  recomendacionTexto: {
+    fontSize: 13,
+    color: "#2c3e50",
+    flex: 1,
+    lineHeight: 18,
+    fontWeight: "500",
+  },
+  // Detalles
+  detailGrid: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 10,
+  },
+  detailCard: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
     alignItems: "center",
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
   },
-  chartTitle: {
+  detailIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  detailValue: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#2A9D8F",
-    marginBottom: 5,
+    fontWeight: "800",
+    color: "#2c3e50",
+    marginBottom: 2,
   },
-  chartSubtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 20,
+  detailLabel: {
+    fontSize: 10,
+    color: "#7f8c8d",
+    textAlign: "center",
+    fontWeight: "500",
   },
-  statsGrid: {
+  // Productos
+  productoCard: {
     flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-  },
-  statItem: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
     alignItems: "center",
   },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "bold",
+  productoRank: {
+    marginRight: 12,
+  },
+  rankBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  rankText: {
+    color: "white",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  productoInfo: {
+    flex: 1,
+  },
+  productoNombre: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#2c3e50",
+    marginBottom: 4,
+  },
+  productoStats: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  productoStat: {
+    fontSize: 12,
+    color: "#7f8c8d",
+  },
+  // Motivos de rechazo
+  motivoCard: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  motivoHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  motivoTexto: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2c3e50",
+    flex: 1,
+  },
+  motivoPorcentaje: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#e74c3c",
+  },
+  motivoBarraContainer: {
+    height: 6,
+    backgroundColor: "#ecf0f1",
+    borderRadius: 3,
+    overflow: "hidden",
+    marginBottom: 6,
+  },
+  motivoBarra: {
+    height: "100%",
+    backgroundColor: "#e74c3c",
+    borderRadius: 3,
+  },
+  motivoCantidad: {
+    fontSize: 11,
+    color: "#95a5a6",
+  },
+  // Horarios
+  horarioCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  horarioInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    gap: 10,
+  },
+  horarioHora: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#2c3e50",
+  },
+  horarioStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  horarioStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  horarioStatTexto: {
+    fontSize: 12,
+    color: "#7f8c8d",
+  },
+  horarioMonto: {
+    fontSize: 14,
+    fontWeight: "700",
     color: "#2A9D8F",
   },
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 5,
+  // Clientes
+  clientesCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  clienteRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ecf0f1",
+  },
+  clienteInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  clienteLabel: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#2c3e50",
+  },
+  clienteValue: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  // Conversión
+  conversionCard: {
+    padding: 20,
+    borderRadius: 14,
+    alignItems: "center",
+    shadowColor: "#667eea",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  conversionLabel: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.9)",
+    fontWeight: "600",
+  },
+  conversionTasa: {
+    fontSize: 36,
+    fontWeight: "900",
+    color: "white",
+    marginVertical: 8,
+  },
+  // Categorías
+  categoriasContainer: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  categoriaItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ecf0f1",
+  },
+  categoriaInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  categoriaBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  categoriaLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#2c3e50",
+  },
+  categoriaValue: {
+    fontSize: 16,
+    fontWeight: "800",
   },
 });
 

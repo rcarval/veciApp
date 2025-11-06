@@ -21,6 +21,10 @@ export const API_ENDPOINTS = {
   VERIFICAR_CODIGO: `${API_BASE_URL}/auth/verificar-codigo`,
   CAMBIAR_PASSWORD: `${API_BASE_URL}/auth/cambiar-password`,
   
+  // Verificación de teléfono
+  ENVIAR_CODIGO_TELEFONO: `${API_BASE_URL}/auth/enviar-codigo-telefono`,
+  VERIFICAR_CODIGO_TELEFONO: `${API_BASE_URL}/auth/verificar-codigo-telefono`,
+  
   // Comunas
   COMUNAS: `${API_BASE_URL}/comunas`,
   COMUNA_BY_ID: (id) => `${API_BASE_URL}/comunas/${id}`,
@@ -72,6 +76,10 @@ export const API_ENDPOINTS = {
   ELIMINAR_FAVORITO: (emprendimientoId) => `${API_BASE_URL}/favoritos/${emprendimientoId}`,
   VERIFICAR_FAVORITO: (emprendimientoId) => `${API_BASE_URL}/favoritos/check/${emprendimientoId}`,
   
+  // Reportes
+  CREAR_REPORTE: `${API_BASE_URL}/reportes`,
+  MIS_REPORTES: `${API_BASE_URL}/reportes/mis-reportes`,
+  
   // Pedidos
   MIS_PEDIDOS: `${API_BASE_URL}/pedidos`,
   PEDIDOS_RECIBIDOS: `${API_BASE_URL}/pedidos/recibidos`,
@@ -89,7 +97,23 @@ export const API_ENDPOINTS = {
   
   // Estadísticas
   ESTADISTICAS_EMPRENDIMIENTO: (emprendimientoId) => `${API_BASE_URL}/estadisticas/${emprendimientoId}`,
+  ESTADISTICAS_AVANZADAS: (emprendimientoId, periodo = 'mes') => `${API_BASE_URL}/estadisticas-avanzadas/${emprendimientoId}?periodo=${periodo}`,
   REGISTRAR_VISUALIZACION: (emprendimientoId) => `${API_BASE_URL}/estadisticas/${emprendimientoId}/registrar-visualizacion`,
+  
+  // Cupones
+  VALIDAR_CUPON: `${API_BASE_URL}/cupones/validar`,
+  CANJEAR_CUPON: `${API_BASE_URL}/cupones/canjear`,
+  MIS_CUPONES: `${API_BASE_URL}/cupones/mis-cupones`,
+  BENEFICIOS_ACTIVOS: `${API_BASE_URL}/cupones/beneficios-activos`,
+  USAR_BENEFICIO: `${API_BASE_URL}/cupones/usar-beneficio`,
+  
+  // Notificaciones Push
+  REGISTRAR_FCM_TOKEN: `${API_BASE_URL}/notificaciones/registrar-token`,
+  ELIMINAR_FCM_TOKEN: `${API_BASE_URL}/notificaciones/token`,
+  MIS_NOTIFICACIONES: `${API_BASE_URL}/notificaciones/mis-notificaciones`,
+  MARCAR_NOTIFICACION_LEIDA: (id) => `${API_BASE_URL}/notificaciones/${id}/marcar-leida`,
+  MARCAR_TODAS_LEIDAS: `${API_BASE_URL}/notificaciones/marcar-todas-leidas`,
+  NOTIFICACION_TEST: `${API_BASE_URL}/notificaciones/test`,
 };
 
 export default API_BASE_URL;

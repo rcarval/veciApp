@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,18 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { FontAwesome } from "@expo/vector-icons";
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
+
+const { width, height } = Dimensions.get('window');
 
 const RegisterScreen = ({ navigation }) => {
   const [nombre, setNombre] = useState("");
@@ -20,69 +27,76 @@ const RegisterScreen = ({ navigation }) => {
   const [confirmarCorreo, setConfirmarCorreo] = useState("");
   const [contrasena, setContrasena] = useState("");
   const [confirmarContrasena, setConfirmarContrasena] = useState("");
-  const [telefono, setTelefono] = useState("");
   const [comuna, setComuna] = useState("");
   const [comunas, setComunas] = useState([]);
   const [cargandoComunas, setCargandoComunas] = useState(true);
   const [tipoUsuario, setTipoUsuario] = useState("cliente");
-  const [nivelSeguridad, setNivelSeguridad] = useState("");
   const [errorCorreo, setErrorCorreo] = useState("");
   const [errorContrasena, setErrorContrasena] = useState("");
   const [verPassword, setVerPassword] = useState(false);
   const [verConfirmPassword, setVerConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // 🔥 Verifica si el correo ingresado es válido y coincide con la confirmación
+  // Animaciones
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(30)).current;
+
+  useEffect(() => {
+    // Animación de entrada
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // Validaciones
   const verificarCorreo = (text) => {
     setCorreo(text);
     setErrorCorreo(
       /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)
-        ? text !== confirmarCorreo
+        ? text !== confirmarCorreo && confirmarCorreo.length > 0
           ? "Los correos no coinciden"
           : ""
-        : "Ingresa un correo válido"
+        : text.length > 0 ? "Ingresa un correo válido" : ""
     );
   };
 
-  // 🔥 Verifica si el correo de confirmación coincide con el original
   const verificarConfirmarCorreo = (text) => {
     setConfirmarCorreo(text);
-    setErrorCorreo(text !== correo ? "Los correos no coinciden" : "");
+    setErrorCorreo(text !== correo && text.length > 0 ? "Los correos no coinciden" : "");
   };
 
-  // 🔥 Verifica si la contraseña es segura y coincide con la confirmación
   const verificarContrasena = (text) => {
     setContrasena(text);
     setErrorContrasena(
       /^(?=.*[A-Z])(?=.*\d)(?=.*[a-z]).{8,16}$/.test(text)
-        ? text !== confirmarContrasena
+        ? text !== confirmarContrasena && confirmarContrasena.length > 0
           ? "Las contraseñas no coinciden"
           : ""
-        : "La contraseña debe tener entre 8 y 16 caracteres, incluir al menos una mayúscula, un número y una letra"
+        : text.length > 0 ? "8-16 caracteres, 1 mayúscula, 1 número" : ""
     );
   };
 
-  // 🔥 Verifica si la confirmación de contraseña es correcta
   const verificarConfirmarContrasena = (text) => {
     setConfirmarContrasena(text);
     setErrorContrasena(
-      text !== contrasena ? "Las contraseñas no coinciden" : ""
+      text !== contrasena && text.length > 0 ? "Las contraseñas no coinciden" : ""
     );
   };
 
   const validarCorreo = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  const validarTelefono = (numero) => /^\+56\d{9}$/.test(numero);
   const validarContrasena = (password) =>
     /^(?=.*[A-Z])(?=.*\d)(?=.*[a-z]).{8,16}$/.test(password);
 
-  const evaluarSeguridad = (password) => {
-    if (password.length < 8) return "Débil";
-    if (/^(?=.*[A-Z])(?=.*\d)(?=.*[a-z]).{8,16}$/.test(password))
-      return "Fuerte";
-    return "Moderada";
-  };
-
-  // Cargar comunas desde el backend
+  // Cargar comunas
   useEffect(() => {
     const cargarComunas = async () => {
       try {
@@ -92,13 +106,10 @@ const RegisterScreen = ({ navigation }) => {
         
         if (response.ok && data.comunas) {
           setComunas(data.comunas);
-          // Seleccionar la primera comuna por defecto si hay comunas
           if (data.comunas.length > 0) {
             setComuna(data.comunas[0].id.toString());
           }
         } else {
-          console.error('Error al cargar comunas:', data);
-          // Fallback a comunas hardcodeadas si falla la API
           setComunas([
             { id: 1, nombre: 'Isla de Maipo' },
             { id: 2, nombre: 'Talagante' }
@@ -106,8 +117,7 @@ const RegisterScreen = ({ navigation }) => {
           setComuna('1');
         }
       } catch (error) {
-        console.error('Error de conexión al cargar comunas:', error);
-        // Fallback a comunas hardcodeadas
+        console.error('Error al cargar comunas:', error);
         setComunas([
           { id: 1, nombre: 'Isla de Maipo' },
           { id: 2, nombre: 'Talagante' }
@@ -122,15 +132,7 @@ const RegisterScreen = ({ navigation }) => {
   }, []);
 
   const handleRegister = async () => {
-    console.log(correo);
-    if (
-      !nombre ||
-      !correo ||
-      !confirmarCorreo ||
-      !contrasena ||
-      !confirmarContrasena ||
-      !telefono
-    ) {
+    if (!nombre || !correo || !confirmarCorreo || !contrasena || !confirmarContrasena) {
       Alert.alert("Error", "Todos los campos son obligatorios.");
       return;
     }
@@ -142,37 +144,25 @@ const RegisterScreen = ({ navigation }) => {
       Alert.alert("Error", "Los correos no coinciden.");
       return;
     }
-    if (!validarTelefono(telefono)) {
-      Alert.alert(
-        "Error",
-        "Ingresa un número de teléfono válido (+56XXXXXXXXX)."
-      );
-      return;
-    }
     if (!validarContrasena(contrasena)) {
-      Alert.alert(
-        "Error",
-        "La contraseña debe tener entre 8 y 16 caracteres, con al menos una mayúscula, además de números y letras."
-      );
+      Alert.alert("Error", "La contraseña debe tener 8-16 caracteres, con mayúscula y número.");
       return;
     }
     if (contrasena !== confirmarContrasena) {
       Alert.alert("Error", "Las contraseñas no coinciden.");
       return;
     }
+    
     setLoading(true);
 
     try {
-      // Preparar datos para envío
       const datosRegistro = {
         nombre,
         correo: correo.toLowerCase(),
         contrasena,
-        telefono,
-        tipo_usuario: tipoUsuario === 'vecino' ? 'cliente' : tipoUsuario, // Mapear vecino -> cliente
+        tipo_usuario: tipoUsuario === 'vecino' ? 'cliente' : tipoUsuario,
       };
 
-      // Agregar comuna_id solo si se seleccionó una comuna
       if (comuna) {
         datosRegistro.comuna_id = parseInt(comuna);
       }
@@ -190,11 +180,11 @@ const RegisterScreen = ({ navigation }) => {
 
       if (response.ok) {
         Alert.alert(
-          "Registro exitoso",
-          data.mensaje || "Tu cuenta ha sido creada exitosamente. ¡Bienvenido a VeciApp!",
+          "✅ ¡Registro exitoso!",
+          "Hemos enviado un correo de verificación a:\n\n" + correo + "\n\nPor favor verifica tu email para activar tu cuenta.",
           [
             {
-              text: "OK",
+              text: "Entendido",
               onPress: () => navigation.navigate("Login")
             }
           ]
@@ -204,287 +194,458 @@ const RegisterScreen = ({ navigation }) => {
         Alert.alert("Error", mensajeError);
       }
     } catch (error) {
-      console.error("Error de conexión:", error);
-      Alert.alert(
-        "Error de conexión",
-        "No se pudo conectar al servidor. Verifica tu conexión a internet y que el backend esté corriendo."
-      );
+      console.error("Error:", error);
+      Alert.alert("Error de conexión", "No se pudo conectar al servidor.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContainer}>
+    <View style={styles.container}>
+      {/* Background gradient */}
       <LinearGradient
-        colors={["#d5fdfa", "#edeeb7", "#0b8e0d"]}
-        style={styles.container}
+        colors={["#1a535c", "#2A9D8F", "#4ecdc4"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
       >
-        <Text style={styles.title}>Registro en Marketplace</Text>
-
-        {/* 🔥 Nombre Completo */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="user" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={nombre}
-            onChangeText={setNombre}
-            placeholder="Tu nombre"
-          />
-        </View>
-
-        {/* 🔥 Correo */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="envelope" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={correo}
-            onChangeText={verificarCorreo}
-            placeholder="Tu correo"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-        {errorCorreo ? (
-          <Text style={styles.errorTexto}>
-            <FontAwesome name="times-circle" size={14} color="red" />{" "}
-            {errorCorreo}
-          </Text>
-        ) : null}
-
-        {/* 🔥 Confirmar Correo */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="envelope" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={confirmarCorreo}
-            onChangeText={verificarConfirmarCorreo}
-            placeholder="Confirma tu correo"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* 🔥 Contraseña */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="lock" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={contrasena}
-            onChangeText={verificarContrasena}
-            placeholder="Contraseña"
-            secureTextEntry={!verPassword}
-          />
-          <TouchableOpacity onPress={() => setVerPassword(!verPassword)}>
-            <FontAwesome
-              name={verPassword ? "eye" : "eye-slash"}
-              size={22}
-              color="gray"
-            />
-          </TouchableOpacity>
-        </View>
-        {errorContrasena ? (
-          <Text style={styles.errorTexto}>
-            <FontAwesome name="times-circle" size={14} color="red" />{" "}
-            {errorContrasena}
-          </Text>
-        ) : null}
-
-        {/* 🔥 Confirmar Contraseña */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="lock" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={confirmarContrasena}
-            onChangeText={verificarConfirmarContrasena}
-            placeholder="Confirma tu contraseña"
-            secureTextEntry={!verConfirmPassword}
-          />
-          <TouchableOpacity
-            onPress={() => setVerConfirmPassword(!verConfirmPassword)}
-          >
-            <FontAwesome
-              name={verConfirmPassword ? "eye" : "eye-slash"}
-              size={22}
-              color="gray"
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* 🔥 Teléfono */}
-        <View style={styles.inputBox}>
-          <FontAwesome name="phone" size={20} color="#555" />
-          <TextInput
-            style={styles.input}
-            value={telefono}
-            onChangeText={setTelefono}
-            placeholder="+56XXXXXXXXX"
-            keyboardType="phone-pad"
-          />
-        </View>
-
-        {/* 🔥 Objetivo (Picker mejorado) */}
-        <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={tipoUsuario}
-            onValueChange={(itemValue) => setTipoUsuario(itemValue)}
-            style={styles.picker}
-          >
-            <Picker.Item label="Solo Comprar" value="cliente" />
-            <Picker.Item label="Comprar y Vender" value="emprendedor" />
-          </Picker>
-        </View>
-
-        {/* 🔥 Comuna (Picker mejorado - cargado desde API) */}
-        <View style={styles.pickerContainer}>
-          {cargandoComunas ? (
-            <View style={styles.loadingComunas}>
-              <ActivityIndicator size="small" color="#2A9D8F" />
-              <Text style={styles.loadingText}>Cargando comunas...</Text>
-            </View>
-          ) : (
-            <Picker
-              selectedValue={comuna}
-              onValueChange={(itemValue) => setComuna(itemValue)}
-              style={styles.picker}
-            >
-              <Picker.Item label="Selecciona una comuna" value="" />
-              {comunas.map((comunaItem) => (
-                <Picker.Item
-                  key={comunaItem.id}
-                  label={comunaItem.nombre}
-                  value={comunaItem.id.toString()}
-                />
-              ))}
-            </Picker>
-          )}
-        </View>
-
-        {/* 🔥 Botón de registro */}
-        <TouchableOpacity 
-          style={[styles.button, loading && styles.buttonDisabled]} 
-          onPress={handleRegister}
-          disabled={loading || cargandoComunas}
-        >
-          {loading ? (
-            <View style={styles.buttonLoading}>
-              <ActivityIndicator size="small" color="#FFF" />
-              <Text style={styles.buttonText}>Registrando...</Text>
-            </View>
-          ) : (
-            <Text style={styles.buttonText}>Registrarse</Text>
-          )}
-        </TouchableOpacity>
+        <View style={styles.backgroundCircle1} />
+        <View style={styles.backgroundCircle2} />
       </LinearGradient>
-    </ScrollView>
+
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.keyboardView}
+      >
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <Animated.View style={[
+            styles.header,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}>
+            <View style={styles.headerContent}>
+              <View style={styles.logoMini}>
+                <Image 
+                  source={require("../assets/welcome.png")} 
+                  style={styles.logoSmall}
+                  contentFit="contain"
+                  tintColor="white"
+                />
+              </View>
+              <Text style={styles.headerTitle}>Crear Cuenta</Text>
+              <Text style={styles.headerSubtitle}>Únete a tu comunidad local</Text>
+            </View>
+          </Animated.View>
+
+          {/* Formulario */}
+          <Animated.View style={[
+            styles.formContainer,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }],
+            },
+          ]}>
+            <View style={styles.formCard}>
+              {/* Nombre */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIconContainer}>
+                  <Ionicons name="person-outline" size={22} color="#2A9D8F" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={nombre}
+                  onChangeText={setNombre}
+                  placeholder="Nombre completo"
+                  placeholderTextColor="#95a5a6"
+                />
+              </View>
+
+              {/* Email */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIconContainer}>
+                  <Ionicons name="mail-outline" size={22} color="#2A9D8F" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={correo}
+                  onChangeText={verificarCorreo}
+                  placeholder="Correo electrónico"
+                  placeholderTextColor="#95a5a6"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {/* Confirmar Email */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIconContainer}>
+                  <Ionicons name="mail-outline" size={22} color="#2A9D8F" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={confirmarCorreo}
+                  onChangeText={verificarConfirmarCorreo}
+                  placeholder="Confirmar correo"
+                  placeholderTextColor="#95a5a6"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+              </View>
+
+              {errorCorreo ? (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color="#e74c3c" />
+                  <Text style={styles.errorText}>{errorCorreo}</Text>
+                </View>
+              ) : null}
+
+              {/* Contraseña */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIconContainer}>
+                  <Ionicons name="lock-closed-outline" size={22} color="#2A9D8F" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={contrasena}
+                  onChangeText={verificarContrasena}
+                  placeholder="Contraseña"
+                  placeholderTextColor="#95a5a6"
+                  secureTextEntry={!verPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity 
+                  onPress={() => setVerPassword(!verPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={verPassword ? "eye-outline" : "eye-off-outline"}
+                    size={22}
+                    color="#7f8c8d"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Confirmar Contraseña */}
+              <View style={styles.inputContainer}>
+                <View style={styles.inputIconContainer}>
+                  <Ionicons name="lock-closed-outline" size={22} color="#2A9D8F" />
+                </View>
+                <TextInput
+                  style={styles.input}
+                  value={confirmarContrasena}
+                  onChangeText={verificarConfirmarContrasena}
+                  placeholder="Confirmar contraseña"
+                  placeholderTextColor="#95a5a6"
+                  secureTextEntry={!verConfirmPassword}
+                  autoCapitalize="none"
+                />
+                <TouchableOpacity 
+                  onPress={() => setVerConfirmPassword(!verConfirmPassword)}
+                  style={styles.eyeButton}
+                >
+                  <Ionicons
+                    name={verConfirmPassword ? "eye-outline" : "eye-off-outline"}
+                    size={22}
+                    color="#7f8c8d"
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {errorContrasena ? (
+                <View style={styles.errorContainer}>
+                  <Ionicons name="alert-circle" size={16} color="#e74c3c" />
+                  <Text style={styles.errorText}>{errorContrasena}</Text>
+                </View>
+              ) : null}
+
+              {/* Tipo de Usuario - Compacto */}
+              <View style={styles.pickerContainerCompact}>
+                <View style={styles.pickerIconContainer}>
+                  <Ionicons name="briefcase-outline" size={20} color="#2A9D8F" />
+                </View>
+                <View style={styles.pickerWrapper}>
+                  <Picker
+                    selectedValue={tipoUsuario}
+                    onValueChange={(itemValue) => setTipoUsuario(itemValue)}
+                    style={styles.pickerCompact}
+                  >
+                    <Picker.Item label="Quiero Comprar" value="cliente" />
+                    <Picker.Item label="Quiero Comprar y Vender" value="emprendedor" />
+                  </Picker>
+                </View>
+              </View>
+
+              {/* Comuna - Compacto */}
+              <View style={styles.pickerContainerCompact}>
+                <View style={styles.pickerIconContainer}>
+                  <Ionicons name="location-outline" size={20} color="#2A9D8F" />
+                </View>
+                {cargandoComunas ? (
+                  <View style={styles.loadingComunasCompact}>
+                    <ActivityIndicator size="small" color="#2A9D8F" />
+                    <Text style={styles.loadingTextCompact}>Cargando...</Text>
+                  </View>
+                ) : (
+                  <View style={styles.pickerWrapper}>
+                    <Picker
+                      selectedValue={comuna}
+                      onValueChange={(itemValue) => setComuna(itemValue)}
+                      style={styles.pickerCompact}
+                    >
+                      <Picker.Item label="Selecciona comuna" value="" />
+                      {comunas.map((comunaItem) => (
+                        <Picker.Item
+                          key={comunaItem.id}
+                          label={comunaItem.nombre}
+                          value={comunaItem.id.toString()}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+                )}
+              </View>
+
+              {/* Botón de registro */}
+              <TouchableOpacity 
+                style={styles.registerButton} 
+                onPress={handleRegister}
+                disabled={loading || cargandoComunas}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={["#2A9D8F", "#1a7a6e"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.registerButtonGradient}
+                >
+                  {loading ? (
+                    <View style={styles.buttonLoading}>
+                      <ActivityIndicator size="small" color="white" />
+                      <Text style={styles.registerButtonText}>Registrando...</Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.registerButtonText}>Crear Cuenta</Text>
+                      <Ionicons name="checkmark-circle" size={20} color="white" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              {/* Link a login */}
+              <TouchableOpacity
+                onPress={() => navigation.navigate("Login")}
+                style={styles.loginLink}
+              >
+                <Text style={styles.loginLinkText}>
+                  ¿Ya tienes cuenta? <Text style={styles.loginLinkBold}>Inicia sesión</Text>
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#FAFAF9",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 20,
+    backgroundColor: "#1a535c",
   },
-  title: { fontSize: 24, fontWeight: "bold", color: "#333", marginBottom: 20 },
-  label: {
-    alignSelf: "flex-start",
-    marginLeft: 10,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#555",
-  },
-  inputBox: {
-    flexDirection: "row",
-    alignItems: "center",
-    width: "85%",
-    paddingHorizontal: 15,
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    marginVertical: 8,
-    elevation: 3,
-  },
-
-  input: {
+  keyboardView: {
     flex: 1,
-    paddingVertical: 12,
-    marginLeft: 10,
   },
-  pickerContainer: {
-    backgroundColor: "#FFF",
-    borderRadius: 12, // 🔥 Bordes redondeados más suaves
-    paddingHorizontal: 8,
-    width: "85%",
-    paddingVertical: 0,
-    marginVertical: 10,
-    elevation: 4, // 🔥 Sombra para destacar
-    height: "5%",
-    justifyContent: "center",
+  scrollContent: {
+    flexGrow: 1,
+    paddingTop: 30,
+    paddingBottom: 30,
   },
-
-  picker: {
-    width: "100%",
-    color: "#333", // 🔥 Mejor contraste
-    fontSize: 14, // 🔥 Ajuste de tamaño para mejor lectura
+  // Círculos decorativos
+  backgroundCircle1: {
+    position: "absolute",
+    width: 350,
+    height: 350,
+    borderRadius: 175,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    top: -100,
+    right: -80,
   },
-
-  errorTexto: {
-    color: "red",
-    fontSize: 14,
-    marginVertical: 5,
+  backgroundCircle2: {
+    position: "absolute",
+    width: 250,
+    height: 250,
+    borderRadius: 125,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    bottom: -60,
+    left: -60,
   },
-  button: {
-    backgroundColor: "#2A9D8F",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 20,
-    marginBottom: 40,
-    width: "85%",
+  // Header
+  header: {
+    paddingHorizontal: 24,
+    marginBottom: 20,
     alignItems: "center",
   },
-  buttonText: { color: "white", fontSize: 18, fontWeight: "bold" },
-  loginLink: { marginTop: 15 },
-  loginText: { color: "#2c7edb", fontSize: 16, fontWeight: "600" },
-  scrollContainer: {
-    flexGrow: 1, // Espacio extra para evitar que el último elemento quede pegado abajo
+  headerContent: {
+    alignItems: "center",
+  },
+  logoMini: {
+    marginBottom: 8,
+  },
+  logoSmall: {
+    width: 60,
+    height: 60,
+  },
+  headerTitle: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "white",
+    letterSpacing: 0.5,
+    textShadowColor: "rgba(0, 0, 0, 0.3)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.85)",
+    marginTop: 4,
+    fontWeight: "400",
+  },
+  // Formulario
+  formContainer: {
+    paddingHorizontal: 24,
+  },
+  formCard: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    backgroundColor: "#fff",
-    marginVertical: 10,
+    backgroundColor: "#f8f9fa",
+    borderRadius: 14,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    overflow: "hidden",
   },
-  inputPass: {
+  inputIconContainer: {
+    paddingLeft: 16,
+    paddingRight: 12,
+  },
+  input: {
     flex: 1,
     paddingVertical: 12,
+    fontSize: 15,
+    color: "#2c3e50",
   },
-  icon: {
-    marginLeft: 10,
+  eyeButton: {
+    paddingHorizontal: 16,
   },
-  loadingComunas: {
+  errorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#fee",
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+    gap: 6,
+  },
+  errorText: {
+    color: "#e74c3c",
+    fontSize: 13,
+    flex: 1,
+  },
+  // Picker compacto
+  pickerContainerCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    marginBottom: 14,
+    height: 52,
+    overflow: "hidden",
+  },
+  pickerIconContainer: {
+    paddingLeft: 16,
+    paddingRight: 12,
+  },
+  pickerWrapper: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  pickerCompact: {
+    color: "#2c3e50",
+    fontSize: 15,
+  },
+  loadingComunasCompact: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    gap: 10,
   },
-  loadingText: {
-    marginLeft: 10,
-    color: '#666',
+  loadingTextCompact: {
+    color: '#7f8c8d',
     fontSize: 14,
   },
-  buttonDisabled: {
-    opacity: 0.6,
+  // Botones
+  registerButton: {
+    marginTop: 20,
+    borderRadius: 14,
+    overflow: "hidden",
+    shadowColor: "#2A9D8F",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  registerButtonGradient: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 16,
+    gap: 10,
+  },
+  registerButtonText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "700",
   },
   buttonLoading: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  loginLink: {
+    alignItems: "center",
+    marginTop: 20,
+  },
+  loginLinkText: {
+    color: "#7f8c8d",
+    fontSize: 14,
+  },
+  loginLinkBold: {
+    color: "#2A9D8F",
+    fontWeight: "700",
   },
 });
 

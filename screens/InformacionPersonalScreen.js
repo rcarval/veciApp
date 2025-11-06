@@ -270,91 +270,150 @@ const InformacionPersonalScreen = () => {
       <LinearGradient
         colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <View style={styles.headerTitleContainer}>
-          <Ionicons name="person" size={24} color="white" />
-          <Text style={styles.tituloPrincipal}>Información Personal</Text>
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            style={styles.botonAtrasModerno}
+            onPress={() => navigation.goBack()}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <View style={styles.headerCentro}>
+            <View style={styles.headerIconWrapper}>
+              <Ionicons name="person" size={28} color="white" />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerSubtitle}>Edita tu</Text>
+              <Text style={styles.tituloPrincipal}>Información</Text>
+            </View>
+          </View>
+          <View style={{ width: 44 }} />
         </View>
       </LinearGradient>
 
       {cargandoUsuario ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2A9D8F" />
-          <Text style={styles.loadingText}>Cargando información...</Text>
+          <LinearGradient
+            colors={[currentTheme.primary + '30', currentTheme.secondary + '30']}
+            style={styles.loadingGradiente}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <ActivityIndicator size="large" color={currentTheme.primary} />
+          </LinearGradient>
+          <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>Cargando información...</Text>
         </View>
       ) : (
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.formContainer}>
-            {/* Campo Nombre */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Nombre Completo</Text>
-              <TextInput
-                style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
-                value={nombre}
-                onChangeText={setNombre}
-                placeholder="Ingresa tu nombre completo"
-                editable={!guardando}
-              />
-            </View>
-
-            {/* Campo Teléfono */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Teléfono</Text>
-              <TextInput
-                style={[styles.inputField, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
-                value={telefono}
-                onChangeText={setTelefono}
-                placeholder="+56912345678"
-                keyboardType="phone-pad"
-                editable={!guardando}
-              />
-            </View>
-
-            {/* Campo Comuna */}
-            <View style={styles.inputGroup}>
-              <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Comuna</Text>
-              <View style={[styles.pickerWrapper, { borderColor: currentTheme.border }]}>
-                {cargandoComunas ? (
-                  <View style={styles.loadingComunas}>
-                    <ActivityIndicator size="small" color={currentTheme.primary} />
-                    <Text style={[styles.loadingComunasText, { color: currentTheme.textSecondary }]}>Cargando comunas...</Text>
-                  </View>
-                ) : (
-                  <Picker
-                    selectedValue={comuna}
-                    onValueChange={(itemValue) => setComuna(itemValue)}
-                    style={[styles.picker, { color: currentTheme.text }]}
-                    enabled={!guardando}
-                  >
-                    <Picker.Item label="Selecciona una comuna" value="" />
-                    {comunas.map((comunaItem) => (
-                      <Picker.Item
-                        key={comunaItem.id}
-                        label={comunaItem.nombre}
-                        value={comunaItem.id.toString()}
-                      />
-                    ))}
-                  </Picker>
-                )}
-              </View>
-            </View>
-
-            {/* Botón Guardar */}
-            <TouchableOpacity
-              style={[
-                styles.botonGuardar,
-                { backgroundColor: currentTheme.primary },
-                (!hayCambios() || guardando) && styles.botonGuardarInactivo,
-              ]}
-              onPress={manejarGuardado}
-              disabled={!hayCambios() || guardando}
+          <View style={[styles.formContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+            <LinearGradient
+              colors={[currentTheme.primary + '08', 'transparent']}
+              style={styles.formGradiente}
             >
-              {guardando ? (
-                <ActivityIndicator size="small" color="#FFF" />
-              ) : (
-                <Text style={styles.botonGuardarTexto}>Guardar Cambios</Text>
-              )}
-            </TouchableOpacity>
+              {/* Campo Nombre */}
+              <View style={styles.inputGroup}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="person-outline" size={16} color={currentTheme.primary} />
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Nombre Completo</Text>
+                </View>
+                <View style={[styles.inputContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <Ionicons name="text-outline" size={20} color={currentTheme.primary} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.inputModerno, { color: currentTheme.text }]}
+                    value={nombre}
+                    onChangeText={setNombre}
+                    placeholder="Ingresa tu nombre completo"
+                    placeholderTextColor={currentTheme.textSecondary}
+                    editable={!guardando}
+                  />
+                </View>
+              </View>
+
+              {/* Campo Teléfono */}
+              <View style={styles.inputGroup}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="call-outline" size={16} color={currentTheme.primary} />
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Teléfono</Text>
+                </View>
+                <View style={[styles.inputContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <Ionicons name="phone-portrait-outline" size={20} color={currentTheme.primary} style={styles.inputIcon} />
+                  <TextInput
+                    style={[styles.inputModerno, { color: currentTheme.text }]}
+                    value={telefono}
+                    onChangeText={setTelefono}
+                    placeholder="+56912345678"
+                    placeholderTextColor={currentTheme.textSecondary}
+                    keyboardType="phone-pad"
+                    editable={!guardando}
+                  />
+                </View>
+              </View>
+
+              {/* Campo Comuna */}
+              <View style={styles.inputGroup}>
+                <View style={styles.labelContainer}>
+                  <Ionicons name="location-outline" size={16} color={currentTheme.primary} />
+                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Comuna</Text>
+                </View>
+                <View style={[styles.pickerContainerModerno, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                  <Ionicons name="navigate-outline" size={20} color={currentTheme.primary} style={styles.pickerIcon} />
+                  {cargandoComunas ? (
+                    <View style={styles.loadingComunasModerno}>
+                      <ActivityIndicator size="small" color={currentTheme.primary} />
+                      <Text style={[styles.loadingComunasText, { color: currentTheme.textSecondary }]}>Cargando...</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.pickerWrapper}>
+                      <Picker
+                        selectedValue={comuna}
+                        onValueChange={(itemValue) => setComuna(itemValue)}
+                        style={[styles.pickerModerno, { color: currentTheme.text }]}
+                        enabled={!guardando}
+                      >
+                        <Picker.Item label="Selecciona una comuna" value="" />
+                        {comunas.map((comunaItem) => (
+                          <Picker.Item
+                            key={comunaItem.id}
+                            label={comunaItem.nombre}
+                            value={comunaItem.id.toString()}
+                          />
+                        ))}
+                      </Picker>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Botón Guardar */}
+              <TouchableOpacity
+                style={[styles.botonGuardarModerno, (!hayCambios() || guardando) && styles.botonGuardarInactivo]}
+                onPress={manejarGuardado}
+                disabled={!hayCambios() || guardando}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={(!hayCambios() || guardando) ? ['#95a5a6', '#7f8c8d'] : [currentTheme.primary, currentTheme.secondary]}
+                  style={styles.botonGuardarGradiente}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {guardando ? (
+                    <>
+                      <ActivityIndicator size="small" color="#FFF" />
+                      <Text style={styles.botonGuardarTexto}>Guardando...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Ionicons name="checkmark-circle" size={22} color="white" />
+                      <Text style={styles.botonGuardarTexto}>Guardar Cambios</Text>
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         </ScrollView>
       )}
@@ -369,51 +428,88 @@ const InformacionPersonalScreen = () => {
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContainer, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: currentTheme.text }]}>Verificación por SMS</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={currentTheme.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={[styles.modalText, { color: currentTheme.textSecondary }]}>
-              Hemos enviado un código de verificación al número {telefono}.
-              Ingresa el código a continuación:
-            </Text>
-
-            <TextInput
-              style={[styles.codigoInput, { backgroundColor: currentTheme.background, borderColor: currentTheme.border, color: currentTheme.text }]}
-              value={codigoVerificacion}
-              onChangeText={setCodigoVerificacion}
-              placeholder="Código de 4 dígitos"
-              keyboardType="number-pad"
-              maxLength={4}
-            />
-
-            {tiempoRestante > 0 && (
-              <Text style={[styles.tiempoRestante, { color: currentTheme.textSecondary }]}>
-                Tiempo restante: {Math.floor(tiempoRestante / 60)}:
-                {(tiempoRestante % 60).toString().padStart(2, "0")}
-              </Text>
-            )}
-
-            {tiempoRestante === 0 && (
-              <TouchableOpacity
-                onPress={enviarCodigoVerificacion}
-                style={styles.botonReenviar}
-              >
-                <Text style={[styles.botonReenviarTexto, { color: currentTheme.primary }]}>Reenviar código</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.botonVerificar, { backgroundColor: currentTheme.primary }]}
-              onPress={verificarCodigo}
-              disabled={codigoVerificacion.length !== 4}
+          <View style={[styles.modalContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+            <LinearGradient
+              colors={[currentTheme.primary + '10', 'transparent']}
+              style={styles.modalGradiente}
             >
-              <Text style={styles.botonVerificarTexto}>Verificar</Text>
-            </TouchableOpacity>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalIconWrapper}>
+                  <LinearGradient
+                    colors={[currentTheme.primary, currentTheme.secondary]}
+                    style={styles.modalIconoGradiente}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                  >
+                    <Ionicons name="shield-checkmark" size={28} color="white" />
+                  </LinearGradient>
+                </View>
+                <TouchableOpacity 
+                  onPress={() => setModalVisible(false)}
+                  style={styles.modalCloseButton}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="close-circle" size={28} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={[styles.modalTitle, { color: currentTheme.text }]}>Verificación por SMS</Text>
+              
+              <Text style={[styles.modalText, { color: currentTheme.textSecondary }]}>
+                Hemos enviado un código de verificación al número {telefono}.
+                Ingresa el código a continuación:
+              </Text>
+
+              <View style={[styles.codigoInputContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                <Ionicons name="keypad-outline" size={22} color={currentTheme.primary} />
+                <TextInput
+                  style={[styles.codigoInputModerno, { color: currentTheme.text }]}
+                  value={codigoVerificacion}
+                  onChangeText={setCodigoVerificacion}
+                  placeholder="••••"
+                  placeholderTextColor={currentTheme.textSecondary}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                />
+              </View>
+
+              {tiempoRestante > 0 && (
+                <View style={styles.tiempoContainer}>
+                  <Ionicons name="time-outline" size={16} color={currentTheme.primary} />
+                  <Text style={[styles.tiempoRestante, { color: currentTheme.textSecondary }]}>
+                    Tiempo restante: {Math.floor(tiempoRestante / 60)}:{(tiempoRestante % 60).toString().padStart(2, "0")}
+                  </Text>
+                </View>
+              )}
+
+              {tiempoRestante === 0 && (
+                <TouchableOpacity
+                  onPress={enviarCodigoVerificacion}
+                  style={[styles.botonReenviarModerno, { borderColor: currentTheme.primary }]}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="refresh-circle-outline" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.botonReenviarTexto, { color: currentTheme.primary }]}>Reenviar código</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={[styles.botonVerificarModerno, codigoVerificacion.length !== 4 && styles.botonVerificarInactivo]}
+                onPress={verificarCodigo}
+                disabled={codigoVerificacion.length !== 4}
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={codigoVerificacion.length !== 4 ? ['#95a5a6', '#7f8c8d'] : [currentTheme.primary, currentTheme.secondary]}
+                  style={styles.botonVerificarGradiente}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="checkmark-done-circle" size={22} color="white" />
+                  <Text style={styles.botonVerificarTexto}>Verificar Código</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </LinearGradient>
           </View>
         </View>
       </Modal>
@@ -466,166 +562,334 @@ const styles = StyleSheet.create({
     backgroundColor: "#FAFAF9",
   },
   scrollContainer: {
-    paddingBottom: 20,
+    paddingBottom: 150,
     paddingHorizontal: 20,
+    paddingTop: 20,
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 55,
+    paddingBottom: 28,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  botonAtrasModerno: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  headerCentro: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
   tituloPrincipal: {
-    fontSize: 28,
-    fontWeight: "800",
-    color: "white",
-    textAlign: "center",
-    marginLeft: 10,
-  },
-  headerTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
+    fontSize: 22,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   formContainer: {
-    marginTop: 20,
+    backgroundColor: "white",
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    overflow: 'hidden',
+  },
+  formGradiente: {
+    padding: 24,
   },
   inputGroup: {
     marginBottom: 20,
+    gap: 10,
+  },
+  labelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   inputLabel: {
-    fontSize: 16,
-    color: "#555",
-    marginBottom: 8,
-    fontWeight: "500",
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#2c3e50",
+    letterSpacing: 0.3,
   },
-  inputField: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 16,
-    backgroundColor: "#fff",
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    borderRadius: 14,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 14,
+    gap: 10,
+  },
+  inputIcon: {
+    marginRight: 4,
+  },
+  inputModerno: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: "#2c3e50",
+  },
+  pickerContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    borderRadius: 14,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 14,
+    gap: 10,
+    height: 52,
+  },
+  pickerIcon: {
+    marginRight: 4,
   },
   pickerWrapper: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    overflow: "hidden",
+    flex: 1,
+    justifyContent: 'center',
   },
-  picker: {
-    height: 52,
-    width: "100%",
+  pickerModerno: {
+    color: "#2c3e50",
+    fontSize: 15,
   },
-  botonGuardar: {
-    backgroundColor: "#2A9D8F",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginTop: 20,
+  loadingComunasModerno: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingComunasText: {
+    fontSize: 14,
+    color: "#7f8c8d",
+  },
+  botonGuardarModerno: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginTop: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  botonGuardarGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 10,
   },
   botonGuardarInactivo: {
-    backgroundColor: "#ccc",
+    opacity: 0.6,
   },
   botonGuardarTexto: {
     color: "white",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
   modalContainer: {
     backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 20,
-    width: "90%",
+    borderRadius: 24,
+    width: "100%",
     maxWidth: 400,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+    overflow: 'hidden',
+  },
+  modalGradiente: {
+    padding: 28,
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 20,
+  },
+  modalIconWrapper: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  modalIconoGradiente: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#2c3e50",
+    textAlign: "center",
+    marginBottom: 12,
+    letterSpacing: 0.3,
   },
   modalText: {
-    fontSize: 16,
-    color: "#555",
-    marginBottom: 20,
-    lineHeight: 24,
-  },
-  codigoInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 18,
+    fontSize: 15,
+    color: "#7f8c8d",
+    marginBottom: 24,
+    lineHeight: 22,
     textAlign: "center",
-    marginBottom: 15,
-    backgroundColor: "#fff",
+  },
+  codigoInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: "#e9ecef",
+    borderRadius: 14,
+    backgroundColor: "#f8f9fa",
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    gap: 12,
+  },
+  codigoInputModerno: {
+    flex: 1,
+    paddingVertical: 16,
+    fontSize: 24,
+    textAlign: "center",
+    color: "#2c3e50",
+    fontWeight: '700',
+    letterSpacing: 8,
+  },
+  tiempoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
   },
   tiempoRestante: {
     fontSize: 14,
-    color: "#777",
-    textAlign: "center",
-    marginBottom: 15,
+    color: "#7f8c8d",
+    fontWeight: '600',
   },
-  botonReenviar: {
-    backgroundColor: "#f0f0f0",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 15,
+  botonReenviarModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: "#2A9D8F",
+    marginBottom: 20,
+    gap: 8,
   },
   botonReenviarTexto: {
     color: "#2A9D8F",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 15,
+    fontWeight: "700",
   },
-  botonVerificar: {
-    backgroundColor: "#2A9D8F",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
+  botonVerificarModerno: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  botonVerificarGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 18,
+    gap: 10,
   },
   botonVerificarInactivo: {
-    backgroundColor: "#ccc",
+    opacity: 0.6,
   },
   botonVerificarTexto: {
     color: "white",
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: 40,
+    paddingVertical: 60,
+  },
+  loadingGradiente: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   loadingText: {
-    marginTop: 15,
     fontSize: 16,
-    color: "#666",
-  },
-  loadingComunas: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 15,
-  },
-  loadingComunasText: {
-    marginLeft: 10,
-    fontSize: 14,
-    color: "#666",
+    color: "#7f8c8d",
+    fontWeight: '600',
   },
   tabBar: {
     flexDirection: "row",

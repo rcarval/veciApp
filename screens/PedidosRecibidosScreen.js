@@ -10,6 +10,8 @@ import {
   ActivityIndicator,
   TextInput,
   Image,
+  Linking,
+  Platform,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -18,23 +20,26 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import { Picker } from '@react-native-picker/picker';
+import { Audio } from 'expo-av';
 import { useTheme } from '../context/ThemeContext';
+import { useUser } from '../context/UserContext';
 import pedidoService from '../services/pedidoService';
 import io from 'socket.io-client';
 import env from '../config/env';
+import LoadingVeciApp from '../components/LoadingVeciApp';
 
 const PedidosRecibidosScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { currentTheme } = useTheme();
-  const usuario = route.params?.usuario ?? {};
+  const { usuario: usuarioFromContext } = useUser();
+  const usuario = route.params?.usuario || usuarioFromContext || {};
   
   const [pedidosRecibidos, setPedidosRecibidos] = useState([]);
   const [tabActivo, setTabActivo] = useState("pendientes");
   const [modalVisible, setModalVisible] = useState(false);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [cargando, setCargando] = useState(false);
-  const [mapaVisible, setMapaVisible] = useState(false);
   const [coordenadasDireccion, setCoordenadasDireccion] = useState(null);
   const [cargandoMapa, setCargandoMapa] = useState(false);
   const [modalRechazoVisible, setModalRechazoVisible] = useState(false);
@@ -57,6 +62,8 @@ const PedidosRecibidosScreen = () => {
   const [modalCancelacionVisible, setModalCancelacionVisible] = useState(false);
   const [pedidoParaConfirmarCancelacion, setPedidoParaConfirmarCancelacion] = useState(null);
   const [calificacionClienteReal, setCalificacionClienteReal] = useState(null);
+  const [modalMapaFullVisible, setModalMapaFullVisible] = useState(false);
+  const [direccionMapa, setDireccionMapa] = useState('');
 
   // Opciones de tiempo de entrega
   const opcionesTiempo = [
@@ -87,6 +94,45 @@ const PedidosRecibidosScreen = () => {
     { key: 'amabilidad', label: 'Amabilidad', icon: 'heart' },
     { key: 'cooperacion', label: 'Cooperación', icon: 'users' }
   ];
+
+  // Función para reproducir sonido de notificación de nuevo pedido
+  const reproducirSonidoNotificacion = async () => {
+    try {
+      console.log('🔔 Reproduciendo sonido de notificación...');
+      
+      // Configurar el modo de audio para que reproduzca incluso en modo silencioso
+      await Audio.setAudioModeAsync({
+        playsInSilentModeIOS: true,
+        staysActiveInBackground: false,
+        shouldDuckAndroid: true,
+      });
+
+      // 🎵 Sonido seleccionado: Clear Announce Tones
+      const sonidoSeleccionado = 'https://assets.mixkit.co/active_storage/sfx/2861/2861.wav';
+
+      // Crear y reproducir el sonido
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: sonidoSeleccionado },
+        { 
+          shouldPlay: true, 
+          volume: 1.0,
+          isLooping: false
+        }
+      );
+      
+      // Limpiar el sonido después de reproducirlo
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          console.log('✅ Sonido de notificación completado');
+          sound.unloadAsync();
+        }
+      });
+      
+    } catch (error) {
+      console.error('❌ Error al reproducir sonido:', error);
+      // No mostrar alerta para no interrumpir la experiencia del usuario
+    }
+  };
 
   // Función para cargar pedidos recibidos del backend
   const cargarPedidosRecibidos = useCallback(async () => {
@@ -163,8 +209,12 @@ const PedidosRecibidosScreen = () => {
     });
 
     // Escuchar nuevos pedidos para el emprendedor
-    socket.on(`pedido:nuevo:${usuario.id}`, (data) => {
+    socket.on(`pedido:nuevo:${usuario.id}`, async (data) => {
       console.log('📡 Nuevo pedido recibido via WebSocket:', data);
+      
+      // Reproducir sonido de notificación
+      await reproducirSonidoNotificacion();
+      
       // Recargar la lista de pedidos
       cargarPedidosRecibidos();
     });
@@ -309,6 +359,79 @@ const PedidosRecibidosScreen = () => {
     }
   };
 
+  // Función para abrir direcciones en la app de mapas del dispositivo
+  const abrirDireccionesEnMapa = async () => {
+    try {
+      if (!coordenadasDireccion) {
+        Alert.alert('Error', 'No se han cargado las coordenadas de destino');
+        return;
+      }
+
+      const { latitude, longitude } = coordenadasDireccion;
+      const label = encodeURIComponent(direccionMapa);
+
+      let url = '';
+
+      if (Platform.OS === 'ios') {
+        // Apple Maps con direcciones desde ubicación actual
+        url = `http://maps.apple.com/?daddr=${latitude},${longitude}&dirflg=d`;
+      } else {
+        // Google Maps con direcciones desde ubicación actual
+        url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}&travelmode=driving`;
+      }
+
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'No se puede abrir la aplicación de mapas');
+      }
+    } catch (error) {
+      console.error('Error al abrir direcciones:', error);
+      Alert.alert('Error', 'No se pudo abrir la aplicación de mapas');
+    }
+  };
+
+  // Función para llamar al cliente
+  const llamarCliente = async (telefono) => {
+    try {
+      const url = `tel:${telefono}`;
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'No se puede realizar la llamada');
+      }
+    } catch (error) {
+      console.error('Error al llamar:', error);
+      Alert.alert('Error', 'No se pudo realizar la llamada');
+    }
+  };
+
+  // Función para abrir WhatsApp con el cliente
+  const abrirWhatsApp = async (telefono) => {
+    try {
+      // Limpiar el teléfono de caracteres especiales y espacios
+      const telefonoLimpio = telefono.replace(/[^0-9]/g, '');
+      
+      // Construir la URL de WhatsApp
+      const url = `https://wa.me/${telefonoLimpio}`;
+      
+      const supported = await Linking.canOpenURL(url);
+
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('Error', 'WhatsApp no está instalado en este dispositivo');
+      }
+    } catch (error) {
+      console.error('Error al abrir WhatsApp:', error);
+      Alert.alert('Error', 'No se pudo abrir WhatsApp');
+    }
+  };
+
   const actualizarEstadoPedido = async (pedidoId, nuevoEstado) => {
     try {
       console.log(`📤 Actualizando estado del pedido ${pedidoId} a ${nuevoEstado}`);
@@ -433,17 +556,17 @@ const PedidosRecibidosScreen = () => {
       
       // Recargar pedidos desde el backend
       await cargarPedidosRecibidos();
-      
-      Alert.alert('Calificación Guardada', 'La calificación del cliente ha sido guardada exitosamente.');
-      
-      setModalCalificacionClienteVisible(false);
-      setPedidoParaCalificarCliente(null);
-      setCalificacionesCliente({
-        puntualidad: 0,
-        comunicacion: 0,
-        amabilidad: 0,
-        cooperacion: 0
-      });
+    
+    Alert.alert('Calificación Guardada', 'La calificación del cliente ha sido guardada exitosamente.');
+    
+    setModalCalificacionClienteVisible(false);
+    setPedidoParaCalificarCliente(null);
+    setCalificacionesCliente({
+      puntualidad: 0,
+      comunicacion: 0,
+      amabilidad: 0,
+      cooperacion: 0
+    });
     } catch (error) {
       console.log('❌ Error al guardar calificación:', error);
       Alert.alert('Error', 'No se pudo guardar la calificación.');
@@ -611,17 +734,18 @@ const PedidosRecibidosScreen = () => {
       });
     }
     
-    // Ordenar del más nuevo al más antiguo por fechaHoraReserva
+    // Ordenar del más antiguo al más nuevo por fechaHoraReserva
     return pedidosFiltrados.sort((a, b) => {
       const fechaA = a.fechaHoraReserva ? new Date(a.fechaHoraReserva) : new Date(a.fecha);
       const fechaB = b.fechaHoraReserva ? new Date(b.fechaHoraReserva) : new Date(b.fecha);
-      return fechaB - fechaA; // Más nuevo primero
+      return fechaA - fechaB; // Más antiguo primero
     });
   };
 
   const renderPedido = (pedido) => {
     const fechaReserva = new Date(pedido.fechaHoraReserva);
     const tiempoTranscurrido = calcularTiempoTranscurrido(pedido.fechaHoraReserva);
+    const estadoColor = getEstadoColor(pedido.estado);
     
     // Formatear fecha y hora usando el timestamp local
     const dia = fechaReserva.getDate();
@@ -634,57 +758,89 @@ const PedidosRecibidosScreen = () => {
     const horaFormateada = `${horas.toString().padStart(2, '0')}:${minutos.toString().padStart(2, '0')}`;
     
     return (
-      <View key={pedido.id} style={[styles.pedidoCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-        <View style={styles.pedidoHeader}>
-          <View style={styles.pedidoInfo}>
-            <Text style={[styles.pedidoNegocio, { color: currentTheme.text }]}>{pedido.negocio}</Text>
-            <Text style={[styles.pedidoFecha, { color: currentTheme.textSecondary }]}>
-              {fechaFormateada} - {horaFormateada}
+      <View key={pedido.id} style={[styles.pedidoCardModerno, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+        <LinearGradient
+          colors={[estadoColor + '08', 'transparent']}
+          style={styles.pedidoCardGradiente}
+        >
+          {/* Nombre del Emprendimiento */}
+          <View style={styles.negocioContainerModerno}>
+            <Ionicons name="storefront" size={16} color={currentTheme.primary} />
+            <Text style={[styles.negocioNombreModerno, { color: currentTheme.primary }]}>
+              {pedido.negocio}
             </Text>
-            <View style={styles.tiempoContainer}>
-              <FontAwesome name="clock-o" size={12} color="#e74c3c" />
-              <Text style={[styles.tiempoTexto, { color: "#e74c3c" }]}>Hace {tiempoTranscurrido}</Text>
             </View>
-          </View>
-          <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(pedido.estado) }]}>
-            <Text style={styles.estadoTexto}>{getEstadoTexto(pedido.estado)}</Text>
-          </View>
-        </View>
 
-      <View style={styles.pedidoDetalles}>
-        <View style={styles.detalleItem}>
-          <FontAwesome name="user" size={14} color={currentTheme.primary} />
-          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>Cliente: {pedido.cliente}</Text>
+          {/* Header con foto del cliente */}
+          <View style={styles.pedidoHeaderModerno}>
+            <View style={styles.clienteAvatarContainer}>
+              {pedido.fotoPerfilCliente ? (
+                <Image 
+                  source={{ uri: pedido.fotoPerfilCliente }} 
+                  style={styles.clienteAvatarPedido}
+                />
+              ) : (
+                <View style={[styles.clienteAvatarPlaceholder, { backgroundColor: currentTheme.primary + '20' }]}>
+                  <Ionicons name="person" size={24} color={currentTheme.primary} />
+          </View>
+              )}
+          </View>
+            <View style={styles.pedidoInfoModerno}>
+              <Text style={[styles.clienteNombreModerno, { color: currentTheme.text }]}>{pedido.cliente}</Text>
+              <View style={styles.fechaHoraContainer}>
+                <Ionicons name="calendar-outline" size={12} color={currentTheme.textSecondary} />
+                <Text style={[styles.pedidoFechaModerno, { color: currentTheme.textSecondary }]}>
+                  {fechaFormateada}
+                </Text>
+                <Ionicons name="time-outline" size={12} color={currentTheme.textSecondary} style={{ marginLeft: 8 }} />
+                <Text style={[styles.pedidoFechaModerno, { color: currentTheme.textSecondary }]}>
+                  {horaFormateada}
+                </Text>
+        </View>
+              <View style={styles.tiempoContainerModerno}>
+                <Ionicons name="hourglass-outline" size={12} color="#e74c3c" />
+                <Text style={styles.tiempoTextoModerno}>Hace {tiempoTranscurrido}</Text>
+              </View>
+            </View>
+            <View style={[styles.estadoBadgeModerno, { backgroundColor: estadoColor }]}>
+              <Text style={styles.estadoTextoModerno}>{getEstadoTexto(pedido.estado)}</Text>
+            </View>
         </View>
         
-        <View style={styles.detalleItem}>
-          <FontAwesome name="phone" size={14} color={currentTheme.primary} />
-          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>{pedido.telefonoCliente}</Text>
+          {/* Detalles del Pedido */}
+          <View style={styles.pedidoDetallesModerno}>
+            <View style={styles.detalleItemModerno}>
+              <Ionicons name="call-outline" size={16} color={currentTheme.primary} />
+              <Text style={[styles.detalleTextoModerno, { color: currentTheme.text }]}>
+                {pedido.telefonoCliente}
+              </Text>
         </View>
 
-        <View style={styles.detalleItem}>
-          <FontAwesome name="map-marker" size={14} color={currentTheme.primary} />
-          <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>{pedido.direccion}</Text>
+            <View style={styles.detalleItemModerno}>
+              <Ionicons name="location-outline" size={16} color={currentTheme.primary} />
+              <Text style={[styles.detalleTextoModerno, { color: currentTheme.text }]} numberOfLines={2}>
+                {pedido.direccion}
+              </Text>
         </View>
 
         {pedido.modoEntrega && (
-          <View style={styles.detalleItem}>
-            <FontAwesome 
-              name={pedido.modoEntrega === "delivery" ? "truck" : "shopping-bag"} 
-              size={14} 
+              <View style={[styles.modoEntregaBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                <Ionicons 
+                  name={pedido.modoEntrega === "delivery" ? "bicycle" : "bag-handle"} 
+                  size={16} 
               color={currentTheme.primary} 
             />
-            <Text style={[styles.detalleTexto, { color: currentTheme.text }]}>
+                <Text style={[styles.modoEntregaTextoModerno, { color: currentTheme.primary }]}>
               {pedido.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}
             </Text>
           </View>
         )}
 
-        {pedido.estado === 'confirmado' && pedido.tiempoEntregaMinutos && (
-          <View style={[styles.detalleItem, { backgroundColor: currentTheme.primary + '20' }]}>
-            <FontAwesome name="clock-o" size={14} color={currentTheme.primary} />
-            <Text style={[styles.detalleTexto, { color: currentTheme.primary }]}>
-              Entrega estimada: {pedido.tiempoEntregaMinutos} minutos
+            {pedido.estado === 'confirmado' && pedido.tiempoEntregaMinutos && (
+              <View style={[styles.tiempoEstimadoBadge, { backgroundColor: '#27ae6015' }]}>
+                <Ionicons name="timer-outline" size={16} color="#27ae60" />
+                <Text style={styles.tiempoEstimadoTexto}>
+                  Entrega estimada: {pedido.tiempoEntregaMinutos} min
             </Text>
           </View>
         )}
@@ -692,18 +848,32 @@ const PedidosRecibidosScreen = () => {
 
       {/* Mostrar motivo de cancelación si está en la pestaña cancelados */}
       {tabActivo === "cancelados" && pedido.motivoCancelacion && (
-        <View style={styles.motivoCancelacionContainer}>
-          <Text style={styles.motivoCancelacionLabel}>Motivo de cancelación:</Text>
-          <Text style={styles.motivoCancelacionTexto}>{pedido.motivoCancelacion}</Text>
+            <View style={styles.motivoCancelacionModerno}>
+              <Ionicons name="alert-circle" size={16} color="#ffc107" />
+              <View style={styles.motivoCancelacionTextoContainer}>
+                <Text style={styles.motivoCancelacionLabelModerno}>Motivo de cancelación:</Text>
+                <Text style={styles.motivoCancelacionTextoModerno}>{pedido.motivoCancelacion}</Text>
+              </View>
         </View>
       )}
 
-      <View style={styles.productosContainer}>
-        <Text style={styles.productosTitulo}>Productos:</Text>
+          {/* Lista de Productos */}
+          <View style={[styles.productosContainerModerno, { backgroundColor: currentTheme.background }]}>
+            <View style={styles.productosTituloContainer}>
+              <Ionicons name="cart-outline" size={16} color={currentTheme.primary} />
+              <Text style={[styles.productosTituloModerno, { color: currentTheme.text }]}>Productos</Text>
+            </View>
         {pedido.productos.map((producto, index) => (
-          <View key={index} style={styles.productoItem}>
-            <Text style={styles.productoTexto}>
-              {producto.cantidad}x {producto.nombre} - ${producto.subtotal?.toLocaleString() || producto.precio?.toLocaleString() || 'N/A'}
+              <View key={index} style={styles.productoItemModerno}>
+                <View style={styles.productoDot} />
+                <Text style={[styles.productoNombreModerno, { color: currentTheme.text }]}>
+                  {producto.nombre}
+                </Text>
+                <Text style={[styles.productoCantidadModerno, { color: currentTheme.primary }]}>
+                  x{producto.cantidad}
+                </Text>
+                <Text style={[styles.productoPrecioModerno, { color: currentTheme.text }]}>
+                  ${producto.subtotal?.toLocaleString() || producto.precio?.toLocaleString() || 'N/A'}
             </Text>
           </View>
         ))}
@@ -712,60 +882,97 @@ const PedidosRecibidosScreen = () => {
       {/* Ruta de Estados */}
       {tabActivo === "pendientes" && renderRutaEstados(pedido)}
 
-      <View style={styles.pedidoFooter}>
-        <Text style={styles.totalTexto}>Total: ${pedido.total.toLocaleString()}</Text>
+          {/* Footer con Total y Botón de Ver */}
+          <View style={styles.pedidoFooterModerno}>
+            <View style={styles.totalContainer}>
+              <Ionicons name="cash-outline" size={20} color={currentTheme.primary} />
+              <Text style={[styles.totalTextoModerno, { color: currentTheme.primary }]}>
+                ${pedido.total.toLocaleString('es-CL')}
+              </Text>
+            </View>
         
         <TouchableOpacity
-          style={styles.detalleButton}
+              style={[styles.detalleButtonModerno, { backgroundColor: currentTheme.primary + '15' }]}
           onPress={async () => {
             setPedidoSeleccionado(pedido);
-            // Cargar calificación del cliente desde el backend
-            await cargarCalificacionCliente(pedido.clienteId);
-            await obtenerCoordenadasDireccion(pedido.direccion);
             setModalVisible(true);
+                // Cargar datos en paralelo
+                cargarCalificacionCliente(pedido.clienteId);
+                obtenerCoordenadasDireccion(pedido.direccion);
           }}
+              activeOpacity={0.7}
         >
-          <FontAwesome name="eye" size={16} color={currentTheme.primary} />
+              <Ionicons name="eye-outline" size={18} color={currentTheme.primary} />
+              <Text style={[styles.detalleButtonTexto, { color: currentTheme.primary }]}>Ver Detalles</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Botones de Acción en nueva línea */}
+          {/* Botones de Acción Modernos */}
       {tabActivo === "pendientes" && (
-        <View style={styles.accionesContainerNuevaLinea}>
+            <View style={styles.accionesContainerModerno}>
           {getSiguienteEstado(pedido.estado) && (
             <TouchableOpacity
-              style={[styles.accionButtonNuevaLinea, { backgroundColor: getEstadoColor(getSiguienteEstado(pedido.estado)) }]}
+                  style={styles.accionButtonModerno}
               onPress={() => confirmarCambioEstado(pedido, getSiguienteEstado(pedido.estado))}
-            >
-              <FontAwesome name={getSiguienteEstado(pedido.estado) === 'entregado' ? 'gift' : 'arrow-right'} size={16} color="white" />
-              <Text style={styles.accionTextoNuevaLinea}>
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[getEstadoColor(getSiguienteEstado(pedido.estado)), getEstadoColor(getSiguienteEstado(pedido.estado)) + 'dd']}
+                    style={styles.accionButtonGradiente}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons 
+                      name={getSiguienteEstado(pedido.estado) === 'entregado' ? 'gift-outline' : 'arrow-forward'} 
+                      size={18} 
+                      color="white" 
+                    />
+                    <Text style={styles.accionTextoModerno}>
                 {getSiguienteEstado(pedido.estado) === 'entregado' ? 'Marcar Entregado' : 'Siguiente Paso'}
               </Text>
+                  </LinearGradient>
             </TouchableOpacity>
           )}
           
           <TouchableOpacity
-            style={[styles.accionButtonNuevaLinea, { backgroundColor: '#e74c3c' }]}
+                style={styles.accionButtonModerno}
             onPress={() => abrirModalRechazo(pedido)}
-          >
-            <FontAwesome name="times" size={16} color="white" />
-            <Text style={styles.accionTextoNuevaLinea}>Rechazar</Text>
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#e74c3c', '#c0392b']}
+                  style={styles.accionButtonGradiente}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="close-circle" size={18} color="white" />
+                  <Text style={styles.accionTextoModerno}>Rechazar</Text>
+                </LinearGradient>
           </TouchableOpacity>
         </View>
       )}
 
       {/* Botón de confirmación para pedidos cancelados */}
       {tabActivo === "cancelados" && (
-        <View style={styles.accionesContainerNuevaLinea}>
+            <View style={styles.accionesContainerModerno}>
           <TouchableOpacity
-            style={[styles.accionButtonNuevaLinea, { backgroundColor: '#27ae60' }]}
+                style={styles.accionButtonModerno}
             onPress={() => confirmarCancelacion(pedido)}
-          >
-            <FontAwesome name="check" size={16} color="white" />
-            <Text style={styles.accionTextoNuevaLinea}>Confirmar Cancelación</Text>
+                activeOpacity={0.8}
+              >
+                <LinearGradient
+                  colors={['#27ae60', '#229954']}
+                  style={styles.accionButtonGradiente}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="checkmark-circle" size={18} color="white" />
+                  <Text style={styles.accionTextoModerno}>Confirmar Cancelación</Text>
+                </LinearGradient>
           </TouchableOpacity>
         </View>
       )}
+        </LinearGradient>
     </View>
     );
   };
@@ -805,85 +1012,142 @@ const PedidosRecibidosScreen = () => {
       onRequestClose={() => setModalVisible(false)}
     >
       <View style={styles.modalContainer}>
-        <View style={styles.modalContent}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitulo}>Detalle del Cliente</Text>
+        <View style={[styles.modalContentModerno, { backgroundColor: currentTheme.cardBackground }]}>
+          {/* Header Moderno */}
+          <LinearGradient
+            colors={[currentTheme.primary, currentTheme.secondary]}
+            style={styles.modalHeaderModerno}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <View style={styles.modalHeaderIconWrapper}>
+              <Ionicons name="person-circle" size={32} color="white" />
+            </View>
+            <View style={styles.modalHeaderTextContainer}>
+              <Text style={styles.modalSubtitulo}>Información de</Text>
+              <Text style={styles.modalTituloModerno}>Cliente</Text>
+            </View>
             <TouchableOpacity
-              style={styles.modalCloseButton}
+              style={styles.modalCloseButtonModerno}
               onPress={() => {
                 setModalVisible(false);
-                setMapaVisible(false);
-                setCalificacionClienteReal(null); // Limpiar calificación al cerrar
+                setCoordenadasDireccion(null);
+                setCalificacionClienteReal(null);
               }}
+              activeOpacity={0.7}
             >
-              <FontAwesome name="times" size={20} color={currentTheme.primary} />
+              <Ionicons name="close-circle" size={28} color="white" />
             </TouchableOpacity>
-          </View>
+          </LinearGradient>
 
           {pedidoSeleccionado && (
-            <ScrollView style={styles.modalBody}>
-              {/* Información del Cliente */}
-              <View style={styles.modalInfo}>
-                <Text style={styles.modalInfoTitulo}>Información del Cliente</Text>
-                
-                <View style={styles.clienteHeader}>
+            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+              {/* Card del Cliente */}
+              <View style={[styles.clienteCardModerno, { backgroundColor: currentTheme.background }]}>
+                <View style={styles.clienteHeaderModerno}>
+                  <View style={styles.clienteAvatarWrapperModerno}>
                   {pedidoSeleccionado.fotoPerfilCliente ? (
                     <Image 
                       source={{ uri: pedidoSeleccionado.fotoPerfilCliente }} 
-                      style={styles.clienteAvatarImagen}
+                        style={styles.clienteAvatarModalModerno}
                     />
                   ) : (
-                    <View style={styles.clienteAvatar}>
-                      <FontAwesome name="user" size={24} color="white" />
+                      <View style={[styles.clienteAvatarPlaceholderModal, { backgroundColor: currentTheme.primary }]}>
+                        <Ionicons name="person" size={40} color="white" />
                     </View>
                   )}
-                  <View style={styles.clienteInfo}>
-                    <Text style={styles.clienteNombre}>{pedidoSeleccionado.cliente}</Text>
-                    <View style={styles.calificacionContainer}>
+                    <View style={styles.clienteAvatarBorder} />
+                      </View>
+                  <View style={styles.clienteInfoModerno}>
+                    <Text style={[styles.clienteNombreModal, { color: currentTheme.text }]}>
+                      {pedidoSeleccionado.cliente}
+                      </Text>
+                    <View style={styles.calificacionContainerModerno}>
                       {calificacionClienteReal && calificacionClienteReal.calificacion_promedio > 0 ? (
                         <>
-                          <View style={styles.estrellasContainer}>
+                          <View style={styles.estrellasContainerModerno}>
                             {renderEstrellas(calificacionClienteReal.calificacion_promedio)}
-                          </View>
-                          <Text style={styles.calificacionTexto}>
+                    </View>
+                          <Text style={[styles.calificacionTextoModerno, { color: currentTheme.text }]}>
                             {calificacionClienteReal.calificacion_promedio.toFixed(1)}/5
                           </Text>
                         </>
                       ) : (
-                        <Text style={styles.calificacionTexto}>
-                          Sin calificaciones
-                        </Text>
+                        <View style={[styles.sinCalificacionBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                          <Ionicons name="star-outline" size={14} color={currentTheme.primary} />
+                          <Text style={[styles.sinCalificacionTexto, { color: currentTheme.primary }]}>
+                            Sin calificaciones
+                          </Text>
+                        </View>
                       )}
                     </View>
                   </View>
                 </View>
                 
-                <View style={styles.clienteStats}>
-                  <View style={styles.statItem}>
-                    <FontAwesome name="shopping-bag" size={14} color={currentTheme.primary} />
-                    <Text style={styles.statTexto}>{pedidoSeleccionado.pedidosRealizadosCliente} pedidos</Text>
+                {/* Stats del Cliente */}
+                <View style={styles.clienteStatsModerno}>
+                  <View style={[styles.statCardModerno, { backgroundColor: currentTheme.cardBackground }]}>
+                    <View style={[styles.statIconWrapper, { backgroundColor: currentTheme.primary + '15' }]}>
+                      <Ionicons name="cart" size={20} color={currentTheme.primary} />
                   </View>
-                  <View style={styles.statItem}>
-                    <FontAwesome name="calendar" size={14} color={currentTheme.primary} />
-                    <Text style={styles.statTexto}>Cliente desde {pedidoSeleccionado.clienteDesde}</Text>
+                    <Text style={[styles.statNumero, { color: currentTheme.text }]}>
+                      {pedidoSeleccionado.pedidosRealizadosCliente}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: currentTheme.textSecondary }]}>Pedidos</Text>
+                  </View>
+                  <View style={[styles.statCardModerno, { backgroundColor: currentTheme.cardBackground }]}>
+                    <View style={[styles.statIconWrapper, { backgroundColor: currentTheme.primary + '15' }]}>
+                      <Ionicons name="calendar" size={20} color={currentTheme.primary} />
+                    </View>
+                    <Text style={[styles.statNumero, { color: currentTheme.text }]}>
+                      {pedidoSeleccionado.clienteDesde}
+                    </Text>
+                    <Text style={[styles.statLabel, { color: currentTheme.textSecondary }]}>Cliente desde</Text>
                   </View>
                 </View>
                 
-                <View style={styles.contactoContainer}>
-                  <TouchableOpacity style={styles.contactoButton}>
-                    <FontAwesome name="phone" size={16} color="white" />
-                    <Text style={styles.contactoTexto}>Llamar</Text>
+                {/* Botones de Contacto */}
+                <View style={styles.contactoContainerModerno}>
+                  <TouchableOpacity 
+                    style={styles.contactoButtonModerno}
+                    onPress={() => llamarCliente(pedidoSeleccionado.telefonoCliente)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={[currentTheme.primary, currentTheme.secondary]}
+                      style={styles.contactoButtonGradiente}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="call" size={18} color="white" />
+                      <Text style={styles.contactoTextoModerno}>Llamar</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.contactoButton}>
-                    <FontAwesome name="whatsapp" size={16} color="white" />
-                    <Text style={styles.contactoTexto}>WhatsApp</Text>
+                  <TouchableOpacity 
+                    style={styles.contactoButtonModerno}
+                    onPress={() => abrirWhatsApp(pedidoSeleccionado.telefonoCliente)}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={['#25D366', '#128C7E']}
+                      style={styles.contactoButtonGradiente}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="logo-whatsapp" size={18} color="white" />
+                      <Text style={styles.contactoTextoModerno}>WhatsApp</Text>
+                    </LinearGradient>
                   </TouchableOpacity>
                 </View>
               </View>
 
-              {/* Información del Pedido */}
-              <View style={styles.modalInfo}>
-                <Text style={styles.modalInfoTitulo}>Detalles del Pedido</Text>
+              {/* Detalles del Pedido Modernos */}
+              <View style={[styles.pedidoDetallesCardModerno, { backgroundColor: currentTheme.background }]}>
+                <View style={styles.sectionHeaderModerno}>
+                  <Ionicons name="receipt-outline" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.sectionTituloModerno, { color: currentTheme.text }]}>Detalles del Pedido</Text>
+                </View>
+                
                 {(() => {
                   const fechaModal = new Date(pedidoSeleccionado.fechaHoraReserva);
                   const diaModal = fechaModal.getDate();
@@ -896,68 +1160,79 @@ const PedidosRecibidosScreen = () => {
                   
                   return (
                     <>
-                      <Text style={styles.modalInfoTexto}>Fecha: {fechaFormateadaModal}</Text>
-                      <Text style={styles.modalInfoTexto}>Hora: {horaFormateadaModal}</Text>
+                      <View style={styles.detalleRowModerno}>
+                        <Ionicons name="calendar-outline" size={18} color={currentTheme.primary} />
+                        <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Fecha:</Text>
+                        <Text style={[styles.detalleRowValue, { color: currentTheme.text }]}>{fechaFormateadaModal}</Text>
+                      </View>
+                      <View style={styles.detalleRowModerno}>
+                        <Ionicons name="time-outline" size={18} color={currentTheme.primary} />
+                        <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Hora:</Text>
+                        <Text style={[styles.detalleRowValue, { color: currentTheme.text }]}>{horaFormateadaModal}</Text>
+                      </View>
                     </>
                   );
                 })()}
-                <Text style={styles.modalInfoTexto}>Estado: {getEstadoTexto(pedidoSeleccionado.estado)}</Text>
-                <Text style={styles.modalInfoTexto}>Dirección: {pedidoSeleccionado.direccion}</Text>
-                <Text style={styles.modalInfoTexto}>Modo: {pedidoSeleccionado.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}</Text>
-              </View>
-
-              {/* Mapa */}
-              <View style={styles.modalInfo}>
-                <View style={styles.mapaHeader}>
-                  <Text style={styles.modalInfoTitulo}>Ubicación de Entrega</Text>
-                  <TouchableOpacity
-                    style={styles.mapaToggleButton}
-                    onPress={async () => {
-                      if (!mapaVisible) {
-                        await obtenerCoordenadasDireccion(pedidoSeleccionado.direccion);
-                      }
-                      setMapaVisible(!mapaVisible);
-                    }}
-                    disabled={cargandoMapa}
-                  >
-                    {cargandoMapa ? (
-                      <ActivityIndicator size="small" color={currentTheme.primary} />
-                    ) : (
-                      <FontAwesome name={mapaVisible ? "eye-slash" : "eye"} size={16} color={currentTheme.primary} />
-                    )}
-                    <Text style={styles.mapaToggleTexto}>
-                      {cargandoMapa ? "Cargando..." : mapaVisible ? "Ocultar" : "Ver"} Mapa
-                    </Text>
-                  </TouchableOpacity>
+                
+                <View style={styles.detalleRowModerno}>
+                  <View style={[styles.estadoIconCircle, { backgroundColor: getEstadoColor(pedidoSeleccionado.estado) + '20' }]}>
+                    <Ionicons name="radio-button-on" size={14} color={getEstadoColor(pedidoSeleccionado.estado)} />
+                  </View>
+                  <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Estado:</Text>
+                  <Text style={[styles.detalleRowValue, { color: getEstadoColor(pedidoSeleccionado.estado), fontWeight: '700' }]}>
+                    {getEstadoTexto(pedidoSeleccionado.estado)}
+                  </Text>
                 </View>
                 
-                {mapaVisible && coordenadasDireccion && (
-                  <View style={styles.mapaContainer}>
-                    <MapView
-                      style={styles.mapa}
-                      initialRegion={{
-                        latitude: coordenadasDireccion.latitude,
-                        longitude: coordenadasDireccion.longitude,
-                        latitudeDelta: 0.005,
-                        longitudeDelta: 0.005,
-                      }}
-                      showsUserLocation={false}
-                      showsMyLocationButton={false}
-                    >
-                      <Marker
-                        coordinate={coordenadasDireccion}
-                        title="📍 Dirección de Entrega"
-                        description={pedidoSeleccionado.direccion}
-                        pinColor={currentTheme.primary}
-                      />
-                    </MapView>
-                    <View style={styles.mapaInfo}>
-                      <Text style={styles.mapaDireccionTexto}>
-                        📍 {pedidoSeleccionado.direccion}
-                      </Text>
-                    </View>
+                <View style={styles.detalleRowModerno}>
+                  <Ionicons 
+                    name={pedidoSeleccionado.modoEntrega === "delivery" ? "bicycle" : "bag-handle"} 
+                    size={18} 
+                    color={currentTheme.primary} 
+                  />
+                  <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Modo:</Text>
+                  <Text style={[styles.detalleRowValue, { color: currentTheme.text }]}>
+                    {pedidoSeleccionado.modoEntrega === "delivery" ? "Delivery" : "Retiro en local"}
+                  </Text>
+                </View>
                   </View>
-                )}
+
+              {/* Botón para Abrir Mapa en Pantalla Completa */}
+              <View style={[styles.mapaCardModerno, { backgroundColor: currentTheme.background }]}>
+                <View style={styles.sectionHeaderModerno}>
+                  <Ionicons name="map-outline" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.sectionTituloModerno, { color: currentTheme.text }]}>Ubicación de Entrega</Text>
+                </View>
+                
+                <View style={[styles.direccionDisplayContainer, { backgroundColor: currentTheme.cardBackground }]}>
+                  <Ionicons name="location" size={18} color={currentTheme.primary} />
+                  <Text style={[styles.direccionDisplayTexto, { color: currentTheme.text }]} numberOfLines={2}>
+                    {pedidoSeleccionado.direccion}
+                  </Text>
+                </View>
+                
+                <TouchableOpacity
+                  style={styles.abrirMapaButtonModerno}
+                  onPress={() => {
+                    setDireccionMapa(pedidoSeleccionado.direccion);
+                    setModalMapaFullVisible(true);
+                    // Cargar coordenadas si no están cargadas (no bloquea la apertura)
+                    if (!coordenadasDireccion) {
+                      obtenerCoordenadasDireccion(pedidoSeleccionado.direccion);
+                    }
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <LinearGradient
+                    colors={[currentTheme.primary, currentTheme.secondary]}
+                    style={styles.abrirMapaButtonGradiente}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Ionicons name="map" size={20} color="white" />
+                    <Text style={styles.abrirMapaButtonTexto}>Ver en Mapa Completo</Text>
+                  </LinearGradient>
+                </TouchableOpacity>
               </View>
 
             </ScrollView>
@@ -974,76 +1249,148 @@ const PedidosRecibidosScreen = () => {
       <LinearGradient
         colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <View style={styles.headerContainer}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color="white" />
-          </TouchableOpacity>
-          <View style={styles.headerTitleContainer}>
-            <FontAwesome name="shopping-cart" size={24} color="white" />
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconWrapper}>
+            <Ionicons name="basket" size={28} color="white" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerSubtitle}>Gestiona tus</Text>
             <Text style={styles.tituloPrincipal}>Pedidos Recibidos</Text>
+          </View>
+          <View style={styles.headerBadgeWrapper}>
+            <View style={[styles.headerBadge, { backgroundColor: 'white' }]}>
+              <Text style={[styles.headerBadgeText, { color: currentTheme.primary }]}>
+                {pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length}
+              </Text>
+            </View>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Tabs Optimizados */}
-      <View style={[styles.tabsContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+      {/* Tabs Modernos */}
+      <View style={[styles.tabsContainer, { backgroundColor: currentTheme.background }]}>
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "pendientes" && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
+          style={styles.tabModerno}
           onPress={() => setTabActivo("pendientes")}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.tabTexto, { color: tabActivo === "pendientes" ? "white" : currentTheme.textSecondary }, tabActivo === "pendientes" && styles.tabTextoActivo]}>
+          <LinearGradient
+            colors={tabActivo === "pendientes" ? [currentTheme.primary, currentTheme.secondary] : ['white', 'white']}
+            style={styles.tabGradiente}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons 
+              name="time-outline" 
+              size={20} 
+              color={tabActivo === "pendientes" ? "white" : currentTheme.textSecondary} 
+            />
+            <Text style={[
+              styles.tabTextoModerno, 
+              { color: tabActivo === "pendientes" ? "white" : currentTheme.textSecondary }
+            ]}>
             Pendientes
           </Text>
-          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "pendientes" ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
-            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "pendientes" ? "white" : currentTheme.primary }]}>
+            <View style={[
+              styles.tabBadgeModerno, 
+              { backgroundColor: tabActivo === "pendientes" ? "rgba(255,255,255,0.25)" : currentTheme.primary + '15' }
+            ]}>
+              <Text style={[
+                styles.tabBadgeTextoModerno, 
+                { color: tabActivo === "pendientes" ? "white" : currentTheme.primary }
+              ]}>
               {pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length}
             </Text>
           </View>
+          </LinearGradient>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "cancelados" && [styles.tabActivo, { backgroundColor: '#e74c3c' }]]}
+          style={styles.tabModerno}
           onPress={() => setTabActivo("cancelados")}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.tabTexto, { color: tabActivo === "cancelados" ? "white" : currentTheme.textSecondary }, tabActivo === "cancelados" && styles.tabTextoActivo]}>
+          <LinearGradient
+            colors={tabActivo === "cancelados" ? ['#e74c3c', '#c0392b'] : ['white', 'white']}
+            style={styles.tabGradiente}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons 
+              name="close-circle-outline" 
+              size={20} 
+              color={tabActivo === "cancelados" ? "white" : currentTheme.textSecondary} 
+            />
+            <Text style={[
+              styles.tabTextoModerno, 
+              { color: tabActivo === "cancelados" ? "white" : currentTheme.textSecondary }
+            ]}>
             Cancelados
           </Text>
-          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "cancelados" ? "rgba(255,255,255,0.3)" : '#e74c3c' + '20' }]}>
-            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "cancelados" ? "white" : '#e74c3c' }]}>
-              {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada).length}
+            <View style={[
+              styles.tabBadgeModerno, 
+              { backgroundColor: tabActivo === "cancelados" ? "rgba(255,255,255,0.25)" : '#e74c3c15' }
+            ]}>
+              <Text style={[
+                styles.tabBadgeTextoModerno, 
+                { color: tabActivo === "cancelados" ? "white" : '#e74c3c' }
+              ]}>
+                {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada).length}
             </Text>
           </View>
+          </LinearGradient>
         </TouchableOpacity>
         
         <TouchableOpacity
-          style={[styles.tab, tabActivo === "historial" && [styles.tabActivo, { backgroundColor: currentTheme.primary }]]}
+          style={styles.tabModerno}
           onPress={() => setTabActivo("historial")}
+          activeOpacity={0.8}
         >
-          <Text style={[styles.tabTexto, { color: tabActivo === "historial" ? "white" : currentTheme.textSecondary }, tabActivo === "historial" && styles.tabTextoActivo]}>
+          <LinearGradient
+            colors={tabActivo === "historial" ? [currentTheme.primary, currentTheme.secondary] : ['white', 'white']}
+            style={styles.tabGradiente}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons 
+              name="checkmark-done-outline" 
+              size={20} 
+              color={tabActivo === "historial" ? "white" : currentTheme.textSecondary} 
+            />
+            <Text style={[
+              styles.tabTextoModerno, 
+              { color: tabActivo === "historial" ? "white" : currentTheme.textSecondary }
+            ]}>
             Historial
           </Text>
-          <View style={[styles.tabBadge, { backgroundColor: tabActivo === "historial" ? "rgba(255,255,255,0.3)" : currentTheme.primary + '20' }]}>
-            <Text style={[styles.tabBadgeTexto, { color: tabActivo === "historial" ? "white" : currentTheme.primary }]}>
-              {pedidosRecibidos.filter(p => {
-                if (p.estado === 'entregado') return true;
-                if (p.estado === 'rechazado') return true;
-                if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
-                return false;
-              }).length}
+            <View style={[
+              styles.tabBadgeModerno, 
+              { backgroundColor: tabActivo === "historial" ? "rgba(255,255,255,0.25)" : currentTheme.primary + '15' }
+            ]}>
+              <Text style={[
+                styles.tabBadgeTextoModerno, 
+                { color: tabActivo === "historial" ? "white" : currentTheme.primary }
+              ]}>
+                {pedidosRecibidos.filter(p => {
+                  if (p.estado === 'entregado') return true;
+                  if (p.estado === 'rechazado') return true;
+                  if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
+                  return false;
+                }).length}
             </Text>
           </View>
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={[styles.container, { backgroundColor: currentTheme.background }]} contentContainerStyle={styles.scrollContainer}>
         {cargando ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={currentTheme.primary} />
-            <Text style={styles.loadingTexto}>Cargando pedidos...</Text>
+            <LoadingVeciApp size={120} color={currentTheme.primary} />
+            <Text style={[styles.loadingTexto, { marginTop: 30 }]}>Cargando pedidos...</Text>
           </View>
         ) : pedidosFiltrados.length > 0 ? (
           pedidosFiltrados.map(renderPedido)
@@ -1289,6 +1636,104 @@ const PedidosRecibidosScreen = () => {
           </View>
         </View>
       </Modal>
+
+      {/* Modal de Mapa en Pantalla Completa */}
+      <Modal
+        animationType="slide"
+        transparent={false}
+        visible={modalMapaFullVisible}
+        onRequestClose={() => setModalMapaFullVisible(false)}
+      >
+        <View style={styles.modalMapaFullContainer}>
+          {/* Header del Modal de Mapa */}
+          <LinearGradient
+            colors={[currentTheme.primary, currentTheme.secondary]}
+            style={styles.modalMapaFullHeader}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <TouchableOpacity
+              style={styles.modalMapaBackButton}
+              onPress={() => setModalMapaFullVisible(false)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={24} color="white" />
+            </TouchableOpacity>
+            <View style={styles.modalMapaHeaderContent}>
+              <Ionicons name="map" size={24} color="white" />
+              <Text style={styles.modalMapaTitulo}>Ubicación de Entrega</Text>
+            </View>
+            <View style={{ width: 40 }} />
+          </LinearGradient>
+
+          {/* Mapa en Pantalla Completa */}
+          {cargandoMapa ? (
+            <View style={styles.mapaFullLoadingContainer}>
+              <LoadingVeciApp size={100} color={currentTheme.primary} />
+              <Text style={[styles.mapaFullLoadingTexto, { color: currentTheme.textSecondary, marginTop: 20 }]}>
+                Cargando ubicación...
+              </Text>
+            </View>
+          ) : coordenadasDireccion ? (
+            <>
+              <MapView
+                style={styles.mapaFull}
+                initialRegion={{
+                  latitude: coordenadasDireccion.latitude,
+                  longitude: coordenadasDireccion.longitude,
+                  latitudeDelta: 0.01,
+                  longitudeDelta: 0.01,
+                }}
+                showsUserLocation={false}
+                showsMyLocationButton={false}
+              >
+                <Marker
+                  coordinate={coordenadasDireccion}
+                  title="📍 Dirección de Entrega"
+                  description={direccionMapa}
+                  pinColor={currentTheme.primary}
+                />
+              </MapView>
+              
+              {/* Panel de Dirección Flotante */}
+              <View style={styles.direccionFloatingPanel}>
+                <View style={styles.direccionFloatingContent}>
+                  <View style={[styles.direccionFloatingIconWrapper, { backgroundColor: currentTheme.primary + '15' }]}>
+                    <Ionicons name="location" size={24} color={currentTheme.primary} />
+                  </View>
+                  <View style={styles.direccionFloatingTextContainer}>
+                    <Text style={[styles.direccionFloatingTexto, { color: currentTheme.text }]}>
+                      {direccionMapa}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.comoLlegarButton}
+                      onPress={abrirDireccionesEnMapa}
+                      activeOpacity={0.8}
+                    >
+                      <LinearGradient
+                        colors={[currentTheme.primary, currentTheme.secondary]}
+                        style={styles.comoLlegarGradiente}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="navigate" size={16} color="white" />
+                        <Text style={styles.comoLlegarTexto}>Cómo Llegar</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </>
+          ) : (
+            <View style={styles.mapaFullLoadingContainer}>
+              <Ionicons name="alert-circle-outline" size={64} color={currentTheme.textSecondary} />
+              <Text style={[styles.mapaFullLoadingTexto, { color: currentTheme.textSecondary }]}>
+                No se pudo cargar la ubicación
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1296,88 +1741,124 @@ const PedidosRecibidosScreen = () => {
 const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
-    paddingBottom: 130, // Espacio para la barra inferior
+    paddingBottom: 130,
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 55,
+    paddingBottom: 28,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  headerContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  backButton: {
-    marginRight: 15,
+  headerIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  headerTitleContainer: {
-    flexDirection: "row",
-    alignItems: "center",
+  headerTextContainer: {
     flex: 1,
   },
+  headerSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
   tituloPrincipal: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "white",
-    marginLeft: 10,
+    fontSize: 20,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  headerBadgeWrapper: {
+    alignItems: 'center',
+  },
+  headerBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  headerBadgeText: {
+    fontSize: 16,
+    fontWeight: '800',
   },
   tabsContainer: {
-    flexDirection: "row",
-    backgroundColor: "white",
-    marginHorizontal: 20,
+    flexDirection: 'row',
+    marginHorizontal: 16,
     marginTop: 20,
-    borderRadius: 12,
-    padding: 6,
-    shadowColor: "#000",
+    marginBottom: 10,
+    paddingVertical: 8,
+    gap: 10,
+  },
+  tabModerno: {
+    flex: 1,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 4,
     elevation: 3,
   },
-  tab: {
-    flex: 1,
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    gap: 4,
+  tabGradiente: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    gap: 6,
+    borderRadius: 16,
   },
-  tabActivo: {
-    backgroundColor: "#2A9D8F",
+  tabTextoModerno: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    letterSpacing: 0.3,
   },
-  tabTexto: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#7f8c8d",
-    flexShrink: 1,
-    textAlign: "center",
+  tabBadgeModerno: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  tabTextoActivo: {
-    color: "white",
-    fontWeight: "700",
-  },
-  tabBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-  },
-  tabBadgeTexto: {
+  tabBadgeTextoModerno: {
     fontSize: 11,
-    fontWeight: "bold",
+    fontWeight: '800',
   },
   container: {
     flex: 1,
   },
   scrollContainer: {
-    padding: 20,
+    padding: 16,
   },
   loadingContainer: {
     alignItems: "center",
@@ -1388,22 +1869,274 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#7f8c8d",
   },
-  pedidoCard: {
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 16,
+  pedidoCardModerno: {
+    borderRadius: 20,
     marginBottom: 16,
-    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  pedidoCardGradiente: {
+    padding: 18,
+  },
+  negocioContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f130',
+  },
+  negocioNombreModerno: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  pedidoHeaderModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  clienteAvatarContainer: {
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  pedidoHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
+  clienteAvatarPedido: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  clienteAvatarPlaceholder: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'white',
+  },
+  pedidoInfoModerno: {
+    flex: 1,
+    gap: 4,
+  },
+  clienteNombreModerno: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  fechaHoraContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pedidoFechaModerno: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  tiempoContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tiempoTextoModerno: {
+    fontSize: 12,
+    color: '#e74c3c',
+    fontWeight: '600',
+  },
+  estadoBadgeModerno: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+  },
+  estadoTextoModerno: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  pedidoDetallesModerno: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  detalleItemModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  detalleTextoModerno: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  modoEntregaBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 8,
+  },
+  modoEntregaTextoModerno: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  tiempoEstimadoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignSelf: 'flex-start',
+    gap: 8,
+  },
+  tiempoEstimadoTexto: {
+    fontSize: 13,
+    color: '#27ae60',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  motivoCancelacionModerno: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fff3cd',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#ffc107',
+    marginBottom: 16,
+  },
+  motivoCancelacionTextoContainer: {
+    flex: 1,
+  },
+  motivoCancelacionLabelModerno: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#856404',
+    marginBottom: 2,
+  },
+  motivoCancelacionTextoModerno: {
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
+  },
+  productosContainerModerno: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  productosTituloContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
+  },
+  productosTituloModerno: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  productoItemModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    gap: 10,
+  },
+  productoDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#2A9D8F',
+  },
+  productoNombreModerno: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
+  productoCantidadModerno: {
+    fontSize: 13,
+    fontWeight: '700',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    backgroundColor: '#2A9D8F15',
+  },
+  productoPrecioModerno: {
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 70,
+    textAlign: 'right',
+  },
+  pedidoFooterModerno: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: '#ecf0f130',
+    paddingTop: 14,
+    marginBottom: 8,
+  },
+  totalContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  totalTextoModerno: {
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  detalleButtonModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    gap: 6,
+  },
+  detalleButtonTexto: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  accionesContainerModerno: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  accionButtonModerno: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  accionButtonGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  accionTextoModerno: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   pedidoInfo: {
     flex: 1,
@@ -1523,26 +2256,450 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
-  modalContent: {
-    backgroundColor: "white",
+  modalContentModerno: {
+    borderRadius: 24,
+    width: "92%",
+    maxWidth: 420,
+    maxHeight: "85%",
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  modalHeaderModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  modalHeaderIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalHeaderTextContainer: {
+    flex: 1,
+  },
+  modalSubtitulo: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  modalTituloModerno: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  modalCloseButtonModerno: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clienteCardModerno: {
     borderRadius: 20,
     padding: 20,
-    width: "90%",
-    maxWidth: 400,
-    maxHeight: "80%",
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  clienteHeaderModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 16,
+  },
+  clienteAvatarWrapperModerno: {
+    position: 'relative',
+  },
+  clienteAvatarModalModerno: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+  },
+  clienteAvatarPlaceholderModal: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  clienteAvatarBorder: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  clienteInfoModerno: {
+    flex: 1,
+    gap: 8,
+  },
+  clienteNombreModal: {
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  calificacionContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  estrellasContainerModerno: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  calificacionTextoModerno: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sinCalificacionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  sinCalificacionTexto: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  clienteStatsModerno: {
+    flexDirection: 'row',
+    gap: 12,
     marginBottom: 20,
   },
-  modalTitulo: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2c3e50",
+  statCardModerno: {
+    flex: 1,
+    borderRadius: 14,
+    padding: 14,
+    alignItems: 'center',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statIconWrapper: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  statNumero: {
+    fontSize: 18,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  contactoContainerModerno: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  contactoButtonModerno: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  contactoButtonGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  contactoTextoModerno: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  pedidoDetallesCardModerno: {
+    borderRadius: 20,
+    padding: 18,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  sectionHeaderModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ecf0f130',
+  },
+  sectionTituloModerno: {
+    fontSize: 16,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  detalleRowModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  detalleRowLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    minWidth: 80,
+  },
+  detalleRowValue: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  estadoIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mapaCardModerno: {
+    borderRadius: 20,
+    padding: 18,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  mapaHeaderModerno: {
+    marginBottom: 14,
+  },
+  mapaLoadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    gap: 12,
+  },
+  mapaLoadingTexto: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  mapaContainerModerno: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginTop: 14,
+    height: 220,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  mapa: {
+    flex: 1,
+  },
+  mapaInfoModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#ecf0f130',
+  },
+  mapaDireccionTextoModerno: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    letterSpacing: 0.3,
+  },
+  direccionDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    gap: 10,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  direccionDisplayTexto: {
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+    lineHeight: 20,
+  },
+  abrirMapaButtonModerno: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  abrirMapaButtonGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 10,
+  },
+  abrirMapaButtonTexto: {
+    color: 'white',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Estilos del Modal de Mapa Pantalla Completa
+  modalMapaFullContainer: {
+    flex: 1,
+  },
+  modalMapaFullHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  modalMapaBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalMapaHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  modalMapaTitulo: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  mapaFull: {
+    flex: 1,
+  },
+  mapaFullLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 16,
+    paddingHorizontal: 40,
+  },
+  mapaFullLoadingTexto: {
+    fontSize: 16,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  direccionFloatingPanel: {
+    position: 'absolute',
+    bottom: 30,
+    left: 20,
+    right: 20,
+    borderRadius: 18,
+    backgroundColor: 'white',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  direccionFloatingContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  direccionFloatingIconWrapper: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  direccionFloatingTextContainer: {
+    flex: 1,
+    gap: 10,
+  },
+  direccionFloatingTexto: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  comoLlegarButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  comoLlegarGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  comoLlegarTexto: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   modalCloseButton: {
     padding: 4,

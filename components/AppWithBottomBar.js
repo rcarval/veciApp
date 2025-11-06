@@ -13,15 +13,25 @@ const AppWithBottomBar = ({ children }) => {
       try {
         const usuarioGuardado = await AsyncStorage.getItem('usuario');
         const sesionActiva = await AsyncStorage.getItem('sesionActiva');
+        const modoVista = await AsyncStorage.getItem('modoVista');
         
         if (usuarioGuardado && sesionActiva === 'true') {
           const usuarioData = JSON.parse(usuarioGuardado);
           setUsuario(usuarioData);
-          setIsEmprendedor(
-            usuarioData?.tipo_usuario === "emprendedor" || 
-            usuarioData?.tipo_usuario === "admin"
-          );
-          setShowBottomBar(true);
+          
+          // Si el emprendedor está en modo vista cliente, mostrar bottom bar de cliente
+          if (modoVista === 'cliente' && usuarioData?.tipo_usuario === 'emprendedor') {
+            setIsEmprendedor(false); // Mostrar como cliente
+            setShowBottomBar(true);
+          } else {
+            // Comportamiento normal
+            setIsEmprendedor(
+              usuarioData?.tipo_usuario === "emprendedor" || 
+              usuarioData?.tipo_usuario === "admin"
+            );
+            // Ocultar barra inferior para vendedores
+            setShowBottomBar(usuarioData?.tipo_usuario !== 'vendedor');
+          }
         } else {
           setShowBottomBar(false);
         }

@@ -19,10 +19,11 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
 import { API_ENDPOINTS } from "../config/api";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const PerfilScreen = () => {
   const navigation = useNavigation();
-  const { usuario, loading, cargarUsuario, actualizarUsuarioLocal } = useUser();
+  const { usuario, direcciones, loading, cargarUsuario, actualizarUsuarioLocal, modoVista, cambiarAVistaCliente, volverAVistaEmprendedor } = useUser();
   const { currentTheme, changeTheme, getNextTheme, isChangingTheme } = useTheme();
   const [imagenPerfil, setImagenPerfil] = useState(null);
   const [imagenError, setImagenError] = useState(false);
@@ -291,13 +292,15 @@ const PerfilScreen = () => {
     );
   };
 
+  // Determinar tipo de usuario efectivo (considerando modo vista)
+  const tipoUsuarioEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+  
   const opciones = usuario ? [
     { nombre: "Información Personal", icono: "user-circle", screen: "InformacionPersonal" },
-    { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones" },
-    { nombre: "Mis Pedidos", icono: "shopping-bag", screen: "MisPedidos" },
-    { nombre: "Mis Emprendimientos", icono: "briefcase", screen: "Emprendimiento", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
-    { nombre: "Pedidos Recibidos", icono: "shopping-cart", screen: "PedidosRecibidos", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" },
-    { nombre: "Mi Plan", icono: "star", screen: "PlanScreen" },
+    { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor" },
+    { nombre: "Mis Pedidos", icono: "shopping-bag", screen: "MisPedidos", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor" },
+    { nombre: "Mis Cupones", icono: "ticket", screen: "Cupones" }, // ✅ Nueva opción de cupones
+    { nombre: "Mi Plan", icono: "star", screen: "PlanScreen", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" }, // Siempre basado en tipo real
     { nombre: "Necesito Ayuda", icono: "question-circle", screen: "HelpScreen" },
     { nombre: "Cerrar Sesión", icono: "sign-out", screen: "cerrarSesion", esAccion: true },
   ].filter(op => op.mostrar !== false) : [];
@@ -308,12 +311,19 @@ const PerfilScreen = () => {
       <LinearGradient
         colors={[currentTheme.primary, currentTheme.secondary]}
         style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <View style={styles.headerTitleContainer}>
-          <Ionicons name="person" size={24} color="white" />
-          <Text style={styles.tituloPrincipal}>Mi Perfil</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconWrapper}>
+            <Ionicons name="person" size={32} color="white" />
+          </View>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerSubtitle}>Tu cuenta</Text>
+            <Text style={styles.tituloPrincipal}>Mi Perfil</Text>
+          </View>
           <TouchableOpacity 
-            style={[styles.themeButton, isChangingTheme && styles.themeButtonDisabled]}
+            style={[styles.themeButtonModerno, isChangingTheme && styles.themeButtonDisabled]}
             onPress={cambiarTema}
             activeOpacity={0.7}
             disabled={isChangingTheme}
@@ -321,112 +331,253 @@ const PerfilScreen = () => {
             {isChangingTheme ? (
               <ActivityIndicator size="small" color="white" />
             ) : (
-              <Ionicons name={currentTheme.icon} size={24} color="white" />
+              <Ionicons name={currentTheme.icon} size={28} color="white" />
             )}
           </TouchableOpacity>
         </View>
-        <View style={styles.themeIndicator}>
+        <View style={styles.themeIndicatorModerno}>
           <Text style={styles.themeIndicatorText}>{currentTheme.name}</Text>
         </View>
       </LinearGradient>
         <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
         {loading || subiendoAvatar ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={currentTheme.primary} />
-            <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>
+            <LoadingVeciApp size={120} color={currentTheme.primary} />
+            <Text style={[styles.loadingText, { color: currentTheme.textSecondary, marginTop: 30 }]}>
               {subiendoAvatar ? 'Subiendo avatar...' : 'Cargando perfil...'}
             </Text>
           </View>
         ) : usuario ? (
           <>
-            {/* Tarjeta de perfil */}
-            <View style={[styles.perfilCard, { 
+            {/* Tarjeta de perfil moderna */}
+            <View style={[styles.perfilCardModerna, { 
               backgroundColor: currentTheme.cardBackground,
-              shadowColor: currentTheme.shadow,
-              borderColor: currentTheme.border
+              shadowColor: currentTheme.shadow
             }]}>
-              <View style={styles.avatarContainer}>
+              <LinearGradient
+                colors={[currentTheme.primary + '10', 'transparent']}
+                style={styles.perfilCardGradiente}
+              >
                 <TouchableOpacity 
-                  style={styles.avatarTouchable}
+                  style={styles.avatarTouchableModerno}
                   onPress={seleccionarImagenPerfil}
                   activeOpacity={0.8}
                 >
-                  {imagenPerfil && !imagenError ? (
-                    <Image 
-                      source={{ uri: imagenPerfil }} 
-                      style={[styles.avatarImage, { borderColor: currentTheme.primary }]}
-                      onError={(e) => {
-                        console.log('❌ Error cargando avatar, usando imagen genérica', e.nativeEvent.error);
-                        setImagenPerfil(null); // Resetear a null para mostrar genérica
-                        setImagenError(false);
-                      }}
-                    />
-                  ) : (
-                    <View style={[styles.avatarImage, styles.avatarPlaceholder, { borderColor: currentTheme.primary }]}>
-                      <Ionicons name="person" size={50} color={currentTheme.primary} />
-                    </View>
-                  )}
-                  {subiendoAvatar && (
-                    <View style={styles.uploadingOverlay}>
-                      <ActivityIndicator size="small" color="white" />
-                    </View>
-                  )}
-                  <View style={[styles.cameraIconContainer, { backgroundColor: currentTheme.primary }]}>
-                    <Ionicons name="camera" size={16} color="white" />
+                  <View style={[styles.avatarWrapperModerno, { borderColor: currentTheme.primary }]}>
+                    {imagenPerfil && !imagenError ? (
+                      <Image 
+                        source={{ uri: imagenPerfil }} 
+                        style={styles.avatarImageModerno}
+                        onError={(e) => {
+                          console.log('❌ Error cargando avatar, usando imagen genérica', e.nativeEvent.error);
+                          setImagenPerfil(null);
+                          setImagenError(false);
+                        }}
+                      />
+                    ) : (
+                      <View style={[styles.avatarImageModerno, styles.avatarPlaceholderModerno, { backgroundColor: currentTheme.primary + '15' }]}>
+                        <Ionicons name="person" size={56} color={currentTheme.primary} />
+                      </View>
+                    )}
+                    {subiendoAvatar && (
+                      <View style={styles.uploadingOverlay}>
+                        <ActivityIndicator size="small" color="white" />
+                      </View>
+                    )}
+                    <LinearGradient
+                      colors={[currentTheme.primary, currentTheme.secondary]}
+                      style={styles.cameraIconModerno}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    >
+                      <Ionicons name="camera" size={18} color="white" />
+                    </LinearGradient>
                   </View>
                 </TouchableOpacity>
-                <Text style={[styles.nombreUsuario, { color: currentTheme.text }]}>{usuario.nombre}</Text>
-                <Text style={[styles.tipoUsuario, { color: currentTheme.primary }]}>{usuario.tipo_usuario === "emprendedor" ? "Emprendedor" : "Cliente"}</Text>
-                <Text style={[styles.tipoPlan, { color: currentTheme.text }]}>{usuario.plan_id ? "Plan Premium" : "Plan Básico"}</Text>
-              </View>
+                
+                <View style={styles.perfilInfoModerna}>
+                  <Text style={[styles.nombreUsuarioModerno, { color: currentTheme.text }]}>
+                    {usuario.nombre}
+                  </Text>
+                  <View style={styles.perfilBadgesContainer}>
+                    <View style={[styles.perfilBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                      <Ionicons name="briefcase" size={14} color={currentTheme.primary} />
+                      <Text style={[styles.perfilBadgeTexto, { color: currentTheme.primary }]}>
+                        {tipoUsuarioEfectivo === "emprendedor" ? "Emprendedor" : "Cliente"}
+                      </Text>
+                    </View>
+                    <View style={[styles.perfilBadge, { backgroundColor: currentTheme.secondary + '15' }]}>
+                      <Ionicons name="star" size={14} color={currentTheme.secondary} />
+                      <Text style={[styles.perfilBadgeTexto, { color: currentTheme.secondary }]}>
+                        {usuario.plan_id ? "Premium" : "Básico"}
+                      </Text>
+                    </View>
+                    {/* Badge de Modo Vista si está activo */}
+                    {modoVista === 'cliente' && (
+                      <View style={[styles.perfilBadge, { backgroundColor: '#f39c12' + '15' }]}>
+                        <Ionicons name="eye" size={14} color="#f39c12" />
+                        <Text style={[styles.perfilBadgeTexto, { color: '#f39c12' }]}>
+                          Modo Cliente
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </LinearGradient>
             </View>
 
-        {/* Accesos rápidos */}
-        <View style={[styles.accesosContainer, { 
-          backgroundColor: currentTheme.cardBackground,
-          shadowColor: currentTheme.shadow,
-          borderColor: currentTheme.border
-        }]}>
-          <Text style={[styles.seccionTitulo, { color: currentTheme.primary }]}>Accesos Rápidos</Text>
-          <View style={styles.opcionesGrid}>
-            {opciones.map((opcion) => (
+        {/* Botón de Cambio de Vista - Solo para Emprendedores */}
+        {usuario.tipo_usuario === "emprendedor" && (
+          <View style={styles.cambioVistaSectionModerna}>
+            <TouchableOpacity
+              style={styles.cambioVistaCard}
+              onPress={() => {
+                if (modoVista === 'cliente') {
+                  Alert.alert(
+                    "Volver a Vista Emprendedor",
+                    "¿Quieres volver a tu perfil de emprendedor?",
+                    [
+                      { text: "Cancelar", style: "cancel" },
+                      { 
+                        text: "Volver",
+                        onPress: async () => {
+                          await volverAVistaEmprendedor();
+                          // Reiniciar navegación para aplicar cambios
+                          navigation.dispatch(
+                            require('@react-navigation/native').CommonActions.reset({
+                              index: 0,
+                              routes: [{ name: 'Perfil' }],
+                            })
+                          );
+                        }
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    "Cambiar a Vista Cliente",
+                    "Podrás ver y usar la app como si fueras un cliente. Esto te permitirá probar tu negocio desde la perspectiva del cliente.",
+                    [
+                      { text: "Cancelar", style: "cancel" },
+                      { 
+                        text: "Cambiar a Cliente",
+                        onPress: async () => {
+                          await cambiarAVistaCliente();
+                          // Reiniciar navegación para aplicar cambios
+                          navigation.dispatch(
+                            require('@react-navigation/native').CommonActions.reset({
+                              index: 0,
+                              routes: [{ name: 'Home' }],
+                            })
+                          );
+                        }
+                      }
+                    ]
+                  );
+                }
+              }}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={modoVista === 'cliente' ? ['#e74c3c', '#c0392b'] : ['#f39c12', '#e67e22']}
+                style={styles.cambioVistaGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <View style={styles.cambioVistaIcono}>
+                  <Ionicons 
+                    name={modoVista === 'cliente' ? "arrow-back-circle" : "eye"} 
+                    size={32} 
+                    color="white" 
+                  />
+                </View>
+                <View style={styles.cambioVistaTextos}>
+                  <Text style={styles.cambioVistaTitulo}>
+                    {modoVista === 'cliente' ? "Volver a Vista Emprendedor" : "Ver como Cliente"}
+                  </Text>
+                  <Text style={styles.cambioVistaDescripcion}>
+                    {modoVista === 'cliente' 
+                      ? "Regresa a tu perfil de emprendedor" 
+                      : "Prueba tu negocio como cliente"}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.8)" />
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Accesos rápidos modernos */}
+        <View style={styles.accesosSectionModerna}>
+          <Text style={[styles.seccionTituloModerno, { color: currentTheme.text }]}>
+            Accesos Rápidos
+          </Text>
+          <View style={styles.opcionesGridModerno}>
+            {opciones.map((opcion, index) => (
               <TouchableOpacity 
                 key={opcion.nombre} 
-                style={[styles.opcionCard, { 
-                  backgroundColor: currentTheme.background,
-                  borderColor: currentTheme.border
+                style={[styles.opcionCardModerna, { 
+                  backgroundColor: currentTheme.cardBackground,
+                  shadowColor: currentTheme.shadow
                 }]}
                 onPress={() => {
-                  // Manejar acciones especiales
                   if (opcion.esAccion && opcion.screen === 'cerrarSesion') {
                     cerrarSesion();
                     return;
                   }
-                  
-                  // Navegar según el tipo de screen
-                  if (opcion.screen === 'InformacionPersonal' || opcion.screen === 'MisDirecciones' || opcion.screen === 'MisPedidos' || opcion.screen === 'PlanScreen' || opcion.screen === 'HelpScreen') {
-                    // Screens dentro del stack Perfil
-                    navigation.navigate(opcion.screen);
-                  } else if (opcion.screen === 'Emprendimiento' || opcion.screen === 'PedidosRecibidos') {
-                    // Screens principales
+                  if (opcion.screen) {
+                    // Validar direcciones antes de navegar (excepto a MisDirecciones)
+                    // SOLO para usuarios tipo "cliente"
+                    const esCliente = usuario?.tipo_usuario === 'cliente';
+                    
+                    if (esCliente && direcciones.length === 0 && opcion.screen !== 'MisDirecciones') {
+                      Alert.alert(
+                        "⚠️ Dirección requerida",
+                        "Debes agregar al menos una dirección antes de continuar. Esto es necesario para poder recibir pedidos y servicios.",
+                        [
+                          { text: "Cancelar", style: "cancel" },
+                          { text: "Ir a Mis Direcciones", onPress: () => navigation.navigate('MisDirecciones') }
+                        ]
+                      );
+                      return;
+                    }
                     navigation.navigate(opcion.screen);
                   }
                 }}
+                activeOpacity={0.85}
               >
-                <View style={[styles.opcionIconoContainer, { backgroundColor: currentTheme.primary + '20' }]}>
-                  <FontAwesome 
-                    name={opcion.icono} 
-                    size={24} 
-                    color={opcion.esAccion ? "#e74c3c" : currentTheme.primary} 
-                  />
-                </View>
-                <Text style={[
-                  styles.opcionTexto,
-                  { color: currentTheme.text },
-                  opcion.esAccion && styles.opcionTextoAccion
-                ]}>
-                  {opcion.nombre}
-                </Text>
+                <LinearGradient
+                  colors={opcion.esAccion 
+                    ? ['#e74c3c', '#c0392b'] 
+                    : [currentTheme.primary + '15', currentTheme.secondary + '15']
+                  }
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.opcionCardGradiente}
+                >
+                  <View style={[styles.opcionIconoModerno, { 
+                    backgroundColor: opcion.esAccion ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.3)'
+                  }]}>
+                    <FontAwesome 
+                      name={opcion.icono} 
+                      size={26} 
+                      color={opcion.esAccion ? "#FFF" : currentTheme.primary} 
+                    />
+                  </View>
+                  <Text style={[
+                    styles.opcionTextoModerno,
+                    { color: opcion.esAccion ? '#FFF' : currentTheme.text }
+                  ]}>
+                    {opcion.nombre}
+                  </Text>
+                  <View style={styles.opcionChevron}>
+                    <Ionicons 
+                      name="chevron-forward" 
+                      size={20} 
+                      color={opcion.esAccion ? 'rgba(255,255,255,0.7)' : currentTheme.textSecondary} 
+                    />
+                  </View>
+                </LinearGradient>
               </TouchableOpacity>
             ))}
           </View>
@@ -456,45 +607,74 @@ const styles = StyleSheet.create({
     paddingBottom: 150, // Espacio para la barra inferior
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 55,
+    paddingBottom: 28,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  tituloPrincipal: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: 'white',
-    textAlign: 'center',
-    marginLeft: 10, // Añade este margen para separar del ícono
-  },
-  headerTitleContainer: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
   },
-  themeButton: {
-    position: 'absolute',
-    right: 0,
-    padding: 8,
-    borderRadius: 20,
+  headerIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 2,
+    letterSpacing: 0.5,
+  },
+  tituloPrincipal: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  themeButtonModerno: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   themeButtonDisabled: {
     opacity: 0.5,
   },
-  themeIndicator: {
+  themeIndicatorModerno: {
     alignItems: 'center',
-    marginTop: 5,
+    marginTop: 10,
   },
   themeIndicatorText: {
-    color: 'rgba(255, 255, 255, 0.8)',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  headerIcon: {
-    marginRight: 10,
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   perfilCard: {
     backgroundColor: 'white',
@@ -702,6 +882,187 @@ const styles = StyleSheet.create({
     bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Estilos modernos para la card de perfil
+  perfilCardModerna: {
+    borderRadius: 24,
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  perfilCardGradiente: {
+    padding: 24,
+    paddingTop: 32,
+  },
+  avatarTouchableModerno: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarWrapperModerno: {
+    position: 'relative',
+    padding: 6,
+    borderRadius: 70,
+    borderWidth: 4,
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  avatarImageModerno: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+  },
+  avatarPlaceholderModerno: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cameraIconModerno: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  perfilInfoModerna: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  nombreUsuarioModerno: {
+    fontSize: 26,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  perfilBadgesContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  perfilBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  perfilBadgeTexto: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Estilos para cambio de vista
+  cambioVistaSectionModerna: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  cambioVistaCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  cambioVistaGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 20,
+    gap: 16,
+  },
+  cambioVistaIcono: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  cambioVistaTextos: {
+    flex: 1,
+  },
+  cambioVistaTitulo: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.3,
+    marginBottom: 4,
+  },
+  cambioVistaDescripcion: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.2,
+  },
+  // Estilos modernos para accesos rápidos
+  accesosSectionModerna: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+  },
+  seccionTituloModerno: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 16,
+    paddingHorizontal: 4,
+    letterSpacing: 0.3,
+  },
+  opcionesGridModerno: {
+    gap: 12,
+  },
+  opcionCardModerna: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  opcionCardGradiente: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    gap: 14,
+  },
+  opcionIconoModerno: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  opcionTextoModerno: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  opcionChevron: {
+    width: 28,
+    height: 28,
     justifyContent: 'center',
     alignItems: 'center',
   },

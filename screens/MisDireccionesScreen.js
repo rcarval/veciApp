@@ -20,12 +20,10 @@ import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
-import { useTheme } from "../context/ThemeContext";
 
 const MisDireccionesScreen = () => {
   const navigation = useNavigation();
   const { direcciones, cargarDirecciones, invalidarDirecciones } = useUser();
-  const { currentTheme } = useTheme();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [direccionEditando, setDireccionEditando] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -115,8 +113,6 @@ const MisDireccionesScreen = () => {
         latitud: direccionValidada?.coordenadas?.lat || selectedLocation?.latitude || null,
         longitud: direccionValidada?.coordenadas?.lng || selectedLocation?.longitude || null,
       };
-      
-      console.log('📤 Enviando datos al backend:', JSON.stringify(datosDireccion, null, 2));
 
       let response;
       
@@ -145,14 +141,11 @@ const MisDireccionesScreen = () => {
       }
 
       const data = await response.json();
-      console.log('📥 Respuesta del backend:', JSON.stringify(data, null, 2));
 
       if (response.ok && data.ok) {
-        console.log('✅ Dirección guardada, recargando lista...');
         // Invalidar cache y recargar direcciones
         invalidarDirecciones();
-        const direccionesActualizadas = await cargarDirecciones(true); // Forzar recarga para obtener datos actualizados
-        console.log('📋 Direcciones actualizadas:', direccionesActualizadas?.map(d => ({ id: d.id, nombre: d.nombre, esPrincipal: d.esPrincipal })));
+        await cargarDirecciones(true); // Forzar recarga para obtener datos actualizados
         
         // Limpiar formulario
         limpiarFormulario();
@@ -216,7 +209,6 @@ const MisDireccionesScreen = () => {
                 return;
               }
 
-              console.log('🗑️ Eliminando dirección ID:', id);
               const response = await fetch(API_ENDPOINTS.DIRECCION_BY_ID(id), {
                 method: "DELETE",
                 headers: {
@@ -227,10 +219,8 @@ const MisDireccionesScreen = () => {
               });
 
               const data = await response.json();
-              console.log('📥 Respuesta DELETE:', JSON.stringify(data, null, 2));
 
               if (response.ok && data.ok) {
-                console.log('✅ Dirección eliminada, recargando lista...');
                 // Invalidar cache y recargar direcciones
                 invalidarDirecciones();
                 await cargarDirecciones(true); // Forzar recarga
@@ -444,12 +434,12 @@ const MisDireccionesScreen = () => {
   };
 
   const renderDireccion = ({ item }) => (
-    <View style={[styles.direccionCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+    <View style={styles.direccionCard}>
       <View style={styles.direccionHeader}>
         <View style={styles.direccionInfo}>
-          <Text style={[styles.direccionNombre, { color: currentTheme.text }]}>{item.nombre}</Text>
+          <Text style={styles.direccionNombre}>{item.nombre}</Text>
           {item.esPrincipal && (
-            <View style={[styles.principalBadge, { backgroundColor: currentTheme.primary }]}>
+            <View style={styles.principalBadge}>
               <Text style={styles.principalText}>Principal</Text>
             </View>
           )}
@@ -459,7 +449,7 @@ const MisDireccionesScreen = () => {
             style={styles.actionButton}
             onPress={() => editarDireccion(item)}
           >
-            <Ionicons name="pencil" size={20} color={currentTheme.primary} />
+            <Ionicons name="pencil" size={20} color="#2A9D8F" />
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionButton}
@@ -471,11 +461,11 @@ const MisDireccionesScreen = () => {
       </View>
       
       <View style={styles.direccionDetalles}>
-        <Text style={[styles.direccionTexto, { color: currentTheme.text }]}>
+        <Text style={styles.direccionTexto}>
           {item.direccion}
         </Text>
         {item.referencia && (
-          <Text style={[styles.referenciaTexto, { color: currentTheme.textSecondary }]}>
+          <Text style={styles.referenciaTexto}>
             Referencia: {item.referencia}
           </Text>
         )}
@@ -484,9 +474,9 @@ const MisDireccionesScreen = () => {
   );
 
   return (
-    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+    <View style={styles.containerMaster}>
       <LinearGradient
-        colors={[currentTheme.primary, currentTheme.secondary]}
+        colors={["#2A9D8F", "#1D7874"]}
         style={styles.headerGradient}
       >
         <View style={styles.headerContainer}>
@@ -506,8 +496,8 @@ const MisDireccionesScreen = () => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
         {cargando ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={currentTheme.primary} />
-            <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>Cargando direcciones...</Text>
+            <ActivityIndicator size="large" color="#2A9D8F" />
+            <Text style={styles.loadingText}>Cargando direcciones...</Text>
           </View>
         ) : direcciones.length > 0 ? (
           <FlatList
@@ -519,9 +509,9 @@ const MisDireccionesScreen = () => {
           />
         ) : (
           <View style={styles.emptyState}>
-            <Ionicons name="location-outline" size={64} color={currentTheme.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>No tienes direcciones guardadas</Text>
-            <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+            <Ionicons name="location-outline" size={64} color="#bdc3c7" />
+            <Text style={styles.emptyTitle}>No tienes direcciones guardadas</Text>
+            <Text style={styles.emptySubtitle}>
               Agrega tu primera dirección para recibir pedidos
             </Text>
           </View>
@@ -529,7 +519,7 @@ const MisDireccionesScreen = () => {
 
         {!mostrarFormulario && (
           <TouchableOpacity 
-            style={[styles.agregarButton, { backgroundColor: currentTheme.primary }]}
+            style={styles.agregarButton}
             onPress={() => setMostrarFormulario(true)}
           >
             <Ionicons name="add" size={24} color="white" />
@@ -540,9 +530,9 @@ const MisDireccionesScreen = () => {
         )}
 
         {mostrarFormulario && (
-          <View style={[styles.formularioContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+          <View style={styles.formularioContainer}>
             <View style={styles.formularioHeader}>
-              <Text style={[styles.formularioTitle, { color: currentTheme.text }]}>
+              <Text style={styles.formularioTitle}>
                 {direccionEditando ? "Editar Dirección" : "Nueva Dirección"}
               </Text>
               <TouchableOpacity 
@@ -555,73 +545,71 @@ const MisDireccionesScreen = () => {
 
             <View style={styles.formulario}>
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Nombre de la dirección *</Text>
+                <Text style={styles.inputLabel}>Nombre de la dirección *</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
+                  style={styles.input}
                   value={nombre}
                   onChangeText={setNombre}
                   placeholder="Ej: Casa, Trabajo, etc."
-                  placeholderTextColor={currentTheme.textSecondary}
                   autoCapitalize="words"
                 />
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Dirección completa *</Text>
+                <Text style={styles.inputLabel}>Dirección completa *</Text>
                 <TouchableOpacity
-                  style={[styles.direccionButton, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}
+                  style={styles.direccionButton}
                   onPress={openMapPicker}
                 >
                   <View style={styles.direccionButtonContent}>
-                    <Ionicons name="map" size={20} color={currentTheme.primary} />
-                    <Text style={[styles.direccionButtonText, { color: direccionCompleta ? currentTheme.text : currentTheme.textSecondary }]}>
+                    <Ionicons name="map" size={20} color="#2A9D8F" />
+                    <Text style={[styles.direccionButtonText, direccionCompleta && styles.direccionButtonTextFilled]}>
                       {direccionCompleta || "Selecciona en el mapa"}
                     </Text>
-                    <Ionicons name="chevron-forward" size={16} color={currentTheme.textSecondary} />
+                    <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
                   </View>
                 </TouchableOpacity>
                 {direccionValidada && (
                   <View style={styles.validacionContainer}>
                     <Ionicons name="checkmark-circle" size={16} color="#27ae60" />
-                    <Text style={[styles.validacionText, { color: "#27ae60" }]}>Dirección validada</Text>
+                    <Text style={styles.validacionText}>Dirección validada</Text>
                   </View>
                 )}
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: currentTheme.text }]}>Referencia (opcional)</Text>
+                <Text style={styles.inputLabel}>Referencia (opcional)</Text>
                 <TextInput
-                  style={[styles.input, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
+                  style={styles.input}
                   value={referencia}
                   onChangeText={setReferencia}
                   placeholder="Ej: Frente al supermercado"
-                  placeholderTextColor={currentTheme.textSecondary}
                   autoCapitalize="words"
                 />
               </View>
 
               <TouchableOpacity 
-                style={[styles.checkboxContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }, esPrincipal && [styles.checkboxSelected, { borderColor: currentTheme.primary, backgroundColor: currentTheme.primary + '20' }]]}
+                style={[styles.checkboxContainer, esPrincipal && styles.checkboxSelected]}
                 onPress={() => setEsPrincipal(!esPrincipal)}
               >
                 <Ionicons 
                   name={esPrincipal ? "checkmark-circle" : "ellipse-outline"} 
                   size={24} 
-                  color={esPrincipal ? currentTheme.primary : currentTheme.textSecondary} 
+                  color={esPrincipal ? "#2A9D8F" : "#bdc3c7"} 
                 />
-                <Text style={[styles.checkboxText, { color: currentTheme.text }]}>Marcar como dirección principal</Text>
+                <Text style={styles.checkboxText}>Marcar como dirección principal</Text>
               </TouchableOpacity>
 
               <View style={styles.formularioActions}>
                 <TouchableOpacity 
-                  style={[styles.cancelarButton, { borderColor: currentTheme.border }]}
+                  style={styles.cancelarButton}
                   onPress={limpiarFormulario}
                 >
-                  <Text style={[styles.cancelarButtonText, { color: "#e74c3c" }]}>Cancelar</Text>
+                  <Text style={styles.cancelarButtonText}>Cancelar</Text>
                 </TouchableOpacity>
                 
                 <TouchableOpacity 
-                  style={[styles.guardarButton, { backgroundColor: currentTheme.primary }, guardando && styles.guardarButtonDisabled]}
+                  style={[styles.guardarButton, guardando && styles.guardarButtonDisabled]}
                   onPress={guardarDireccion}
                   disabled={guardando}
                 >
@@ -646,7 +634,7 @@ const MisDireccionesScreen = () => {
         >
           <View style={styles.mapModalContainer}>
             <LinearGradient
-              colors={[currentTheme.primary, currentTheme.secondary]}
+              colors={["#2A9D8F", "#1D7874"]}
               style={styles.mapModalHeader}
             >
               <TouchableOpacity
@@ -672,50 +660,49 @@ const MisDireccionesScreen = () => {
                     title="Ubicación seleccionada"
                   >
                     <View style={styles.customMarker}>
-                      <Ionicons name="location" size={30} color={currentTheme.primary} />
+                      <Ionicons name="location" size={30} color="#2A9D8F" />
                     </View>
                   </Marker>
                 )}
               </MapView>
 
-              <View style={[styles.mapBottomPanel, { backgroundColor: currentTheme.cardBackground, borderTopColor: currentTheme.border }]}>
+              <View style={styles.mapBottomPanel}>
                 <View style={styles.locationInfo}>
-                  <Ionicons name="location" size={18} color={currentTheme.primary} />
-                  <Text style={[styles.locationLabel, { color: currentTheme.text }]}>Dirección:</Text>
+                  <Ionicons name="location" size={18} color="#2A9D8F" />
+                  <Text style={styles.locationLabel}>Dirección:</Text>
                 </View>
                 <View style={styles.searchContainer}>
                   <TextInput
-                    style={[styles.addressInput, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border, color: currentTheme.text }]}
+                    style={styles.addressInput}
                     value={currentAddress}
                     onChangeText={setCurrentAddress}
                     placeholder="Escribe una dirección o selecciona en el mapa"
-                    placeholderTextColor={currentTheme.textSecondary}
                     multiline={true}
                     numberOfLines={2}
                   />
                   <TouchableOpacity
-                    style={[styles.searchButton, { backgroundColor: currentTheme.background, borderColor: currentTheme.primary }, buscandoDireccion && styles.searchButtonDisabled]}
+                    style={[styles.searchButton, buscandoDireccion && styles.searchButtonDisabled]}
                     onPress={() => buscarDireccion(currentAddress)}
                     disabled={buscandoDireccion}
                   >
                     {buscandoDireccion ? (
-                      <Ionicons name="hourglass" size={20} color={currentTheme.textSecondary} />
+                      <Ionicons name="hourglass" size={20} color="#bdc3c7" />
                     ) : (
-                      <Ionicons name="search" size={20} color={currentTheme.primary} />
+                      <Ionicons name="search" size={20} color="#2A9D8F" />
                     )}
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.mapActions}>
                   <TouchableOpacity
-                    style={[styles.cancelMapButton, { backgroundColor: currentTheme.background }]}
+                    style={styles.cancelMapButton}
                     onPress={() => setMapModalVisible(false)}
                   >
-                    <Text style={[styles.cancelMapButtonText, { color: currentTheme.text }]}>Cancelar</Text>
+                    <Text style={styles.cancelMapButtonText}>Cancelar</Text>
                   </TouchableOpacity>
                   
                   <TouchableOpacity
-                    style={[styles.confirmMapButton, { backgroundColor: currentTheme.primary }, validandoDireccion && styles.disabledButton]}
+                    style={[styles.confirmMapButton, validandoDireccion && styles.disabledButton]}
                     onPress={confirmMapLocation}
                     disabled={validandoDireccion}
                   >

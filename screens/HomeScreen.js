@@ -22,10 +22,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
 import pedidoService from "../services/pedidoService";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const HomeScreen = ({ navigation }) => {
   const userContext = useUser();
-  const { usuario, direcciones, direccionSeleccionada, loading, cargarUsuario, cargarDirecciones, establecerDireccionSeleccionada } = userContext;
+  const { usuario, direcciones, direccionSeleccionada, loading, cargarUsuario, cargarDirecciones, establecerDireccionSeleccionada, modoVista, volverAVistaEmprendedor } = userContext;
   const { currentTheme } = useTheme();
   const [cargandoUsuario, setCargandoUsuario] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
@@ -33,12 +34,13 @@ const HomeScreen = ({ navigation }) => {
   const [modalObligatorioVisible, setModalObligatorioVisible] = useState(false);
   const animatedValue = useRef(new Animated.Value(0)).current;
   const intentosCargaRef = useRef(0);
+  const modalYaMostrado = useRef(false);
+  const direccionesRef = useRef([]); // Ref para tener valor actualizado en closures
   const [emprendimientosDestacados, setEmprendimientosDestacados] = useState([]);
   const [productosDestacados, setProductosDestacados] = useState([]);
   const [productosOferta, setProductosOferta] = useState([]);
   const [emprendimientosPorCategoria, setEmprendimientosPorCategoria] = useState({});
   const [cargandoEmprendimientos, setCargandoEmprendimientos] = useState(false);
-
 
   // Helper para obtener el nombre de la comuna
   const obtenerNombreComuna = (comunaId) => {
@@ -132,7 +134,6 @@ const HomeScreen = ({ navigation }) => {
         // Si no hay usuario en el contexto, esperar un momento y luego cargar
         if (!usuario) {
           console.log('🏠 HomeScreen: No hay usuario, esperando 1 segundo y cargando desde backend...');
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Esperar 1 segundo
           
           console.log('🏠 HomeScreen: Llamando a cargarUsuario(true)...');
           const usuarioCargado = await cargarUsuario(true); // Forzar recarga para obtener datos frescos
@@ -144,9 +145,25 @@ const HomeScreen = ({ navigation }) => {
             setCargandoUsuario(false);
             return;
           }
+          
+          // Si es vendedor, redirigir a PedidosRecibidos
+          if (usuarioCargado.tipo_usuario === 'vendedor') {
+            console.log('🏠 HomeScreen: Usuario es vendedor, redirigiendo a PedidosRecibidos');
+            navigation.navigate("PedidosRecibidos");
+            setCargandoUsuario(false);
+            return;
+          }
         } else {
           console.log('🏠 HomeScreen: Usuario existe, usando cache');
           await cargarUsuario(false); // Usar cache si es válido
+          
+          // Si es vendedor, redirigir a PedidosRecibidos
+          if (usuario.tipo_usuario === 'vendedor') {
+            console.log('🏠 HomeScreen: Usuario es vendedor, redirigiendo a PedidosRecibidos');
+            navigation.navigate("PedidosRecibidos");
+            setCargandoUsuario(false);
+            return;
+          }
         }
         
         console.log('🏠 HomeScreen: Cargando direcciones...');
@@ -205,12 +222,69 @@ const HomeScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation, usuario]);
 
-  // Verificar constantemente si hay direcciones y mostrar/ocultar modal
+  // Actualizar ref cuando cambian las direcciones
   useEffect(() => {
-    if (direcciones && direcciones.length === 0) {
-      setModalObligatorioVisible(true);
+    direccionesRef.current = direcciones;
+  }, [direcciones]);
+
+  // Verificar direcciones y mostrar modal 1 segundo después de que termine la animación de loading
+  // SOLO para usuarios tipo "cliente" O emprendedores en modo vista cliente
+  useEffect(() => {
+    // Usar tipo de usuario efectivo (considera modo vista)
+    const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+    const esCliente = tipoEfectivo === 'cliente';
+    
+    // IMPORTANTE: Solo verificar direcciones cuando la carga inicial haya terminado
+    // Esto evita mostrar el modal mientras las direcciones aún se están cargando
+    if (cargandoUsuario || loading) {
+      console.log('⏳ Todavía cargando datos, esperando para verificar direcciones...');
+      return;
+    }
+    
+    console.log('🔍 VERIFICACIÓN DE MODAL:', {
+      esCliente,
+      tipoReal: usuario?.tipo_usuario,
+      modoVista,
+      tipoEfectivo,
+      cantidadDirecciones: direcciones?.length || 0,
+      modalYaMostrado: modalYaMostrado.current,
+      cargandoUsuario,
+      loading
+    });
+    
+    if (esCliente && direcciones && direcciones.length === 0 && !modalYaMostrado.current) {
+      // Escuchar cuando termine la animación del overlay global
+      const checkInterval = setInterval(async () => {
+        const animacionTerminada = await AsyncStorage.getItem('animacionOverlayTerminada');
+        if (animacionTerminada === 'true') {
+          console.log('🎬 Animación de overlay detectada como terminada, esperando 1 segundo...');
+          await AsyncStorage.removeItem('animacionOverlayTerminada');
+          clearInterval(checkInterval);
+          
+          // Esperar 1 segundo adicional después de que termine la animación
+          setTimeout(() => {
+            // ⚠️ VERIFICAR NUEVAMENTE usando el ref actualizado (previene race condition)
+            const direccionesActuales = direccionesRef.current;
+            console.log('🔍 Verificación final antes de mostrar modal:', {
+              cantidadDirecciones: direccionesActuales.length
+            });
+            
+            if (direccionesActuales.length === 0) {
+              console.log('📍 Mostrando modal de dirección obligatoria (usuario cliente sin direcciones)');
+              setModalObligatorioVisible(true);
+              modalYaMostrado.current = true; // Marcar como mostrado
+            } else {
+              console.log('✅ Direcciones cargadas durante la espera, NO mostrar modal');
+            }
+          }, 10);
+        }
+      }, 100);
+      
+      return () => clearInterval(checkInterval);
     } else if (direcciones && direcciones.length > 0) {
+      console.log('✅ Direcciones encontradas:', direcciones.length, '- Ocultando modal si estaba visible');
       setModalObligatorioVisible(false);
+      modalYaMostrado.current = false; // Resetear cuando hay direcciones
       // Seleccionar dirección principal por defecto si no hay selección
       if (!direccionSeleccionada && establecerDireccionSeleccionada) {
         const direccionPrincipal = direcciones.find(dir => dir.esPrincipal);
@@ -221,7 +295,7 @@ const HomeScreen = ({ navigation }) => {
         }
       }
     }
-  }, [direcciones, direccionSeleccionada, establecerDireccionSeleccionada]);
+  }, [direcciones, direccionSeleccionada, establecerDireccionSeleccionada, usuario?.tipo_usuario, modoVista, cargandoUsuario, loading]);
 
   // ✅ Interceptar botón "Atrás"
   /*useEffect(() => {
@@ -289,22 +363,11 @@ const HomeScreen = ({ navigation }) => {
     return emp.estado === 'activo' ? 'Abierto' : 'Cerrado';
   };
 
-  // Función helper para cargar calificación de un emprendimiento
-  const cargarCalificacionEmprendimiento = async (empId) => {
-    try {
-      const response = await pedidoService.obtenerCalificacionEmprendimiento(empId);
-      if (response.ok && response.calificacion) {
-        return parseFloat(response.calificacion.calificacion_promedio) || 0;
-      }
-      return 0;
-    } catch (error) {
-      console.error(`Error cargando calificación para emprendimiento ${empId}:`, error);
-      return 0;
-    }
-  };
+  // Ya no es necesario cargar calificación individual - viene en el JSON del backend
+  // Función removida para optimizar requests
 
   // Función para agrupar emprendimientos por categoría de negocio
-  const agruparEmprendimientosPorCategoria = async (emprendimientos) => {
+  const agruparEmprendimientosPorCategoria = (emprendimientos) => {
     const agrupados = {};
     
     for (const emp of emprendimientos) {
@@ -314,11 +377,12 @@ const HomeScreen = ({ navigation }) => {
         agrupados[categoria] = [];
       }
       
-      // Cargar calificación del emprendimiento
-      const rating = await cargarCalificacionEmprendimiento(emp.id);
+      // La calificación ya viene en el JSON del backend (optimización)
+      const rating = parseFloat(emp.calificacion_promedio) || 0;
       
       agrupados[categoria].push({
         id: emp.id,
+        usuario_id: emp.usuario_id, // ✅ IMPORTANTE: Incluir usuario_id para validaciones
         nombre: emp.nombre,
         descripcion: emp.descripcion_corta || emp.descripcion,
         descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
@@ -375,13 +439,14 @@ const HomeScreen = ({ navigation }) => {
           5
         );
         
-        // Mapear emprendimientos a formato esperado por el Swiper con calificaciones
-        const emprendimientosMapeadosPromises = destacadosSeleccionados.map(async emp => {
-          // Cargar calificación del emprendimiento
-          const rating = await cargarCalificacionEmprendimiento(emp.id);
+        // Mapear emprendimientos a formato esperado por el Swiper (calificación ya viene en el JSON)
+        const emprendimientosMapeados = destacadosSeleccionados.map(emp => {
+          // La calificación ya viene en el JSON del backend (optimización)
+          const rating = parseFloat(emp.calificacion_promedio) || 0;
           
           return {
             id: emp.id,
+            usuario_id: emp.usuario_id, // ✅ IMPORTANTE: Incluir usuario_id para validaciones
             nombre: emp.nombre,
             descripcion: emp.descripcion_corta || emp.descripcion,
             descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
@@ -397,8 +462,6 @@ const HomeScreen = ({ navigation }) => {
             galeria: [] // Se cargará cuando sea necesario
           };
         });
-        
-        const emprendimientosMapeados = await Promise.all(emprendimientosMapeadosPromises);
         
         // Agregar banner premium al principio si el usuario es emprendedor
         const conBannerPremium = usuario?.tipo_usuario === "emprendedor" 
@@ -475,6 +538,7 @@ const HomeScreen = ({ navigation }) => {
         // Guardar el emprendimiento con sus productos
         const emprendimientoConProductos = {
           id: emprendimiento.id,
+          usuario_id: emprendimiento.usuario_id, // ✅ CRÍTICO: Incluir usuario_id para validaciones
           nombre: emprendimiento.nombre,
           descripcion: emprendimiento.descripcion_corta || emprendimiento.descripcion,
           descripcionLarga: emprendimiento.descripcion_larga || emprendimiento.descripcion_corta || '',
@@ -506,6 +570,8 @@ const HomeScreen = ({ navigation }) => {
           productosPorCategoria[categoria].push({
             // Incluir toda la info del emprendimiento completo
             ...emprendimientoConProductos,
+            // Crear un ID único combinando emprendimiento y producto para evitar duplicados
+            id: `${emprendimiento.id}-${producto.id}`,
             // Agregar la categoría al objeto
             categoria: categoria,
             // Sobrescribir solo lo específico del producto
@@ -552,10 +618,10 @@ const HomeScreen = ({ navigation }) => {
   // El componente se re-renderizará automáticamente cuando el contexto se actualice
   if (cargandoUsuario || loading || !usuario) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={currentTheme.primary} />
-        <Text style={{ marginTop: 10 }}>
-          {loading || cargandoUsuario ? 'Cargando...' : 'Cargando usuario...'}
+      <View style={[styles.loadingContainer, { backgroundColor: currentTheme.background }]}>
+        <LoadingVeciApp size={140} color={currentTheme.primary} />
+        <Text style={[styles.loadingText, { color: currentTheme.text, marginTop: 30 }]}>
+          {loading || cargandoUsuario ? 'Cargando tu comunidad...' : 'Preparando todo para ti...'}
         </Text>
       </View>
     );
@@ -565,6 +631,24 @@ const HomeScreen = ({ navigation }) => {
     if (establecerDireccionSeleccionada) {
       establecerDireccionSeleccionada(id);
     }
+  };
+
+  // Función para validar direcciones antes de navegar
+  // SOLO aplica a usuarios tipo "cliente" O emprendedores en modo vista cliente
+  const navegarConValidacion = (nombrePantalla, params = {}) => {
+    // Pantallas que NO requieren validación de dirección
+    const pantallasExentas = ['MisDirecciones', 'Login', 'Perfil', 'InformacionPersonal'];
+    
+    // Validar direcciones para clientes Y emprendedores en modo vista cliente
+    const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+    const esCliente = tipoEfectivo === 'cliente';
+    
+    if (esCliente && !pantallasExentas.includes(nombrePantalla) && direcciones.length === 0) {
+      // No navegar, el modal obligatorio ya está visible
+      return;
+    }
+    
+    navigation.navigate(nombrePantalla, params);
   };
 
   const direccionActual = direcciones && direcciones.length > 0 
@@ -626,40 +710,90 @@ const getIconForCategory = (categoria) => {
   // ✅ **Menú lateral con el menú colapsable dentro**
   return (
     <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+      {/* Banner de Modo Vista Cliente - Solo si el emprendedor está viendo como cliente */}
+      {modoVista === 'cliente' && usuario?.tipo_usuario === 'emprendedor' && (
+        <TouchableOpacity
+          style={styles.modoVistaBanner}
+          onPress={() => {
+            Alert.alert(
+              "Vista de Cliente Activa",
+              "Estás viendo la app como cliente para probar tu negocio. ¿Quieres volver a tu perfil de emprendedor?",
+              [
+                { text: "Seguir como Cliente", style: "cancel" },
+                {
+                  text: "Volver a Emprendedor",
+                  onPress: async () => {
+                    await volverAVistaEmprendedor();
+                    navigation.dispatch(
+                      require('@react-navigation/native').CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'Perfil' }],
+                      })
+                    );
+                  }
+                }
+              ]
+            );
+          }}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={['#f39c12', '#e67e22']}
+            style={styles.modoVistaBannerGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+          >
+            <Ionicons name="eye" size={18} color="white" />
+            <Text style={styles.modoVistaBannerTexto}>
+              Modo Cliente Activo - Toca para volver
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+      
       <View
-        style={[styles.container, { backgroundColor: currentTheme.background }]}
+        style={[
+          styles.container, 
+          { backgroundColor: currentTheme.background },
+          modoVista === 'cliente' && usuario?.tipo_usuario === 'emprendedor' && styles.containerConBanner
+        ]}
       >
-        <LinearGradient  colors={[currentTheme.primary, currentTheme.secondary]} style={styles.direccionContainer}>
-          <View style={styles.direccionSuperior}>
-            <TouchableOpacity
-              style={styles.selectorDireccion}
-              onPress={() => setModalVisible(true)}
-            >
-              <MaterialIcons name="location-on" size={20} color="white" />
-              <View style={styles.direccionTextContainer}>
-                <Text style={styles.direccionTexto} numberOfLines={1}>
-                  {direccionActual ? formatearDireccionMostrada(direccionActual.direccion) : 'Selecciona una dirección'}
-                </Text>
-              </View>
-              <MaterialIcons name="arrow-drop-down" size={24} color="white" />
-            </TouchableOpacity>
-          </View>
-          {/* Nuevo campo de búsqueda */}
-          <View style={styles.searchContainer}>
-  <TextInput
-    style={styles.searchInput}
-    placeholder="¿Qué estás buscando?"
-    placeholderTextColor="#999"
-    onPress={() => navigation.navigate('Busqueda')} // Navega al presionar
-    pointerEvents="none" // Permite que el TouchableOpacity funcione
-  />
-  <View 
-    style={styles.searchIcon}
-    onPress={() => navigation.navigate('Busqueda')} // También navega al presionar el ícono
-  >
-    <FontAwesome name="search" size={18} color="#666" />
-  </View>
-</View>
+        <LinearGradient  
+          colors={[currentTheme.primary, currentTheme.secondary]} 
+          style={styles.headerModerno}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+        >
+          {/* Selector de dirección elegante */}
+          <TouchableOpacity
+            style={styles.direccionModerna}
+            onPress={() => setModalVisible(true)}
+            activeOpacity={0.8}
+          >
+            <View style={styles.direccionIconCircle}>
+              <Ionicons name="location" size={18} color={currentTheme.primary} />
+            </View>
+            <View style={styles.direccionInfoModerna}>
+              <Text style={styles.direccionLabelModerno}>Entregar en</Text>
+              <Text style={styles.direccionTextoModerno} numberOfLines={1}>
+                {direccionActual ? formatearDireccionMostrada(direccionActual.direccion) : 'Selecciona dirección'}
+              </Text>
+            </View>
+            <Ionicons name="chevron-down" size={18} color="rgba(255,255,255,0.9)" />
+          </TouchableOpacity>
+
+          {/* Barra de búsqueda moderna */}
+          <TouchableOpacity
+            style={styles.searchBarModerno}
+            onPress={() => navegarConValidacion('Busqueda')}
+            activeOpacity={0.95}
+          >
+            <Ionicons name="search" size={20} color={currentTheme.primary} style={styles.searchIconStart} />
+            <Text style={styles.searchPlaceholderModerno}>
+              Buscar restaurantes, productos...
+            </Text>
+            <Ionicons name="options-outline" size={18} color="#95a5a6" />
+          </TouchableOpacity>
         </LinearGradient>
 
         {/* Modal de selección de dirección */}
@@ -740,193 +874,278 @@ const getIconForCategory = (categoria) => {
 
         {/* ✅ Sección de productos destacados */}
         <ScrollView contentContainerStyle={styles.scrollContainer}>
+          {/* Categorías principales - Banner horizontal */}
+          <View style={styles.categoriasSection}>
+            <Text style={[styles.categoriasTitle, { color: currentTheme.text }]}>
+              Explorar Categorías
+            </Text>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.categoriasBannerScroll}
+              >
+                {/* Comida */}
+                <Pressable
+                  onPress={() => navegarConValidacion('Comida', { categoria: 'comida' })}
+                  style={({ pressed }) => [
+                    styles.categoriaModernaMix,
+                    pressed && styles.categoriaBannerPressed
+                  ]}
+                >
+                  <Image
+                    source={require('../assets/pizza.jpg')}
+                    style={styles.categoriaModernaImagen}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', currentTheme.primary + 'DD']}
+                    start={{ x: 2, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.categoriaModernaGradienteMix}
+                  >
+                    <View style={styles.categoriaModernaTextoMix}>
+                      <View style={styles.categoriaModernaInfoMix}>
+                        <Text style={styles.categoriaModernaTituloMix}>Comida</Text>
+                        <Text style={styles.categoriaModernaSubtituloMix}>Restaurantes locales</Text>
+                      </View>
+                      <View style={styles.categoriaModernaBadgeMix}>
+                        <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+
+                {/* Servicios */}
+                <Pressable
+                  onPress={() => navegarConValidacion('Servicios', { categoria: 'servicios' })}
+                  style={({ pressed }) => [
+                    styles.categoriaModernaMix,
+                    pressed && styles.categoriaBannerPressed
+                  ]}
+                >
+                  <Image
+                    source={require('../assets/gasfiter.jpg')}
+                    style={styles.categoriaModernaImagen}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', currentTheme.primary + 'DD']}
+                    start={{ x: 2, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.categoriaModernaGradienteMix}
+                  >
+                    <View style={styles.categoriaModernaTextoMix}>
+                      <View style={styles.categoriaModernaInfoMix}>
+                        <Text style={styles.categoriaModernaTituloMix}>Servicios</Text>
+                        <Text style={styles.categoriaModernaSubtituloMix}>Profesionales cerca</Text>
+                      </View>
+                      <View style={styles.categoriaModernaBadgeMix}>
+                        <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+
+                {/* Tiendas */}
+                <Pressable
+                  onPress={() => navegarConValidacion('Negocios', { categoria: 'negocios', titulo: 'Tiendas & Negocios', icono: 'shopping-bag' })}
+                  style={({ pressed }) => [
+                    styles.categoriaModernaMix,
+                    pressed && styles.categoriaBannerPressed
+                  ]}
+                >
+                  <Image
+                    source={require('../assets/almacen.jpg')}
+                    style={styles.categoriaModernaImagen}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', currentTheme.primary + 'DD']}
+                    start={{ x: 2, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.categoriaModernaGradienteMix}
+                  >
+                    <View style={styles.categoriaModernaTextoMix}>
+                      <View style={styles.categoriaModernaInfoMix}>
+                        <Text style={styles.categoriaModernaTituloMix}>Tiendas</Text>
+                        <Text style={styles.categoriaModernaSubtituloMix}>Comercios locales</Text>
+                      </View>
+                      <View style={styles.categoriaModernaBadgeMix}>
+                        <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+
+                {/* Belleza */}
+                <Pressable
+                  onPress={() => navegarConValidacion('Belleza', { categoria: 'belleza' })}
+                  style={({ pressed }) => [
+                    styles.categoriaModernaMix,
+                    pressed && styles.categoriaBannerPressed
+                  ]}
+                >
+                  <Image
+                    source={require('../assets/belleza.avif')}
+                    style={styles.categoriaModernaImagen}
+                    contentFit="cover"
+                  />
+                  <LinearGradient
+                    colors={['transparent', 'rgba(0,0,0,0.3)', currentTheme.primary + 'DD']}
+                    start={{ x: 2, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                    style={styles.categoriaModernaGradienteMix}
+                  >
+                    <View style={styles.categoriaModernaTextoMix}>
+                      <View style={styles.categoriaModernaInfoMix}>
+                        <Text style={styles.categoriaModernaTituloMix}>Belleza</Text>
+                        <Text style={styles.categoriaModernaSubtituloMix}>Salones y estética</Text>
+                      </View>
+                      <View style={styles.categoriaModernaBadgeMix}>
+                        <Ionicons name="arrow-forward" size={20} color="#FFF" />
+                      </View>
+                    </View>
+                  </LinearGradient>
+                </Pressable>
+              </ScrollView>
+          </View>
+
           <View style={styles.destacados}>
-            <View style={styles.iconosContainer}>
-              {/* Icono 1 - Comida */}
-              <View style={styles.iconoItem}>
-                <TouchableOpacity
-                  style={styles.iconoWrapper}
-                  onPress={() => navigation.navigate('Comida')}
-                >
-                  <Image
-                    source={require("../assets/food.webp")}
-                    style={styles.iconoImagen}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.iconoTexto}>Comida Preparada</Text>
-              </View>
-
-              {/* Icono 2 - Servicios */}
-              <View style={styles.iconoItem}>
-                <TouchableOpacity
-                  style={styles.iconoWrapper}
-                  onPress={() => navigation.navigate('Servicios')}
-                >
-                  <Image
-                    source={require("../assets/services.webp")}
-                    style={styles.iconoImagen}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.iconoTexto}>Servicios Locales</Text>
-              </View>
-
-              {/* Icono 3 - Negocios */}
-              <View style={styles.iconoItem}>
-                <TouchableOpacity
-                  style={styles.iconoWrapper}
-                  onPress={() => navigation.navigate('Negocios')}
-                >
-                  <Image
-                    source={require("../assets/store.png")}
-                    style={styles.iconoImagen}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.iconoTexto}>Tiendas & Negocios</Text>
-              </View>
-
-              {/* Icono 4 - Belleza */}
-              <View style={styles.iconoItem}>
-                <TouchableOpacity
-                  style={styles.iconoWrapper}
-                  onPress={() => navigation.navigate('Belleza')}
-                >
-                  <Image
-                    source={require("../assets/beauty.webp")}
-                    style={styles.iconoImagen}
-                  />
-                </TouchableOpacity>
-                <Text style={styles.iconoTexto}>Belleza & Bienestar</Text>
-              </View>
-            </View>
-
-            <Swiper
-              autoplay={true}
-              autoplayTimeout={3}
-              showsPagination={true}
-              style={styles.swiper}
-            >
-              {emprendimientosDestacados.map((producto) => {
+            {emprendimientosDestacados.length > 0 ? (
+              <Swiper
+                autoplay={true}
+                autoplayTimeout={3}
+                showsPagination={true}
+                style={styles.swiper}
+                dotStyle={styles.swiperDot}
+                activeDotStyle={styles.swiperActiveDot}
+                paginationStyle={styles.swiperPagination}
+              >
+                {emprendimientosDestacados.map((producto) => {
                 const isOpen = producto.estado;
                 const isVip = !producto.nombre; // Asume que los VIP no tienen nombre
+                // Verificar si es propio emprendimiento
+                const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
+                const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+                const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
                 return (
                   <TouchableOpacity
                     key={producto.id}
                     style={styles.productoContainer}
-                    onPress={() =>
-                      isVip
-                        ? navigation.navigate("PlanScreen")
-                        : navigation.navigate("PedidoDetalle", { producto })
-                    }
+                    onPress={() => {
+                      if (isVip) {
+                        navigation.navigate("PlanScreen");
+                      } else {
+                        // Si es propio emprendimiento en modo cliente, advertir
+                        if (mostrarAdvertencia) {
+                          Alert.alert(
+                            "⚠️ Tu Propio Negocio",
+                            "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+                            [{ text: "Entendido" }]
+                          );
+                          return;
+                        }
+                        // Si está cerrado, abrir en modo preview
+                        const isPreview = producto.estado === 'Cerrado';
+                        navegarConValidacion("PedidoDetalle", { 
+                          producto,
+                          isPreview: isPreview
+                        });
+                      }
+                    }}
                   >
                     {/* Solo mostrar header y footer si NO es VIP */}
                     {!isVip ? (
                       <>
-                        <View style={styles.productoHeader}>
+                        {/* Imagen principal con overlay */}
+                        <View style={styles.productoImagenWrapper}>
                           <Image
-                            source={producto.logo}
-                            style={styles.productoLogo}
+                            source={producto.imagen}
+                            style={styles.productoImagenDestacado}
                           />
-                          <Text style={styles.productoNombre}>
-                            {producto.nombre}
-                          </Text>
-                        </View>
-                        <Image
-                          source={producto.imagen}
-                          style={styles.productoImagenPrincipal}
-                        />
-                        <View style={styles.productoDetalles}>
-                          <Text style={styles.productoDescripcion}>
-                            {producto.descripcion}
-                          </Text>
-
-                          <View style={styles.productoFooter}>
-                            <View style={styles.productoEstadoContainer}>
+                          <LinearGradient
+                            colors={['transparent', 'rgba(0,0,0,0.7)']}
+                            style={styles.productoImagenOverlay}
+                          >
+                            {/* Badge de estado */}
+                            <View style={[
+                              styles.productoBadgeEstado,
+                              {
+                                backgroundColor: isOpen === "Abierto" 
+                                  ? 'rgba(46, 204, 113, 0.95)' 
+                                  : isOpen === "Cierra Pronto"
+                                  ? 'rgba(241, 196, 15, 0.95)'
+                                  : 'rgba(231, 76, 60, 0.95)'
+                              }
+                            ]}>
                               <Animated.View
                                 style={[
-                                  styles.luzEstado,
+                                  styles.luzEstadoNuevo,
                                   {
-                                    backgroundColor:
-                                      isOpen === "Abierto"
-                                        ? "green"
-                                        : isOpen === "Cierra Pronto"
-                                        ? "orange"
-                                        : "red",
-                                    opacity:
-                                      isOpen === "Abierto" ||
-                                      isOpen === "Cierra Pronto"
-                                        ? animatedValue
-                                        : 1,
+                                    backgroundColor: "#FFF",
+                                    opacity: isOpen === "Abierto" || isOpen === "Cierra Pronto" ? animatedValue : 1,
                                   },
                                 ]}
                               />
-                              <Text
-                                style={[
-                                  styles.productoEstado,
-                                  {
-                                    color:
-                                      isOpen === "Abierto"
-                                        ? "green"
-                                        : isOpen === "Cierra Pronto"
-                                        ? "orange"
-                                        : "red",
-                                  },
-                                ]}
-                              >
+                              <Text style={styles.productoEstadoNuevo}>
                                 {producto.estado}
                               </Text>
                             </View>
+                            
+                            {/* Badge de propio negocio */}
+                            {mostrarAdvertencia && (
+                              <View style={[styles.productoBadgePropio]}>
+                                <Ionicons name="storefront" size={12} color="white" />
+                                <Text style={styles.productoBadgePropioTexto}>Tu Negocio</Text>
+                              </View>
+                            )}
+                            
+                            {/* Info inferior */}
+                            <View style={styles.productoInfoOverlay}>
+                              <View style={styles.productoLogoWrapper}>
+                                <Image
+                                  source={producto.logo}
+                                  style={styles.productoLogoNuevo}
+                                />
+                              </View>
+                              <View style={styles.productoInfoTexto}>
+                                <Text style={styles.productoNombreNuevo} numberOfLines={1}>
+                                  {producto.nombre}
+                                </Text>
+                                <Text style={styles.productoDescripcionNueva} numberOfLines={2}>
+                                  {producto.descripcion}
+                                </Text>
+                                {/* Rating */}
+                                <View style={styles.productoRatingNuevo}>
+                                  <FontAwesome name="star" size={14} color="#FFD700" />
+                                  <Text style={styles.productoRatingTexto}>
+                                    {producto.rating?.toFixed(1) || '0.0'}
+                                  </Text>
+                                  <View style={styles.estrellasSeparador} />
+                                  {[1, 2, 3, 4, 5].map((star) => {
+                                    let rating = producto.rating;
+                                    const decimal = rating - Math.floor(rating);
+                                    if (decimal >= 0.3 && decimal < 0.7) {
+                                      rating = Math.floor(rating) + 0.5;
+                                    } else if (decimal < 0.3) {
+                                      rating = Math.floor(rating);
+                                    } else {
+                                      rating = Math.ceil(rating);
+                                    }
 
-                            <View style={styles.estrellas}>
-                              {[1, 2, 3, 4, 5].map((star) => {
-                                // Redondeo especial: 4.2 → 4, 4.3 → 4.5
-                                let rating = producto.rating;
-                                const decimal = rating - Math.floor(rating);
-                                if (decimal >= 0.3 && decimal < 0.7) {
-                                  rating = Math.floor(rating) + 0.5;
-                                } else if (decimal < 0.3) {
-                                  rating = Math.floor(rating);
-                                } else {
-                                  rating = Math.ceil(rating);
-                                }
-
-                                if (star <= Math.floor(rating)) {
-                                  // Estrella completa
-                                  return (
-                                    <FontAwesome
-                                      key={star}
-                                      name="star"
-                                      size={16}
-                                      color="#FFD700"
-                                    />
-                                  );
-                                } else if (
-                                  star - 0.5 <= rating &&
-                                  rating < star
-                                ) {
-                                  // Media estrella
-                                  return (
-                                    <FontAwesome
-                                      key={star}
-                                      name="star-half-o"
-                                      size={16}
-                                      color="#FFD700"
-                                    />
-                                  );
-                                } else {
-                                  // Estrella vacía
-                                  return (
-                                    <FontAwesome
-                                      key={star}
-                                      name="star-o"
-                                      size={16}
-                                      color="#FFD700"
-                                    />
-                                  );
-                                }
-                              })}
+                                    if (star <= Math.floor(rating)) {
+                                      return <FontAwesome key={star} name="star" size={12} color="#FFD700" />;
+                                    } else if (star - 0.5 <= rating && rating < star) {
+                                      return <FontAwesome key={star} name="star-half-o" size={12} color="#FFD700" />;
+                                    } else {
+                                      return <FontAwesome key={star} name="star-o" size={12} color="#FFD700" />;
+                                    }
+                                  })}
+                                </View>
+                              </View>
                             </View>
-                          </View>
+                          </LinearGradient>
                         </View>
                       </>
                     ) : (
@@ -939,30 +1158,85 @@ const getIconForCategory = (categoria) => {
                   </TouchableOpacity>
                 );
               })}
-            </Swiper>
+              </Swiper>
+            ) : (
+              <View style={styles.emptyStateHome}>
+                <FontAwesome name="clock-o" size={64} color="#95a5a6" />
+                <Text style={styles.emptyTitleHome}>
+                  No hay emprendimientos disponibles
+                </Text>
+                <Text style={styles.emptySubtitleHome}>
+                  Por el momento no hay negocios abiertos en tu zona.{'\n'}
+                  Vuelve pronto para descubrir nuevos emprendimientos locales.
+                </Text>
+              </View>
+            )}
           </View>
           {/* Sección de Ofertas Destacadas */}
 {productosOferta && productosOferta.length > 0 && (
   <View style={styles.seccionOfertas}>
-    <View style={styles.headerSeccion}>
-      <View style={[styles.iconoSeccionContainer]}>
-        <FontAwesome name="tag" size={16}/>
+    <LinearGradient
+      colors={['#FF5252', '#E91E63']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.headerSeccionGradiente}
+    >
+      <View style={styles.headerSeccionContenido}>
+        <View style={styles.iconoSeccionContainerModerno}>
+          <Ionicons name="pricetag" size={20} color="#FFF" />
+        </View>
+        <Text style={styles.tituloSeccionModerno}>
+          Ofertas Destacadas
+        </Text>
       </View>
-      <Text style={[styles.tituloSeccionGaleria]}>
-        OFERTAS DESTACADAS
-      </Text>
-    </View>
+      <View style={styles.lineaDecorativa} />
+    </LinearGradient>
     
     <ScrollView 
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.galeriaScroll}
     >
-      {productosOferta.map(producto => (
+      {productosOferta.map(producto => {
+        // Verificar si es propio emprendimiento
+        console.log('🔍 OFERTAS - Verificando producto:', {
+          productoId: producto.id,
+          productoNombre: producto.nombre,
+          productoUsuarioId: producto.usuario_id,
+          usuarioId: usuario?.id,
+          coincide: producto.usuario_id === usuario?.id
+        });
+        const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
+        const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+        const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+
+        return (
         <TouchableOpacity 
           key={producto.id}
           style={styles.itemGaleria}
-          onPress={() => navigation.navigate("PedidoDetalle", { producto })}
+          onPress={() => {
+            console.log('👆 CLICK en OFERTA:', {
+              productoId: producto.id,
+              productoUsuarioId: producto.usuario_id,
+              usuarioId: usuario?.id,
+              esPropioEmprendimiento,
+              tipoEfectivo,
+              mostrarAdvertencia
+            });
+            if (mostrarAdvertencia) {
+              Alert.alert(
+                "⚠️ Tu Propio Negocio",
+                "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+                [{ text: "Entendido" }]
+              );
+              return;
+            }
+            const isPreview = producto.estado === 'Cerrado';
+            navegarConValidacion("PedidoDetalle", { 
+              producto,
+              isPreview: isPreview
+            });
+          }}
         >
           {/* Imagen del producto */}
           <View style={styles.imagenContainer}>
@@ -988,9 +1262,9 @@ const getIconForCategory = (categoria) => {
             {/* Precio */}
             <Text style={styles.precioProducto}>
               {producto.productoSeleccionado && producto.productoSeleccionado.precio ? 
-                `$${producto.productoSeleccionado.precio.toLocaleString("es-CL")}` : 
+                `$${Math.round(producto.productoSeleccionado.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}` : 
                 (producto.galeria && producto.galeria[0] && producto.galeria[0].precio ? 
-                  `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
+                  `$${Math.round(producto.galeria[0].precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}` : 
                   "Consulte")}
             </Text>
             
@@ -1007,7 +1281,8 @@ const getIconForCategory = (categoria) => {
             </View>
           </View>
         </TouchableOpacity>
-      ))}
+        );
+      })}
     </ScrollView>
   </View>
 )}
@@ -1016,19 +1291,26 @@ const getIconForCategory = (categoria) => {
     {/* Filtramos las categorías únicas */}
     {Array.from(new Set(productosDestacados.map(p => p.categoria).filter(cat => cat))).map(categoria => (
       <View key={categoria} style={styles.categoriaContainer}>
-        <View style={styles.headerSeccion}>
-          <View style={[
-            styles.iconoSeccionContainer,           
-          ]}>
-            <FontAwesome 
-              name={getIconForCategory(categoria)} 
-              size={16} 
-            />
+        <LinearGradient
+          colors={[currentTheme.primary, currentTheme.secondary]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.headerSeccionGradiente}
+        >
+          <View style={styles.headerSeccionContenido}>
+            <View style={styles.iconoSeccionContainerModerno}>
+              <Ionicons 
+                name={categoria === 'principal' ? 'star' : categoria === 'oferta' ? 'pricetag' : 'flame'} 
+                size={20} 
+                color="#FFF"
+              />
+            </View>
+            <Text style={styles.tituloSeccionModerno}>
+              {categoria ? categoria.charAt(0).toUpperCase() + categoria.slice(1) : 'Destacados'}
+            </Text>
           </View>
-          <Text style={[styles.tituloSeccionGaleria]}>
-            {categoria ? categoria.toUpperCase() : 'DESTACADOS'}
-          </Text>
-        </View>
+          <View style={styles.lineaDecorativa} />
+        </LinearGradient>
         
         <ScrollView 
           horizontal
@@ -1037,11 +1319,42 @@ const getIconForCategory = (categoria) => {
         >
           {productosDestacados
             .filter(producto => producto.categoria === categoria)
-            .map(producto => (
+            .map(producto => {
+              // Verificar si es propio emprendimiento
+              console.log('🔍 DESTACADOS - Verificando producto:', {
+                productoId: producto.id,
+                productoNombre: producto.nombre,
+                productoUsuarioId: producto.usuario_id,
+                usuarioId: usuario?.id,
+                coincide: producto.usuario_id === usuario?.id
+              });
+              const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
+              const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+              const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+
+              return (
               <TouchableOpacity 
                 key={producto.id}
                 style={styles.itemGaleria}
-                onPress={() => navigation.navigate("PedidoDetalle", { producto })}
+                onPress={() => {
+                  console.log('👆 CLICK en DESTACADO:', {
+                    productoId: producto.id,
+                    productoUsuarioId: producto.usuario_id,
+                    usuarioId: usuario?.id,
+                    esPropioEmprendimiento,
+                    tipoEfectivo,
+                    mostrarAdvertencia
+                  });
+                  if (mostrarAdvertencia) {
+                    Alert.alert(
+                      "⚠️ Tu Propio Negocio",
+                      "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+                      [{ text: "Entendido" }]
+                    );
+                    return;
+                  }
+                  navegarConValidacion("PedidoDetalle", { producto });
+                }}
               >
                 {/* Imagen del producto */}
                 <View style={styles.imagenContainer}>
@@ -1067,9 +1380,9 @@ const getIconForCategory = (categoria) => {
                   {/* Precio */}
                   <Text style={styles.precioProducto}>
                     {producto.productoSeleccionado && producto.productoSeleccionado.precio ? 
-                      `$${producto.productoSeleccionado.precio.toLocaleString("es-CL")}` : 
+                      `$${Math.round(producto.productoSeleccionado.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}` : 
                       (producto.galeria && producto.galeria[0] && producto.galeria[0].precio ? 
-                        `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
+                        `$${Math.round(producto.galeria[0].precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}` : 
                         "Consulte")}
                   </Text>
                   
@@ -1086,7 +1399,8 @@ const getIconForCategory = (categoria) => {
                   </View>
                 </View>
               </TouchableOpacity>
-            ))
+              );
+            })
           }
         </ScrollView>
       </View>
@@ -1104,28 +1418,72 @@ const getIconForCategory = (categoria) => {
                 
                 return (
                   <View key={categoria} style={styles.categoriaContainer}>
-                    <View style={styles.headerSeccion}>
-                      <View style={styles.iconoSeccionContainer}>
-                        <FontAwesome 
-                          name={getIconForCategory(categoria)} 
-                          size={16} 
-                        />
+                    <LinearGradient
+                      colors={[currentTheme.primary, currentTheme.secondary]}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.headerSeccionGradiente}
+                    >
+                      <View style={styles.headerSeccionContenido}>
+                        <View style={styles.iconoSeccionContainerModerno}>
+                          <Ionicons 
+                            name={categoria === 'comida' ? 'restaurant' : categoria === 'servicios' ? 'construct' : categoria === 'negocios' ? 'storefront' : categoria === 'belleza' ? 'cut' : 'business'} 
+                            size={20} 
+                            color="#FFF"
+                          />
+                        </View>
+                        <Text style={styles.tituloSeccionModerno}>
+                          {categoria.charAt(0).toUpperCase() + categoria.slice(1)}
+                        </Text>
                       </View>
-                      <Text style={[styles.tituloSeccionGaleria]}>
-                        {categoria.toUpperCase()}
-                      </Text>
-                    </View>
+                      <View style={styles.lineaDecorativa} />
+                    </LinearGradient>
                     
                     <ScrollView 
                       horizontal
                       showsHorizontalScrollIndicator={false}
                       contentContainerStyle={styles.galeriaScroll}
                     >
-                      {emprendimientosMostrar.map(emp => (
+                      {emprendimientosMostrar.map(emp => {
+                        // Verificar si es propio emprendimiento
+                        console.log('🔍 CATEGORÍA - Verificando emprendimiento:', {
+                          empId: emp.id,
+                          empNombre: emp.nombre,
+                          empUsuarioId: emp.usuario_id,
+                          usuarioId: usuario?.id,
+                          coincide: emp.usuario_id === usuario?.id
+                        });
+                        const esPropioEmprendimiento = emp.usuario_id === usuario?.id;
+                        const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+                        const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+
+                        return (
                         <TouchableOpacity 
                           key={emp.id}
                           style={styles.itemGaleria}
-                          onPress={() => navigation.navigate("PedidoDetalle", { producto: emp })}
+                          onPress={() => {
+                            console.log('👆 CLICK en CATEGORÍA:', {
+                              empId: emp.id,
+                              empUsuarioId: emp.usuario_id,
+                              usuarioId: usuario?.id,
+                              esPropioEmprendimiento,
+                              tipoEfectivo,
+                              mostrarAdvertencia
+                            });
+                            if (mostrarAdvertencia) {
+                              Alert.alert(
+                                "⚠️ Tu Propio Negocio",
+                                "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+                                [{ text: "Entendido" }]
+                              );
+                              return;
+                            }
+                            const isPreview = emp.estado === 'Cerrado';
+                            navegarConValidacion("PedidoDetalle", { 
+                              producto: emp,
+                              isPreview: isPreview
+                            });
+                          }}
                         >
                           {/* Imagen del emprendimiento */}
                           <View style={styles.imagenContainer}>
@@ -1161,7 +1519,8 @@ const getIconForCategory = (categoria) => {
                             </View>
                           </View>
                         </TouchableOpacity>
-                      ))}
+                        );
+                      })}
                     </ScrollView>
                   </View>
                 );
@@ -1211,6 +1570,7 @@ const getIconForCategory = (categoria) => {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 };
@@ -1220,12 +1580,42 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FAFAF9",
   },
+  // Banner de modo vista cliente
+  modoVistaBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 9999,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 8,
+  },
+  modoVistaBannerGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingTop: 50, // Espacio para el notch
+    gap: 10,
+  },
+  modoVistaBannerTexto: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
   container: {
     flex: 1,
     backgroundColor: "#FAFAF9",
     paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: 130, // Espacio para la barra inferior
+  },
+  containerConBanner: {
+    paddingTop: 50, // Espacio adicional cuando el banner está visible
   },
 
   // ✅ Botón de menú lateral (3 rayas)
@@ -1297,6 +1687,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 20,
     alignItems: "center",
+    paddingBottom: 20,
   },
   bannerContainer: {
     width: "100%",
@@ -1318,39 +1709,46 @@ const styles = StyleSheet.create({
 
   productoContainer: {
     backgroundColor: "#fff",
-    borderRadius: 15,
+    borderRadius: 24,
     overflow: "hidden",
-    marginHorizontal: 10,
+    marginHorizontal: 12,
+    marginVertical: 10,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
   },
 
   productoHeader: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 15,
-    backgroundColor: "rgba(255,255,255,0.9)",
+    padding: 18,
+    backgroundColor: "rgba(255,255,255,0.98)",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
   },
 
   productoLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+    borderWidth: 2,
+    borderColor: "#f0f0f0",
   },
 
   productoNombre: {
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 19,
+    fontWeight: "800",
     flex: 1,
+    color: "#2c3e50",
+    letterSpacing: 0.3,
   },
 
   productoImagenPrincipal: {
     width: "100%",
-    height: 180,
+    height: 200,
     resizeMode: "cover",
   },
   productoImagenPrincipalVip: {
@@ -1359,13 +1757,14 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   productoDetalles: {
-    padding: 15,
+    padding: 18,
   },
 
   productoDescripcion: {
-    fontSize: 14,
-    color: "#555",
-    marginBottom: 10,
+    fontSize: 15,
+    color: "#7f8c8d",
+    marginBottom: 14,
+    lineHeight: 22,
   },
 
   productoFooter: {
@@ -1380,15 +1779,16 @@ const styles = StyleSheet.create({
   },
 
   luzEstado: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 5,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
   },
 
   productoEstado: {
-    fontSize: 14,
-    fontWeight: "bold",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
 
   estrellas: {
@@ -1397,7 +1797,25 @@ const styles = StyleSheet.create({
 
   swiper: {
     paddingTop: 10,
-    height: 380, // Ajusta según necesites
+    paddingBottom: 20,
+    height: 410,
+  },
+  swiperPagination: {
+    bottom: -5,
+  },
+  swiperDot: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
+  },
+  swiperActiveDot: {
+    backgroundColor: '#2A9D8F',
+    width: 24,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 4,
   },
   loadingContainer: {
     flex: 1,
@@ -1405,23 +1823,84 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  direccionContainer: {
-    alignItems: "center",
-    backgroundColor: "#2A9D8F",
-    paddingTop: 50,
-    paddingBottom: 30,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    marginTop: -20,
-    marginHorizontal: -20,
-    marginBottom: 20,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
-  direccionSuperior: {
+  headerModerno: {
+    paddingTop: 55,
+    paddingBottom: 24,
+    paddingHorizontal: 20,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    marginHorizontal: -20,
+    marginTop: -20
+  },
+  // Selector de dirección moderno
+  direccionModerna: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10, // Espacio entre la dirección y el buscador
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+    gap: 10,
+  },
+  direccionIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  direccionInfoModerna: {
+    flex: 1,
+  },
+  direccionLabelModerno: {
+    fontSize: 11,
+    color: "rgba(255, 255, 255, 0.85)",
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  direccionTextoModerno: {
+    fontSize: 15,
+    color: "white",
+    fontWeight: "700",
+  },
+  // Barra de búsqueda moderna
+  searchBarModerno: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    gap: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  searchIconStart: {
+    marginRight: 4,
+  },
+  searchPlaceholderModerno: {
+    flex: 1,
+    fontSize: 15,
+    color: "#95a5a6",
+    fontWeight: "500",
+  },
+  searchIconEnd: {
+    padding: 4,
   },
   searchContainer: {
     flexDirection: "row",
@@ -1531,51 +2010,548 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#ddd",
   },
-  iconosContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "120%",
+  categoriasSection: {
     marginBottom: 20,
+    paddingBottom: 10,
   },
-  iconoItem: {
-    alignItems: "center",
-    width: "23%", // Ajusta según el espacio necesario
+  categoriasTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 14,
+    paddingHorizontal: 8,
+    letterSpacing: 0.3,
   },
-  iconoWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 15,
-    backgroundColor: "#f0f0f0",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 5,
+  categoriasBannerScroll: {
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    gap: 14,
   },
-  iconoImagen: {
+  categoriaBanner: {
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  categoriaBannerPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  categoriaBannerGradient: {
+    flex: 1,
+    padding: 16,
+  },
+  categoriaBannerContent: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  categoriaBannerIconContainer: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+  },
+  categoriaBannerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 8,
+  },
+  categoriaBannerSubtitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  categoriaBannerArrow: {
+    position: 'absolute',
+    bottom: 16,
+    right: 16,
+  },
+  // Estilos para banners con imagen
+  categoriaBannerImagen: {
+    width: 200,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  categoriaBannerBg: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+  },
+  categoriaBannerOverlay: {
+    flex: 1,
+    padding: 16,
+  },
+  categoriaBannerContentImg: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  categoriaBannerTopImg: {
+    alignItems: 'flex-start',
+  },
+  categoriaBannerIconWhite: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  categoriaBannerBottomImg: {
+    gap: 4,
+  },
+  categoriaBannerTitleImg: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  categoriaBannerSubtitleImg: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.95)',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  // Estilos para cards publicitarias
+  categoriaPublicitaria: {
+    width: 240,
+    height: 160,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  categoriaPublicitariaOverlay: {
+    flex: 1,
+    padding: 20,
+    justifyContent: 'flex-end',
+  },
+  categoriaPublicitariaContent: {
+    gap: 14,
+  },
+  categoriaPublicitariaTextContainer: {
+    gap: 4,
+  },
+  categoriaPublicitariaLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255, 255, 255, 0.85)',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  categoriaPublicitariaTitulo: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  categoriaPublicitariaSubtitulo: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.9)',
+    lineHeight: 18,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  categoriaPublicitariaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  categoriaPublicitariaButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFF',
+    letterSpacing: 0.3,
+  },
+  // Estilos para cards modernas con gradiente horizontal
+  categoriaModerna: {
+    width: 220,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  categoriaModernaImagen: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    right: 0,
+  },
+  categoriaModernaGradiente: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingLeft: 20,
+  },
+  categoriaModernaTexto: {
+    flexDirection: 'column',
+    gap: 12,
+    maxWidth: '60%',
+  },
+  categoriaModernaTitulo: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  categoriaModernaFlecha: {
+    alignSelf: 'flex-start',
+  },
+  // Variante 2: Gradiente diagonal desde esquina
+  categoriaModernaV2: {
+    width: 220,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  categoriaModernaGradienteV2: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 18,
+  },
+  categoriaModernaTextoV2: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoriaModernaTituloV2: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  categoriaModernaBadgeV2: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  // Variante 3: Gradiente con dos colores + subtítulo
+  categoriaModernaV3: {
+    width: 220,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  categoriaModernaGradienteV3: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  categoriaModernaTextoV3: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoriaModernaInfoV3: {
+    flex: 1,
+    gap: 6,
+  },
+  categoriaModernaTituloV3: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  categoriaModernaSubtituloV3: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  // Variante Mix: Combinación de V2 y V3
+  categoriaModernaMix: {
+    width: 220,
+    height: 140,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  categoriaModernaGradienteMix: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 18,
+  },
+  categoriaModernaTextoMix: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  categoriaModernaInfoMix: {
+    flex: 1,
+    gap: 4,
+  },
+  categoriaModernaTituloMix: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  categoriaModernaSubtituloMix: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.95)',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  categoriaModernaBadgeMix: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  // Estilos para el nuevo diseño de cards del swiper
+  productoImagenWrapper: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  productoImagenDestacado: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  productoImagenOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'space-between',
+    padding: 20,
+  },
+  productoBadgeEstado: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    gap: 6,
+  },
+  productoBadgePropio: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: 'rgba(155, 89, 182, 0.95)',
+    marginBottom: 6,
+    gap: 5,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  productoBadgePropioTexto: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  luzEstadoNuevo: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  productoEstadoNuevo: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.3,
+  },
+  productoInfoOverlay: {
+    flexDirection: 'row',
+    gap: 14,
+  },
+  productoLogoWrapper: {
     width: 70,
     height: 70,
-    borderRadius: 12,
+    borderRadius: 35,
+    backgroundColor: '#FFF',
+    padding: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
   },
-  iconoImagen2: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
+  productoLogoNuevo: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 31,
   },
-  iconoImagen3: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
+  productoInfoTexto: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    gap: 6,
   },
-  iconoTexto: {
+  productoNombreNuevo: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  productoDescripcionNueva: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.95)',
+    lineHeight: 19,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  productoRatingNuevo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  productoRatingTexto: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFF',
+    marginRight: 6,
+  },
+  estrellasSeparador: {
+    width: 1,
+    height: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    marginHorizontal: 4,
+  },
+  // Estilos antiguos (mantener por compatibilidad)
+  categoriaButton: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: '#FFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
+    minHeight: 105,
+  },
+  categoriaContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 6,
+    flex: 1,
+  },
+  categoriaIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  categoriaTexto: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    numberOfLines: 1,
+  },
+  emptyStateHome: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+    height: 380,
+    marginHorizontal: -40,
+    paddingBottom: 10
+  },
+  emptyTitleHome: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#7f8c8d",
+    marginTop: 16,
+    marginBottom: 8,
     textAlign: "center",
-    marginTop: 5,
+  },
+  emptySubtitleHome: {
+    fontSize: 16,
+    color: "#95a5a6",
+    textAlign: "center",
+    lineHeight: 22,
   },
   // Agrega estos estilos al final de tu StyleSheet
   seccionProductos: {
@@ -1589,6 +2565,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
+  },
+  headerSeccionGradiente: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  headerSeccionContenido: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconoSeccionContainerModerno: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tituloSeccionModerno: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  lineaDecorativa: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   iconoSeccionContainer: {
     width: 30,

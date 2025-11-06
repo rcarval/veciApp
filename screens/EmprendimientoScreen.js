@@ -19,19 +19,20 @@ import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import * as ImagePicker from "expo-image-picker";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation, useRoute } from "@react-navigation/native";
+import { useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { currentTheme } = useTheme();
-  const usuario = route.params?.usuario ?? {};
+  const [usuario, setUsuario] = useState(route.params?.usuario ?? {});
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [loading, setLoading] = useState(true);
   
@@ -669,11 +670,36 @@ const EmprendimientoScreen = () => {
     }
   };
 
+  // Cargar usuario desde AsyncStorage
+  const cargarUsuario = async () => {
+    try {
+      const usuarioGuardado = await AsyncStorage.getItem("usuario");
+      if (usuarioGuardado) {
+        const usuarioData = JSON.parse(usuarioGuardado);
+        setUsuario(usuarioData);
+        console.log('Usuario cargado desde AsyncStorage:', {
+          plan_id: usuarioData.plan_id,
+          vigencia_hasta: usuarioData.vigencia_hasta,
+          nombre: usuarioData.nombre
+        });
+      }
+    } catch (error) {
+      console.error("Error al cargar usuario:", error);
+    }
+  };
+
   useEffect(() => {
+    cargarUsuario();
     cargarEmprendimientos();
     cargarCategorias();
   }, []);
 
+  // Recargar usuario cuando la pantalla gana el foco
+  useFocusEffect(
+    React.useCallback(() => {
+      cargarUsuario();
+    }, [])
+  );
 
   // Modificar el campo de dirección en el modal:
   const renderAddressField = () => (
@@ -2227,17 +2253,10 @@ const EmprendimientoScreen = () => {
       <View style={[styles.container, { backgroundColor: currentTheme.background }]}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <LinearGradient
-              colors={[currentTheme.primary + '20', currentTheme.secondary + '20']}
-              style={styles.loadingGradiente}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <ActivityIndicator size="large" color={currentTheme.primary} />
-              <Text style={[styles.loadingText, { color: currentTheme.text }]}>
-                Cargando emprendimientos...
-              </Text>
-            </LinearGradient>
+            <LoadingVeciApp size={120} color={currentTheme.primary} />
+            <Text style={[styles.loadingText, { color: currentTheme.text, marginTop: 30 }]}>
+              Cargando emprendimientos...
+            </Text>
           </View>
         ) : emprendimientos.length === 0 ? (
           <View style={styles.emptyContainer}>
@@ -3343,20 +3362,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 80,
   },
-  loadingGradiente: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
   loadingText: {
-    marginTop: 16,
     fontSize: 16,
     fontWeight: '600',
     letterSpacing: 0.3,

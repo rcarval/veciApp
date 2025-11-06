@@ -1,728 +1,335 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Animated,
-  Modal,
-  Pressable,
-  TextInput,
-  //BackHandler,
+  ActivityIndicator,
   Alert,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Swiper from "react-native-swiper";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "../context/ThemeContext";
+import { useUser } from "../context/UserContext";
+import { API_ENDPOINTS } from "../config/api";
+import pedidoService from "../services/pedidoService";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
-const OfertasScreen = ({ navigation }) => {
-  const [usuario, setUsuario] = useState(null);
-  const [activeSection, setActiveSection] = useState(null);
-  const [modalVisible, setModalVisible] = useState(false);
-  const animatedValue = useRef(new Animated.Value(0)).current;
-  const verificarToken = async (navigation) => {
+const OfertasScreen = () => {
+  const navigation = useNavigation();
+  const { currentTheme } = useTheme();
+  const { usuario, modoVista } = useUser();
+  const [productosOferta, setProductosOferta] = useState([]);
+  const [cargando, setCargando] = useState(false);
+
+  // Función para mapear estado del backend al frontend
+  const mapearEstado = (estadoCalculado) => {
+    if (estadoCalculado === 'cierra_pronto') {
+      return 'Cierra Pronto';
+    } else if (estadoCalculado === 'abierto') {
+      return 'Abierto';
+    } else if (estadoCalculado === 'cerrado') {
+      return 'Cerrado';
+    }
+    return 'Cerrado';
+  };
+
+  // Ya no es necesario cargar calificación individual - viene en el JSON del backend
+  // Función removida para optimizar requests
+
+  // Función para agrupar productos por categoría de emprendimiento
+  const agruparProductosPorCategoria = (productos) => {
+    const agrupados = {};
+    
+    for (const prod of productos) {
+      const categoria = prod.categoria_principal || 'otros';
+      
+      if (!agrupados[categoria]) {
+        agrupados[categoria] = [];
+      }
+      
+      // La calificación ya viene en el JSON del backend (optimización)
+      const rating = parseFloat(prod.calificacion_promedio) || 0;
+      
+      // Mapear producto al formato esperado por el frontend
+      const productoMapeado = {
+        id: prod.emprendimiento_id,
+        usuario_id: prod.emprendimiento_usuario_id, // ✅ AGREGAR usuario_id del emprendimiento
+        nombre: prod.emprendimiento_nombre,
+        descripcion: prod.emprendimiento_descripcion || '',
+        descripcionLarga: prod.emprendimiento_descripcion || '',
+        imagen: prod.emprendimiento_background ? { uri: prod.emprendimiento_background } : require('../assets/icon.png'),
+        logo: prod.emprendimiento_logo ? { uri: prod.emprendimiento_logo } : require('../assets/icon.png'),
+        estado: mapearEstado(prod.estado_calculado),
+        telefono: prod.emprendimiento_telefono,
+        direccion: prod.emprendimiento_direccion,
+        metodosEntrega: prod.tipos_entrega || { delivery: true, retiro: true },
+        metodosPago: prod.medios_pago || { tarjeta: true, efectivo: true, transferencia: false },
+        rating: rating,
+        horarios: prod.horarios || {},
+        categoria: categoria,
+        galeria: [{
+          id: prod.id,
+          imagen: prod.imagen_url ? { uri: prod.imagen_url } : require('../assets/icon.png'),
+          nombre: prod.nombre,
+          descripcion: prod.descripcion,
+          precio: parseFloat(prod.precio),
+          precioOferta: prod.precio_oferta ? parseFloat(prod.precio_oferta) : parseFloat(prod.precio),
+          categoria: prod.categoria,
+          descuento: prod.precio_oferta ? Math.round(((parseFloat(prod.precio) - parseFloat(prod.precio_oferta)) / parseFloat(prod.precio)) * 100) : 0
+        }]
+      };
+      
+      agrupados[categoria].push(productoMapeado);
+    }
+    
+    return agrupados;
+  };
+
+  // Función para cargar ofertas desde el backend
+  const cargarOfertas = async () => {
     try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        Alert.alert(
-          "Sesión expirada",
-          "Tu sesión ha caducado, inicia sesión nuevamente."
+      setCargando(true);
+      console.log('🏷️ Cargando ofertas desde el backend...');
+      
+      const response = await fetch(API_ENDPOINTS.OFERTAS);
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar ofertas');
+      }
+      
+      const data = await response.json();
+      if (data.ok && data.productos) {
+        console.log('✅ Ofertas cargadas:', data.productos.length);
+        
+        // Filtrar solo productos de emprendimientos abiertos o que cierran pronto
+        const productosAbiertos = data.productos.filter(p => 
+          p.estado_calculado === 'abierto' || p.estado_calculado === 'cierra_pronto'
         );
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Login" }], // 🔥 Redirige al login sin poder volver atrás
+        
+        console.log('✅ Productos de emprendimientos abiertos:', productosAbiertos.length);
+        
+        // Agrupar por categoría de emprendimiento (ya no es async)
+        const agrupados = agruparProductosPorCategoria(productosAbiertos);
+        
+        // Convertir a array plano para el swiper y las listas
+        const todosLosProductos = [];
+        Object.values(agrupados).forEach(categoria => {
+          todosLosProductos.push(...categoria);
         });
+        
+        console.log('✅ Productos agrupados por categoría:', Object.keys(agrupados));
+        
+        setProductosOferta(todosLosProductos);
       } else {
-        console.log("token vigente");
+        console.log('⚠️ No se pudieron cargar ofertas');
+        setProductosOferta([]);
       }
     } catch (error) {
-      console.log("Error al verificar el token:", error);
+      console.error('❌ Error al cargar ofertas:', error);
+      Alert.alert('Error', 'No se pudieron cargar las ofertas');
+      setProductosOferta([]);
+    } finally {
+      setCargando(false);
     }
   };
 
   useEffect(() => {
-    const interval = setInterval(() => verificarToken(navigation), 60000); // Cada 1 minuto
+    if (usuario) {
+      cargarOfertas();
+    }
+  }, [usuario]);
 
-    return () => clearInterval(interval); // Evita fugas de memoria
-  }, []);
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(animatedValue, {
-          toValue: 1,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animatedValue, {
-          toValue: 0,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  useEffect(() => {
-    const cargarUsuario = async () => {
-      try {
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          setUsuario(JSON.parse(usuarioGuardado));
-        }
-      } catch (error) {
-        console.log("Error al obtener el usuario:", error);
-      }
+  // Función para obtener icono según categoría
+  const getIconForCategory = (categoria) => {
+    if (!categoria) return "tag";
+    const icons = {
+      "comida": "cutlery",
+      "belleza": "scissors",
+      "servicio": "wrench",
+      "servicios": "wrench",
+      "negocios": "shopping-bag",
+      "otros": "tag"
     };
-    cargarUsuario();
-  }, []);
-  // ✅ Interceptar botón "Atrás"
-  /*useEffect(() => {
-    const handleBackPress = () => {
-      Alert.alert("Salir de la Aplicación", "¿Realmente desea salir?", [
-        { text: "Salir", onPress: () => BackHandler.exitApp() }, // 🔥 Cierra la app
-        { text: "Cancelar", style: "cancel" },
-      ]);
-      return true; // 🔥 Evita que vuelva atrás al Login
-    };
-
-    BackHandler.addEventListener("hardwareBackPress", handleBackPress);
-
-    return () =>
-      BackHandler.removeEventListener("hardwareBackPress", handleBackPress);
-  }, []);*/
-
-  const handleSeleccionDireccion = (id) => {
-    const updatedUsuario = {
-      ...usuario,
-      direccionSeleccionada: id,
-    };
-    setUsuario(updatedUsuario);
-    AsyncStorage.setItem("usuario", JSON.stringify(updatedUsuario));
+    return icons[categoria.toLowerCase()] || "tag";
   };
 
-  if (!usuario) {
+  // Agrupar productos por categoría de emprendimiento
+  const productosPorCategoria = productosOferta.reduce((acc, producto) => {
+    const categoria = producto.categoria || 'otros';
+    if (!acc[categoria]) {
+      acc[categoria] = [];
+    }
+    acc[categoria].push(producto);
+    return acc;
+  }, {});
+
+  if (cargando) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text>Cargando...</Text>
+      <View style={[styles.loadingContainer, { backgroundColor: currentTheme.background }]}>
+        <LoadingVeciApp size={120} color={currentTheme.primary} />
+        <Text style={{ marginTop: 30, color: currentTheme.text, fontSize: 16, fontWeight: '600' }}>Cargando ofertas...</Text>
       </View>
     );
   }
 
-  const direccionActual = usuario.direcciones.find(
-    (dir) => dir.id === usuario.direccionSeleccionada
-  );
-
-  const toggleSection = (index) => {
-    setActiveSection(activeSection === index ? null : index);
-  };
-
-  const categorias = [
-    {
-      nombre: "🔥 Ofertas del Día",
-      subcategorias: [
-        "Nuevas promociones",
-        "Descuentos exclusivos",
-        "Paquetes especiales",
-      ],
-    },
-    {
-      nombre: "🛍 Productos y Tiendas",
-      subcategorias: ["Almacén", "Carnicería", "Panadería", "Pizzerías"],
-    },
-    {
-      nombre: "🛠 Servicios Profesionales",
-      subcategorias: [
-        "Reparación",
-        "Construcción",
-        "Mantenimiento",
-        "Transporte",
-      ],
-    },
-    {
-      nombre: "💇‍♂️ Estilo y Cuidado Personal",
-      subcategorias: ["Peluquería", "Mascotas", "Salud"],
-    },
-    {
-      nombre: "🎨 Creatividad y Oficios",
-      subcategorias: ["Artesanía", "Publicidad", "Música y Eventos"],
-    },
-  ];
-
-  const emprendimientosDestacados = [
-    ...(usuario?.tipo_usuario === "emprendedor" 
-      ? [{
-          id: -1,
-          imagen: require("../assets/premium.png"),
-        }]
-      : []),
-    {
-      id: 1,
-      nombre: "Pizzeria Donatelo",
-      descripcion: "Pizzas de masa madre",
-      descripcionLarga:
-        "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-      imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-      logo: require("../assets/donatelo.png"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Manuel Rodríguez 885, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-      rating: 4.8,
-      galeria: [
-        {
-          imagen: require("../assets/pizza-margarita.jpg"),
-          descripcion: "Pizza Margarita clásica con ingredientes frescos",
-          precio: 8990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/Pepperoni-pizza.webp"),
-          descripcion: "Pizza Pepperoni con doble porción de pepperoni",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizza-iberica.webp"),
-          descripcion: "Pizza Iberica con carne de cerdo y verduras",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizza-cuatro-quesos.jpg"),
-          descripcion: "Pizza cuatro quesos con extra queso",
-          precio: 9990,
-          categoria: "principal"
-        },
-        {
-          imagen: require("../assets/pizzaOferta.jpg"),
-          descripcion: "Pizzas a elección 2 x 1",
-          precio: 12990,
-          categoria: "oferta"
-        },
-        {
-          imagen: require("../assets/bebidas.jpg"),
-          descripcion: "Bebidas en Lata",
-          precio: 1990,
-          categoria: "secundario"
-        },
-      ]
-    },
-    {
-      id: 2,
-      nombre: "Pelucan",
-      descripcion: "Estilismo profesional para perros.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/pelucan.webp"),
-      logo: require("../assets/pelucan_logo.png"),
-      estado: "Cerrado",
-      telefono: "+56994908047",
-      direccion: "Vista Hermosa 319, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: true },
-      rating: 4.6,
-    },
-    {
-      id: 3,
-      nombre: "Grill Burger",
-      descripcion: "Ricas hamburguesas caseras.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/burger.webp"),
-      logo: require("../assets/grillburger_logo.jpg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Balmaceda 1458, Talagante",
-      metodosEntrega: { delivery: false, retiro: true },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 3.9,
-    },
-    {
-      id: 4,
-      nombre: "Caniceria Los Chinitos",
-      descripcion: "Expertos en Carnes.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/carniceria.webp"),
-      logo: require("../assets/loschinitos_logo.jpg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "El Zorzal Nte. 608, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: true },
-      metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-      rating: 2.4,
-    },
-    {
-      id: 5,
-      nombre: "Maestro José",
-      descripcion: "Reparación y Construcción.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/construccion.jpg"),
-      logo: require("../assets/maestrojose_logo.jpeg"),
-      estado: "Cierra Pronto",
-      telefono: "+56994908047",
-      direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-      metodosEntrega: { delivery: true, retiro: false },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 3.4,
-    },
-    {
-      id: 6,
-      nombre: "Gasfiter Experto",
-      descripcion: "Reparación de Cañerías.",
-      descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-      imagen: require("../assets/gasfiter.jpg"),
-      logo: require("../assets/gasfiter_logo.jpeg"),
-      estado: "Abierto",
-      telefono: "+56994908047",
-      direccion: "Balmaceda 1458, Talagante",
-      metodosEntrega: { delivery: false, retiro: true },
-      metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-      rating: 4.1,
-    }
-  ];
-  
-  const productosDestacados = [
-    {
-    id: 1,
-    nombre: "Pizzeria Donatelo",
-    descripcion: "Pizzas de masa madre",
-    categoria: "comida",
-    descripcionLarga:
-      "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-    imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-    logo: require("../assets/donatelo.png"),
-    estado: "Abierto",
-    telefono: "+56994908047",
-    direccion: "Manuel Rodríguez 885, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: true },
-    metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-    rating: 4.8,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 5,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "servicios",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 7,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "negocios",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  },
-  {
-    id: 8,
-    nombre: "Maestro José",
-    descripcion: "Reparación y Construcción.",
-    categoria: "belleza",
-    descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-    imagen: require("../assets/construccion.jpg"),
-    logo: require("../assets/maestrojose_logo.jpeg"),
-    estado: "Cierra Pronto",
-    telefono: "+56994908047",
-    direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-    metodosEntrega: { delivery: true, retiro: false },
-    metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-    rating: 3.4,
-    galeria: [
-      {
-        imagen: require("../assets/pizza-margarita.jpg"),
-        descripcion: "Pizza Margarita clásica con ingredientes frescos",
-        precio: 8990,
-        categoria: "principal"
-      }
-    ]
-  }
-];
-
-const productosOferta = [
-  {
-  id: 1,
-  nombre: "Pizzeria Donatelo",
-  descripcion: "Pizzas de masa madre",
-  categoria: "comida",
-  descripcionLarga:
-    "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-  imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-  logo: require("../assets/donatelo.png"),
-  estado: "Abierto",
-  telefono: "+56994908047",
-  direccion: "Manuel Rodríguez 885, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: true },
-  metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-  rating: 4.8,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      precioOferta: 7990,
-      categoria: "oferta",
-      descuento: 10
-    }
-  ]
-},
-{
-  id: 5,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "servicios",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      precioOferta: 7990,
-      categoria: "oferta",
-      descuento: 20
-    }
-  ]
-},
-{
-  id: 7,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "negocios",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      precioOferta: 7990,
-      categoria: "oferta",
-      descuento: 50
-    }
-  ]
-},
-{
-  id: 8,
-  nombre: "Maestro José",
-  descripcion: "Reparación y Construcción.",
-  categoria: "belleza",
-  descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-  imagen: require("../assets/construccion.jpg"),
-  logo: require("../assets/maestrojose_logo.jpeg"),
-  estado: "Cierra Pronto",
-  telefono: "+56994908047",
-  direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-  metodosEntrega: { delivery: true, retiro: false },
-  metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-  rating: 3.4,
-  galeria: [
-    {
-      imagen: require("../assets/pizza-margarita.jpg"),
-      descripcion: "Pizza Margarita clásica con ingredientes frescos",
-      precio: 8990,
-      precioOferta: 7990,
-      categoria: "oferta",
-      descuento: 5
-    }
-  ]
-}
-];
-
-// Función para agrupar productos por categoría
-// Función para obtener icono según categoría
-const getIconForCategory = (categoria) => {
-  const icons = {
-    "comida": "cutlery",
-    "belleza": "scissors",
-    "servicio": "wrench",
-    "negocios": "shopping-bag"
-  };
-  return icons[categoria.toLowerCase()] || "tag";
-};
-
-  // ✅ **Menú lateral con el menú colapsable dentro**
   return (
-    <View style={styles.containerMaster}>
-<LinearGradient
-  colors={['#2A9D8F', '#1D7874']}
-  style={styles.headerGradient}
->
-  <View style={styles.headerTitleContainer}>
-    <Ionicons name="pricetag" size={24} color="white" style={styles.headerIcon} />
-    <Text style={styles.tituloPrincipal}>Ofertas</Text>
-  </View>
-</LinearGradient>
-      <View
-        style={styles.container}
+    <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+      <LinearGradient
+        colors={[currentTheme.primary, currentTheme.secondary]}
+        style={styles.headerGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-
-        {/* ✅ Sección de productos destacados */}
-        <ScrollView contentContainerStyle={styles.scrollContainer}>
-          <View style={styles.destacados}>
-
-
-            <Swiper
-  autoplay={true}
-  autoplayTimeout={5}
-  showsPagination={true}
-  style={styles.swiperOfertas} // 280px de altura
-  containerStyle={{overflow: 'visible'}} // Importante!
->
-  {productosOferta.map((producto) => {
-    const precioFinal = producto.galeria[0].precioOferta;
-    
-    return (
-      <View key={producto.id} style={styles.slideOfertaContainer}>
-        {/* Estructura compacta */}
-        <View style={styles.slideContent}>
-          {/* Columna izquierda (Imagen + Badges) */}
-          <View style={styles.imageColumn}>
-            <Image 
-              source={producto.galeria[0].imagen} 
-              style={styles.imagenOfertaCompacta}
-            />
-            
-            {/* Logo y descuento superpuestos */}
-            <View style={styles.logoCompacto}>
-              <Image source={producto.logo} style={styles.logoMiniatura}/>
-            </View>
+        <View style={styles.headerContent}>
+          <View style={styles.headerIconWrapper}>
+            <Ionicons name="pricetag" size={32} color="white" />
           </View>
-          
-          {/* Columna derecha (Info compacta) */}
-          <View style={styles.infoColumn}>
-            <Text style={styles.nombreCompacto} numberOfLines={1}>
-              {producto.nombre}
-            </Text>
-            
-            <Text style={styles.descripcionCompacta} numberOfLines={2}>
-              {producto.galeria[0].descripcion}
-            </Text>
-            
-            <View style={styles.precioContainerCompact}>
-              <Text style={styles.precioOriginalCompact}>
-                ${precioFinal.toLocaleString("es-CL")}
-              </Text>
-              <Text style={styles.precioFinalCompact}>
-                ${producto.galeria[0].precio.toLocaleString("es-CL")}
-              </Text>
-            </View>
-            
-            <TouchableOpacity style={styles.botonCompacto}
-                                onPress={() =>
-                                   navigation.navigate("PedidoDetalle", { producto })
-                                  }>
-              <Text style={styles.botonTextoCompacto}>Ver Oferta</Text>
-            </TouchableOpacity>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerSubtitle}>Descuentos exclusivos</Text>
+            <Text style={styles.tituloPrincipal}>Ofertas del Día</Text>
+          </View>
+          <View style={styles.headerBadge}>
+            <Ionicons name="flame" size={24} color={currentTheme.primary} />
           </View>
         </View>
-      </View>
-    );
-  })}
-</Swiper>
-          </View>
-          {/* Sección de Ofertas Destacadas */}
-<View style={styles.seccionOfertas}>
-  <View style={styles.headerSeccion}>
-    <View style={[styles.iconoSeccionContainer]}>
-      <FontAwesome name="tag" size={16}/>
-    </View>
-    <Text style={[styles.tituloSeccionGaleria]}>
-      OFERTAS DESTACADAS
-    </Text>
-  </View>
-  
-  <ScrollView 
-    horizontal
-    showsHorizontalScrollIndicator={false}
-    contentContainerStyle={styles.galeriaScroll}
-  >
-    {productosOferta.map(producto => (
-      <TouchableOpacity 
-        key={producto.id}
-        style={styles.itemGaleria}
-        onPress={() => navigation.navigate("PedidoDetalle", { producto })}
+      </LinearGradient>
+
+      <ScrollView 
+        style={[styles.container, { backgroundColor: currentTheme.background }]}
+        contentContainerStyle={styles.scrollContainer}
       >
-        {/* Imagen del producto */}
-        <View style={styles.imagenContainer}>
+        {productosOferta.length === 0 ? (
+          <View style={styles.emptyState}>
+            <FontAwesome name="tag" size={64} color={currentTheme.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+              No hay ofertas disponibles
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+              Vuelve pronto para ver las nuevas ofertas
+            </Text>
+          </View>
+        ) : (
+          <>
+            {/* Sección de Ofertas por Categoría */}
+            {Object.entries(productosPorCategoria).map(([categoria, productos]) => (
+              <View key={categoria} style={styles.seccionOfertas}>
+                <LinearGradient
+                  colors={[currentTheme.primary, currentTheme.secondary]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.headerSeccionGradiente}
+                >
+                  <View style={styles.headerSeccionContenido}>
+                    <View style={styles.iconoSeccionModerno}>
+                      <Ionicons 
+                        name={categoria === 'comida' ? 'restaurant' : categoria === 'servicios' ? 'construct' : categoria === 'negocios' ? 'storefront' : categoria === 'belleza' ? 'cut' : 'business'} 
+                        size={20} 
+                        color="#FFF"
+                      />
+                    </View>
+                    <Text style={styles.tituloSeccionModerno}>
+                      Ofertas en {categoria.charAt(0).toUpperCase() + categoria.slice(1)}
+                    </Text>
+                    <View style={styles.badgeOferta}>
+                      <Ionicons name="flash" size={14} color="#FFF" />
+                    </View>
+                  </View>
+                  <View style={styles.lineaDecorativa} />
+                </LinearGradient>
+                
+                <ScrollView 
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.galeriaScroll}
+                >
+                  {productos.map(producto => {
+                    // Verificar si es propio emprendimiento
+                    const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
+                    const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+                    const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+
+                    return (
+                    <TouchableOpacity 
+                      key={`${producto.id}_${producto.galeria[0].id}`}
+                      style={[styles.itemGaleria, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}
+                      onPress={() => {
+                        if (mostrarAdvertencia) {
+                          Alert.alert(
+                            "⚠️ Tu Propio Negocio",
+                            "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+                            [{ text: "Entendido" }]
+                          );
+                          return;
+                        }
+                        // Si está cerrado, abrir en modo preview
+                        const isPreview = producto.estado === 'Cerrado';
+                        navigation.navigate("PedidoDetalle", { 
+                          producto,
+                          isPreview: isPreview
+                        });
+                      }}
+                    >
+                      {/* Imagen del producto */}
+                      <View style={styles.imagenContainer}>
           <Image 
             source={producto.galeria[0].imagen} 
             style={styles.imagenGaleria}
             contentFit="cover"
           />
-          <View style={[styles.etiquetaCategoria, {backgroundColor: '#FF5252'}]}>
+          <View style={[styles.etiquetaCategoria, { 
+            backgroundColor: currentTheme.primary,
+            shadowColor: currentTheme.primary 
+          }]}>
             <Text style={styles.etiquetaTextoOferta}>
-              DESTACADO
+              {producto.galeria[0].descuento > 0 ? `-${producto.galeria[0].descuento}%` : 'OFERTA'}
             </Text>
           </View>
-        </View>
-        
-        {/* Información del producto */}
-        <View style={styles.infoGaleria}>
-          {/* Descripción */}
-          <Text style={styles.descripcionGaleria} numberOfLines={2}>
-            {producto.galeria[0].descripcion}
-          </Text>
-          
-          {/* Precio */}
-          <Text style={styles.precioProducto}>
-            {producto.galeria[0].precio ? 
-              `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
-              "Consulte"}
-          </Text>
-          
-          {/* Recuadro con logo y nombre de empresa */}
-          <View style={styles.empresaContainer}>
-            <Image 
-              source={producto.logo} 
-              style={styles.logoEmpresa}
-              contentFit="contain"
-            />
-            <Text style={styles.nombreEmpresa} numberOfLines={1}>
-              {producto.nombre}
-            </Text>
-          </View>
-        </View>
-      </TouchableOpacity>
-    ))}
-  </ScrollView>
-</View>
-<View style={styles.seccionProductos}>
-  {/* Filtramos las categorías únicas */}
-  {Array.from(new Set(productosDestacados.map(p => p.categoria))).map(categoria => (
-    <View key={categoria} style={styles.categoriaContainer}>
-      <View style={styles.headerSeccion}>
-        <View style={[
-          styles.iconoSeccionContainer,           
-        ]}>
-          <FontAwesome 
-            name={getIconForCategory(categoria)} 
-            size={16} 
-          />
-        </View>
-        <Text style={[styles.tituloSeccionGaleria]}>
-          OFERTAS EN {categoria.toUpperCase()}
-        </Text>
-      </View>
-      
-      <ScrollView 
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.galeriaScroll}
-      >
-        {productosDestacados
-          .filter(producto => producto.categoria === categoria)
-          .map(producto => (
-            <TouchableOpacity 
-              key={producto.id}
-              style={styles.itemGaleria}
-              onPress={() => navigation.navigate("PedidoDetalle", { producto })}
-            >
-              {/* Imagen del producto */}
-              <View style={styles.imagenContainer}>
-                <Image 
-                  source={producto.galeria[0].imagen} 
-                  style={styles.imagenGaleria}
-                  contentFit="cover"
-                />
-                 <View style={styles.etiquetaCategoria}>
-                 <Text style={styles.etiquetaTexto}>
-                            OFERTA
+                      </View>
+                      
+                      {/* Información del producto */}
+                      <View style={styles.infoGaleria}>
+                        {/* Descripción del producto */}
+                        <Text style={[styles.descripcionGaleria, { color: currentTheme.text }]} numberOfLines={2}>
+                          {producto.galeria[0].descripcion}
+                        </Text>
+                        
+                        {/* Precio con descuento */}
+                        <View style={styles.precioContainer}>
+                          {producto.galeria[0].descuento > 0 && (
+                            <Text style={styles.precioOriginal}>
+                              ${producto.galeria[0].precio.toLocaleString("es-CL")}
+                            </Text>
+                          )}
+                          <Text style={[styles.precioProducto, { color: currentTheme.primary }]}>
+                            ${producto.galeria[0].precioOferta.toLocaleString("es-CL")}
                           </Text>
-                 </View>
+                        </View>
+                        
+                        {/* Recuadro con logo y nombre de empresa */}
+                        <View style={[styles.empresaContainer, { backgroundColor: currentTheme.background }]}>
+                          <Image 
+                            source={producto.logo} 
+                            style={styles.logoEmpresa}
+                            contentFit="contain"
+                          />
+                          <Text style={[styles.nombreEmpresa, { color: currentTheme.textSecondary }]} numberOfLines={1}>
+                            {producto.nombre}
+                          </Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                  })}
+                </ScrollView>
               </View>
-              
-              {/* Información del producto */}
-              <View style={styles.infoGaleria}>
-                {/* Descripción */}
-                <Text style={styles.descripcionGaleria} numberOfLines={2}>
-                  {producto.galeria[0].descripcion}
-                </Text>
-                
-                {/* Precio */}
-                <Text style={styles.precioProducto}>
-                  {producto.galeria[0].precio ? 
-                    `$${producto.galeria[0].precio.toLocaleString("es-CL")}` : 
-                    "Consulte"}
-                </Text>
-                
-                {/* Recuadro con logo y nombre de empresa */}
-                <View style={styles.empresaContainer}>
-                  <Image 
-                    source={producto.logo} 
-                    style={styles.logoEmpresa}
-                    contentFit="contain"
-                  />
-                  <Text style={styles.nombreEmpresa} numberOfLines={1}>
-                    {producto.nombre}
-                  </Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-          ))
-        }
+            ))}
+          </>
+        )}
       </ScrollView>
-    </View>
-  ))}
-</View>
-        </ScrollView>
-      </View>
     </View>
   );
 };
@@ -731,205 +338,78 @@ const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
     backgroundColor: "#FAFAF9",
+    paddingBottom: 130,
   },
   container: {
     flex: 1,
     backgroundColor: "#FAFAF9",
     paddingHorizontal: 10,
     paddingTop: 10,
-    paddingBottom: 130, // Espacio para la barra inferior
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 55,
+    paddingBottom: 28,
+    paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
   },
-  tituloPrincipal: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: 'white',
-    textAlign: 'center',
-    marginLeft: 10, // Añade este margen para separar del ícono
-  },
-  headerTitleContainer: {
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  headerIconWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
-  headerIcon: {
-    marginRight: 10,
-  },
-  // ✅ Botón de menú lateral (3 rayas)
-  menuButton: {
-    position: "absolute",
-    top: 55,
-    left: 25,
-    borderColor: "black",
-    padding: 5,
-    borderWidth: 1,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-
-  usuarioContainer: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255, 255, 255, 0)",
-    padding: 15,
-    marginTop: 0,
-    borderRadius: 10,
-    justifyContent: "flex-end",
-  },
-  usuarioInfo: { marginLeft: 10, alignItems: "right" },
-  usuarioNombre: { fontSize: 14, color: "#333" },
-  usuarioPlan: { fontSize: 16, fontWeight: "bold", color: "#555" },
-  usuarioTipo: { fontSize: 16, fontWeight: "bold", color: "#555" },
-
-  // ✅ Menú lateral tipo cortina
-  drawerMenu: { flex: 1, backgroundColor: "#FFF", padding: 20 },
-  drawerTitle: { fontSize: 22, fontWeight: "bold", marginBottom: 20 },
-  drawerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  drawerText: { fontSize: 18, marginLeft: 10, color: "#333" },
-
-  menuMaster: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 10,
-    alignItems: "center",
-    width: "100%",
-  },
-
-  categoria: { marginBottom: 10, backgroundColor: "#2A9D8F", borderRadius: 8 },
-  categoriaTitulo: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    padding: 12,
-    alignItems: "center",
-  },
-  categoriaNombre: { fontSize: 18, fontWeight: "bold", color: "#333" },
-  subcategoria: {
-    padding: 10,
-    backgroundColor: "#F18F01",
-    borderRadius: 1,
-    marginVertical: 2,
-    alignItems: "center",
-  },
-  subcategoriaTexto: { color: "white", fontSize: 16 },
-
-  // ✅ Sección de productos destacados
-  scrollContainer: { flexGrow: 1, paddingBottom: 30, marginTop: 10 },
-  destacados: {
-    paddingHorizontal: 40,
-    backgroundColor: "rgba(255, 255, 255, 0)",
-    width: "100%",
-    borderRadius: 10,
-    marginBottom: 20,
-    alignItems: "center",
-  },
-  bannerContainer: {
-    width: "100%",
-    borderRadius: 20,
-    marginBottom: 0,
-    overflow: "hidden", // Esto asegura que la imagen no sobresalga del borde redondeado
-  },
-  banner: {
-    width: "100%",
-    height: 120, // Altura fija en lugar de porcentaje
-    resizeMode: "hidden", // Asegura que la imagen cubra todo el espacio sin deformarse
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginVertical: 10,
-    color: "#2c7edb",
-  },
-
-  productoContainer: {
-    backgroundColor: "#fff",
-    borderRadius: 15,
-    overflow: "hidden",
-    marginHorizontal: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-
-  productoHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 15,
-    backgroundColor: "rgba(255,255,255,0.9)",
-  },
-
-  productoLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-
-  productoNombre: {
-    fontSize: 18,
-    fontWeight: "bold",
+  headerTextContainer: {
     flex: 1,
   },
-
-  productoImagenPrincipal: {
-    width: "100%",
-    height: 180,
-    resizeMode: "cover",
+  headerSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 2,
+    letterSpacing: 0.5,
   },
-  productoImagenPrincipalVip: {
-    width: "100%",
-    height: 320, // Ajusta esta altura según necesites
-    resizeMode: "cover",
+  tituloPrincipal: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
-  productoDetalles: {
-    padding: 15,
+  headerBadge: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
   },
-
-  productoDescripcion: {
-    fontSize: 14,
-    color: "#555",
-    marginBottom: 10,
-  },
-
-  productoFooter: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  productoEstadoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  luzEstado: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 5,
-  },
-
-  productoEstado: {
-    fontSize: 14,
-    fontWeight: "bold",
-  },
-
-  estrellas: {
-    flexDirection: "row",
-  },
-
-  swiper: {
-    paddingTop: 10,
-    height: 380, // Ajusta según necesites
+  scrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 30,
+    marginTop: 10,
   },
   loadingContainer: {
     flex: 1,
@@ -937,180 +417,82 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#fff",
   },
-  direccionContainer: {
-    alignItems: "center",
-    backgroundColor: "#2A9D8F",
-    paddingTop: 50,
-    paddingBottom: 30,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    marginTop: -20,
-    marginHorizontal: -20,
-    marginBottom: 20,
-    borderBottomLeftRadius: 50,
-    borderBottomRightRadius: 50,
-  },
-  direccionSuperior: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10, // Espacio entre la dirección y el buscador
-  },
-  searchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f5f5f5",
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-  },
-  searchInput: {
+  emptyState: {
     flex: 1,
-    fontSize: 14,
-    color: "#333",
-    paddingVertical: 5,
-  },
-  searchIcon: {
-    padding: 5,
-  },
-  selectorDireccion: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 10,
-  },
-  direccionTextContainer: {
-    marginLeft: 8,
-  },
-  direccionTitulo: {
-    fontSize: 12,
-    color: "#fff",
-  },
-  direccionTexto: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#fff",
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContainer: {
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    maxHeight: "70%",
-    padding: 16,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  direccionOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  direccionSelected: {
-    backgroundColor: "#f5f5f5",
-  },
-  direccionOptionText: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  direccionOptionNombre: {
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  direccionOptionDireccion: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 2,
-  },
-  direccionOptionDetalles: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 2,
-  },
-  agregarDireccion: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  agregarDireccionText: {
-    marginLeft: 12,
-    color: "#0b8e0d",
-    fontWeight: "500",
-  },
-  avatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  iconosContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "120%",
-    marginBottom: 20,
-  },
-  iconoItem: {
-    alignItems: "center",
-    width: "23%", // Ajusta según el espacio necesario
-  },
-  iconoWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 15,
-    backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 5,
+    paddingTop: 100,
   },
-  iconoImagen: {
-    width: 70,
-    height: 70,
-    borderRadius: 12,
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#7f8c8d",
+    marginTop: 16,
+    marginBottom: 8,
   },
-  iconoImagen2: {
-    width: 120,
-    height: 120,
-    borderRadius: 12,
-  },
-  iconoImagen3: {
-    width: 100,
-    height: 100,
-    borderRadius: 12,
-  },
-  iconoTexto: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#333",
+  emptySubtitle: {
+    fontSize: 16,
+    color: "#95a5a6",
     textAlign: "center",
-    marginTop: 5,
+    lineHeight: 22,
   },
-  // Agrega estos estilos al final de tu StyleSheet
-  seccionProductos: {
+  seccionOfertas: {
     marginTop: 20,
     paddingHorizontal: 10,
+    marginBottom: 20,
   },
-  categoriaContainer: {
-    marginBottom: 30,
+  headerSeccionGradiente: {
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  headerSeccionContenido: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconoSeccionModerno: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tituloSeccionModerno: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.4,
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  badgeOferta: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  lineaDecorativa: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
   },
   headerSeccion: {
     flexDirection: 'row',
@@ -1133,20 +515,20 @@ const styles = StyleSheet.create({
     paddingLeft: 5,
   },
   itemGaleria: {
-    width: 180,
-    marginRight: 15,
+    width: 190,
+    marginRight: 16,
     backgroundColor: '#FFF',
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    elevation: 3,
+    elevation: 6,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
     marginBottom: 10
   },
   imagenContainer: {
-    height: 120,
+    height: 130,
     position: 'relative',
   },
   imagenGaleria: {
@@ -1163,11 +545,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     minHeight: 40,
   },
+  precioContainer: {
+    marginBottom: 8,
+  },
+  precioOriginal: {
+    fontSize: 13,
+    color: '#999',
+    textDecorationLine: 'line-through',
+    marginBottom: 2,
+  },
   precioProducto: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2A9D8F',
-    marginBottom: 8,
   },
   empresaContainer: {
     flexDirection: 'row',
@@ -1190,154 +580,20 @@ const styles = StyleSheet.create({
   },
   etiquetaCategoria: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    paddingVertical: 3,
-    paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: '#FFA000',
-  },
-  etiquetaTexto: {
-    color: 'white',
-    backgroundColor: '#FFA000',
-    fontWeight: 'bold',
-    fontSize: 12,
+    top: 12,
+    right: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
+    elevation: 4,
   },
   etiquetaTextoOferta: {
     color: 'white',
-    backgroundColor: '#FF5252',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  seccionOfertas: {
-    marginTop: 20,
-    paddingHorizontal: 10,
-    marginBottom: 20,
-  },
-  etiquetaOfertaSwiper: {
-    position: 'absolute',
-    top: 60,
-    right: 15,
-    backgroundColor: '#FF5252',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    zIndex: 2,
-  },
-  etiquetaOfertaText: {
-    color: 'white',
-    fontWeight: 'bold',
-    fontSize: 12,
-  },
-  swiperOfertas: {
-    height: 300, // Altura reducida
-    marginBottom: 15,
-  },
-  slideOfertaContainer: {
-    height: 260, // 20px menos que el contenedor
-    paddingHorizontal: 10,
-  },
-  slideContent: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    borderRadius: 12,
-    overflow: 'hidden',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-  },
-  imageColumn: {
-    width: '45%',
-    position: 'relative',
-  },
-  imagenOfertaCompacta: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-  },
-  logoCompacto: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'white',
-    width: 60,
-    height: 60,
-    borderRadius: 35,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 3,
-  },
-  logoMiniatura: {
-    width: 50,
-    height: 50,
-    borderRadius: 15,
-  },
-  descuentoCompacto: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    backgroundColor: 'yellow',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  infoColumn: {
-    width: '55%',
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  nombreCompacto: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  descripcionCompacta: {
-    fontSize: 12,
-    color: '#666',
-    marginVertical: 5,
-  },
-  precioContainerCompact: {
-    marginVertical: 5,
-  },
-  precioOriginalCompact: {
-    fontSize: 13,
-    color: '#999',
-    textDecorationLine: 'line-through',
-  },
-  precioFinalCompact: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2A9D8F',
-  },
-  botonCompacto: {
-    backgroundColor: '#FF5252',
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  botonTextoCompacto: {
-    color: 'white',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  descuentoText: {
-    color: 'black',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-  tituloMinimalistaContainer: {
-    alignItems: 'center',
-    marginTop: 50,
-    paddingBottom: 30
-  },
-  tituloMinimalistaText: {
-    fontSize: 27,
     fontWeight: '800',
-    color: '#2A9D8F',
+    fontSize: 13,
     letterSpacing: 0.5,
   },
 });

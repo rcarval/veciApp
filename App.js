@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createDrawerNavigator } from "@react-navigation/drawer";
-import { Easing } from "react-native";
+import { Animated, View, StyleSheet } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { LinearGradient } from "expo-linear-gradient";
+import { Image } from "expo-image";
 import { UserProvider } from "./context/UserContext";
 import { ThemeProvider } from "./context/ThemeContext";
+import { CarritoProvider } from "./context/CarritoContext";
 import LoginScreen from "./screens/LoginScreen";
 import RegisterScreen from "./screens/RegisterScreen";
 import HomeScreen from "./screens/HomeScreen";
@@ -31,13 +34,110 @@ import MisEstadisticasScreen from "./screens/MisEstadisticasScreen";
 import MisDireccionesScreen from "./screens/MisDireccionesScreen";
 import MisPedidosScreen from "./screens/MisPedidosScreen";
 import PedidosRecibidosScreen from "./screens/PedidosRecibidosScreen";
+import VendedorScreen from "./screens/VendedorScreen";
 import PlanScreen from "./screens/PlanScreen";
 import HelpScreen from "./screens/HelpScreen";
+import CuponesScreen from "./screens/CuponesScreen";
+import IngresarTelefonoScreen from "./screens/IngresarTelefonoScreen";
 import PedidoPopup from "./components/PedidoPopup";
 import AppWithBottomBar from "./components/AppWithBottomBar";
+import NotificationHandler from "./components/NotificationHandler";
 
 const Stack = createStackNavigator();
 const Drawer = createDrawerNavigator();
+
+// Componente de animación de loading (versión estática para overlay)
+const LoadingAnimationStatic = () => {
+  return (
+    <View style={overlayStyles.loadingAnimationContainer}>
+      <View style={overlayStyles.loadingGlowStatic} />
+      <Image 
+        source={require("./assets/welcome.png")} 
+        style={overlayStyles.loadingLogo}
+        contentFit="contain"
+        tintColor="white"
+      />
+    </View>
+  );
+};
+
+// Componente global de overlay de transición
+const GlobalTransitionOverlay = () => {
+  const [mostrar, setMostrar] = useState(false);
+  const opacity = useRef(new Animated.Value(1)).current;
+  const scale = useRef(new Animated.Value(1)).current;
+  const navigationRef = useRef(null);
+
+  useEffect(() => {
+    const checkInterval = setInterval(async () => {
+      const flag = await AsyncStorage.getItem('mostrarOverlayTransicion');
+      if (flag === 'true') {
+        console.log('🎬 Overlay global detectado, iniciando transición');
+        setMostrar(true);
+        await AsyncStorage.removeItem('mostrarOverlayTransicion');
+        
+        // Pequeño delay para que la pantalla se monte
+        setTimeout(() => {
+          // Animar fade out + zoom out
+          Animated.parallel([
+            Animated.timing(opacity, {
+              toValue: 0,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+            Animated.timing(scale, {
+              toValue: 1.4,
+              duration: 800,
+              useNativeDriver: true,
+            }),
+          ]).start(() => {
+            // Ocultar después de la animación
+            setTimeout(async () => {
+              setMostrar(false);
+              opacity.setValue(1);
+              scale.setValue(1);
+              
+              // Guardar flag indicando que la animación terminó
+              await AsyncStorage.setItem('animacionOverlayTerminada', 'true');
+              console.log('✅ Animación de overlay completada, flag guardado');
+            }, 100);
+          });
+        }, 150);
+      }
+    }, 100); // Verificar cada 100ms
+
+    return () => clearInterval(checkInterval);
+  }, []);
+
+  if (!mostrar) return null;
+
+  return (
+    <Animated.View
+      style={[
+        overlayStyles.overlay,
+        {
+          opacity: opacity,
+        },
+      ]}
+      pointerEvents="none"
+    >
+      <LinearGradient
+        colors={["#1a535c", "#2A9D8F", "#4ecdc4"]}
+        style={StyleSheet.absoluteFillObject}
+      >
+        <View style={overlayStyles.overlayCenter}>
+          <Animated.View
+            style={{
+              transform: [{ scale: scale }],
+            }}
+          >
+            <LoadingAnimationStatic />
+          </Animated.View>
+        </View>
+      </LinearGradient>
+    </Animated.View>
+  );
+};
 
 // Configuración de transiciones personalizadas
 const forFade = ({ current }) => ({
@@ -140,7 +240,7 @@ function AppNavigator({ usuario }) {
           name="RecuperarPassword"
           component={RecuperarPasswordScreen}
           options={{
-            title: "Recuperar Contraseña",
+            headerShown: false,
             cardStyleInterpolator: slideFromRight,
           }}
         />
@@ -149,7 +249,7 @@ function AppNavigator({ usuario }) {
           name="VerificarCodigo"
           component={VerificarCodigoScreen}
           options={{
-            title: "Verificar Código",
+            headerShown: false,
             cardStyleInterpolator: zoomIn,
           }}
         />
@@ -374,6 +474,19 @@ function AppNavigator({ usuario }) {
         />
 
         <Stack.Screen
+          name="VendedorScreen"
+          component={VendedorScreen}
+          initialParams={usuario ? { usuario } : {}}
+          options={{
+            title: "Gestionar Vendedor",
+            headerShown: false,
+            cardStyleInterpolator: forFade,
+            detachPreviousScreen: true,
+            
+          }}
+        />
+
+        <Stack.Screen
           name="PlanScreen"
           component={PlanScreen}
           initialParams={usuario ? { usuario } : {}}
@@ -415,6 +528,24 @@ function AppNavigator({ usuario }) {
             headerShown: false, 
             cardStyleInterpolator: forFade,
             detachPreviousScreen: true,
+          }}
+        />
+        <Stack.Screen
+          name="Cupones"
+          component={CuponesScreen}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: slideFromBottom,
+            detachPreviousScreen: true,
+          }}
+        />
+        <Stack.Screen
+          name="IngresarTelefono"
+          component={IngresarTelefonoScreen}
+          options={{ 
+            headerShown: false, 
+            cardStyleInterpolator: slideFromBottom,
+            gestureEnabled: false, // No permitir cerrar con gesto
           }}
         />
 
@@ -490,13 +621,51 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ThemeProvider>
         <UserProvider>
-          <NavigationContainer>
-            <AppWithBottomBar>
-              <AppNavigator usuario={usuario} />
-            </AppWithBottomBar>
-          </NavigationContainer>
+          <CarritoProvider>
+            <NavigationContainer>
+              <NotificationHandler>
+                <AppWithBottomBar>
+                  <AppNavigator usuario={usuario} />
+                </AppWithBottomBar>
+              </NotificationHandler>
+              {/* Overlay global de transición */}
+              <GlobalTransitionOverlay />
+            </NavigationContainer>
+          </CarritoProvider>
         </UserProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
   );
 }
+
+// Estilos para el overlay global
+const overlayStyles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 99999,
+  },
+  overlayCenter: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingAnimationContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingGlowStatic: {
+    position: "absolute",
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
+  },
+  loadingLogo: {
+    width: 130,
+    height: 130,
+  },
+});

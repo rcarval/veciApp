@@ -6,223 +6,171 @@ import {
   ScrollView,
   TouchableOpacity,
   StyleSheet,
-  Image,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { Image as ExpoImage } from "expo-image";
+import { API_ENDPOINTS } from "../config/api";
+import { useUser } from "../context/UserContext";
 
 const BusquedaScreen = () => {
   const navigation = useNavigation();
+  const { usuario, modoVista } = useUser();
   const [searchText, setSearchText] = useState("");
   const [resultados, setResultados] = useState([]);
+  const [cargando, setCargando] = useState(false);
 
-  // Datos de ejemplo (simulando tu base de datos)
-  const emprendimientos = [
-    {
-        id: 1,
-        nombre: "Pizzeria Donatelo",
-        descripcion: "Pizzas de masa madre",
-        descripcionLarga:
-          "Deliciosas pizzas con masa madre, hechas con mucho amor y amasada por la abuela de brazos musculosos.",
-        imagen: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI2hdQeNVlyu20ReOpJcNwdgW0ER5hwxnauQ&s",
-        logo: require("../assets/donatelo.png"),
-        estado: "Abierto",
-        telefono: "+56994908047",
-        direccion: "Manuel Rodríguez 885, Isla de Maipo",
-        metodosEntrega: { delivery: true, retiro: true },
-        metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-        rating: 4.8,
-        galeria: [
-          {
-            imagen: require("../assets/pizza-margarita.jpg"),
-            descripcion: "Pizza Margarita clásica con ingredientes frescos",
-            precio: 8990,
-            categoria: "principal"
-          },
-          {
-            imagen: require("../assets/Pepperoni-pizza.webp"),
-            descripcion: "Pizza Pepperoni con doble porción de pepperoni",
-            precio: 9990,
-            categoria: "principal"
-          },
-          {
-            imagen: require("../assets/pizza-iberica.webp"),
-            descripcion: "Pizza Iberica con carne de cerdo y verduras",
-            precio: 9990,
-            categoria: "principal"
-          },
-          {
-            imagen: require("../assets/pizza-cuatro-quesos.jpg"),
-            descripcion: "Pizza cuatro quesos con extra queso",
-            precio: 9990,
-            categoria: "principal"
-          },
-          {
-            imagen: require("../assets/pizzaOferta.jpg"),
-            descripcion: "Pizzas a elección 2 x 1",
-            precio: 12990,
-            categoria: "oferta"
-          },
-          {
-            imagen: require("../assets/bebidas.jpg"),
-            descripcion: "Bebidas en Lata",
-            precio: 1990,
-            categoria: "secundario"
-          },
-        ]
-      },
-      {
-        id: 2,
-        nombre: "Pelucan",
-        descripcion: "Estilismo profesional para perros.",
-        descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-        imagen: require("../assets/pelucan.webp"),
-        logo: require("../assets/pelucan_logo.png"),
-        estado: "Cerrado",
-        telefono: "+56994908047",
-        direccion: "Vista Hermosa 319, Isla de Maipo",
-        metodosEntrega: { delivery: true, retiro: true },
-        metodosPago: { tarjeta: true, efectivo: true, transferencia: true },
-        rating: 4.6,
-      },
-      {
-        id: 3,
-        nombre: "Grill Burger",
-        descripcion: "Ricas hamburguesas caseras.",
-        descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-        imagen: require("../assets/burger.webp"),
-        logo: require("../assets/grillburger_logo.jpg"),
-        estado: "Abierto",
-        telefono: "+56994908047",
-        direccion: "Balmaceda 1458, Talagante",
-        metodosEntrega: { delivery: false, retiro: true },
-        metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-        rating: 3.9,
-      },
-      {
-        id: 4,
-        nombre: "Carniceria Los Chinitos",
-        descripcion: "Expertos en Carnes.",
-        descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-        imagen: require("../assets/carniceria.webp"),
-        logo: require("../assets/loschinitos_logo.jpg"),
-        estado: "Abierto",
-        telefono: "+56994908047",
-        direccion: "El Zorzal Nte. 608, Isla de Maipo",
-        metodosEntrega: { delivery: true, retiro: true },
-        metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
-        rating: 2.4
-      },
-      {
-        id: 5,
-        nombre: "Maestro José",
-        descripcion: "Reparación y Construcción.",
-        descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-        imagen: require("../assets/construccion.jpg"),
-        logo: require("../assets/maestrojose_logo.jpeg"),
-        estado: "Cierra Pronto",
-        telefono: "+56994908047",
-        direccion: "San Antonio de Naltagua 5198, Isla de Maipo",
-        metodosEntrega: { delivery: true, retiro: false },
-        metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-        rating: 3.4,
-      },
-      {
-        id: 6,
-        nombre: "Gasfiter Experto",
-        descripcion: "Reparación de Cañerías.",
-        descripcionLarga: "Descripción detallada con toda la información sobre los productos y servicios ofrecidos...",
-        imagen: require("../assets/gasfiter.jpg"),
-        logo: require("../assets/gasfiter_logo.jpeg"),
-        estado: "Abierto",
-        telefono: "+56994908047",
-        direccion: "Balmaceda 1458, Talagante",
-        metodosEntrega: { delivery: false, retiro: true },
-        metodosPago: { tarjeta: false, efectivo: true, transferencia: true },
-        rating: 4.1,
-      }
-    // Agrega más emprendimientos según sea necesario
-  ];
+  // Función para buscar en el backend
+  const buscarEnBackend = async (termino) => {
+    if (!termino || termino.trim().length < 3) {
+      setResultados([]);
+      return;
+    }
 
-  const productos = [
-    {
-      id: 101,
-      nombre: "Pizza Margarita",
-      descripcion: "Pizza clásica con ingredientes frescos",
-      categoria: "comida",
-      precio: 8990,
-      emprendimiento: "Pizzeria Donatelo",
-      imagen: require("../assets/pizza-margarita.jpg")
-    },
-    {
-        id: 102,
-        nombre: "Carniceria Los Chinitos",
-        categoria: "comida",
-        imagen: require("../assets/huachalomo.webp"),
-        descripcion: "Huachalomo Categoría V 1 KG",
-        precio: 9990,
-        categoria: "principal"
-    },
-    {
-        id: 103,
-        nombre: "Pizzeria Donatelo",
-        imagen: require("../assets/Pepperoni-pizza.webp"),
-        descripcion: "Pizza Pepperoni con doble porción de pepperoni",
-        precio: 9990,
-        categoria: "principal"
-      },
-      {
-        id: 104,
-        nombre: "Pizzeria Donatelo",
-        imagen: require("../assets/pizza-iberica.webp"),
-        descripcion: "Pizza Iberica con carne de cerdo y verduras",
-        precio: 9990,
-        categoria: "principal"
-      },
-      {
-        id: 105,
-        nombre: "Pizzeria Donatelo",
-        imagen: require("../assets/pizza-cuatro-quesos.jpg"),
-        descripcion: "Pizza cuatro quesos con extra queso",
-        precio: 9990,
-        categoria: "principal"
-      },
-      {
-        id: 106,
-        nombre: "Pizzeria Donatelo",
-        imagen: require("../assets/pizzaOferta.jpg"),
-        descripcion: "Pizzas a elección 2 x 1",
-        precio: 12990,
-        categoria: "oferta"
-      },
-      {
-        id: 107,
-        nombre: "Pizzeria Donatelo",
-        imagen: require("../assets/bebidas.jpg"),
-        descripcion: "Bebidas en Lata",
-        precio: 1990,
-        categoria: "secundario"
+    try {
+      setCargando(true);
+      console.log('🔍 Buscando:', termino);
+      
+      const response = await fetch(`${API_ENDPOINTS.BUSCAR}?q=${encodeURIComponent(termino)}`);
+      const data = await response.json();
+      
+      if (data.ok) {
+        console.log('✅ Resultados:', data.emprendimientos?.length || 0, 'emprendimientos,', data.productos?.length || 0, 'productos');
+        
+        // Combinar emprendimientos y productos en un solo array
+        const todosLosResultados = [];
+        
+        // Mapear emprendimientos
+        if (data.emprendimientos) {
+          data.emprendimientos.forEach(emp => {
+            todosLosResultados.push({
+              id: `emp_${emp.id}`,
+              tipo: 'emprendimiento',
+              nombre: emp.nombre,
+              descripcion: emp.descripcion_corta || emp.descripcion_larga || '',
+              imagen: emp.background_url,
+              logo: emp.logo_url,
+              estado: emp.estado_calculado || emp.estado,
+              emprendimientoData: emp, // Guardar objeto completo con nombre diferente
+            });
+          });
+        }
+        
+        // Mapear productos
+        if (data.productos) {
+          data.productos.forEach(prod => {
+            todosLosResultados.push({
+              id: `prod_${prod.id}`,
+              tipo: 'producto',
+              nombre: prod.nombre,
+              descripcion: prod.descripcion || '',
+              precio: prod.precio,
+              imagen: prod.imagen_url,
+              emprendimiento: prod.emprendimiento_nombre,
+              producto: prod,
+            });
+          });
+        }
+        
+        setResultados(todosLosResultados);
+      } else {
+        console.log('⚠️ Error en búsqueda:', data.error);
+        setResultados([]);
       }
-    // Agrega más productos según sea necesario
-  ];
+    } catch (error) {
+      console.error('❌ Error al buscar:', error);
+      setResultados([]);
+    } finally {
+      setCargando(false);
+    }
+  };
 
   useEffect(() => {
-    if (searchText.length > 2) {
-      const resultadosFiltrados = [
-        ...emprendimientos.filter(item => 
-          item.nombre.toLowerCase().includes(searchText.toLowerCase()) ||
-          item.descripcion.toLowerCase().includes(searchText.toLowerCase())
-        ),
-        ...productos.filter(item => 
-          item.nombre.toLowerCase().includes(searchText.toLowerCase()) ||
-          item.descripcion.toLowerCase().includes(searchText.toLowerCase())
-        )
-      ];
-      setResultados(resultadosFiltrados);
-    } else {
-      setResultados([]);
-    }
+    const debounce = setTimeout(() => {
+      buscarEnBackend(searchText);
+    }, 500); // Esperar 500ms después de que el usuario deje de escribir
+
+    return () => clearTimeout(debounce);
   }, [searchText]);
+
+  // Función para navegar al detalle
+  const navegarADetalle = (item) => {
+    // Determinar el usuario_id dependiendo del tipo de resultado
+    const usuarioIdEmprendimiento = item.tipo === 'emprendimiento' 
+      ? item.emprendimientoData.usuario_id 
+      : item.producto.emprendimiento_usuario_id;
+
+    // Verificar si es propio emprendimiento
+    const esPropioEmprendimiento = usuarioIdEmprendimiento === usuario?.id;
+    const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+    const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+
+    if (mostrarAdvertencia) {
+      Alert.alert(
+        "⚠️ Tu Propio Negocio",
+        "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
+        [{ text: "Entendido" }]
+      );
+      return;
+    }
+
+    if (item.tipo === 'emprendimiento') {
+      // Para emprendimientos, necesitamos mapear los datos al formato esperado
+      const producto = {
+        id: item.emprendimientoData.id,
+        usuario_id: item.emprendimientoData.usuario_id, // ✅ AGREGAR usuario_id
+        nombre: item.emprendimientoData.nombre,
+        descripcion: item.emprendimientoData.descripcion_corta || item.emprendimientoData.descripcion_larga || '',
+        descripcionLarga: item.emprendimientoData.descripcion_larga || '',
+        imagen: item.emprendimientoData.background_url ? { uri: item.emprendimientoData.background_url } : require('../assets/icon.png'),
+        logo: item.emprendimientoData.logo_url ? { uri: item.emprendimientoData.logo_url } : require('../assets/icon.png'),
+        estado: item.emprendimientoData.estado_calculado || item.emprendimientoData.estado,
+        telefono: item.emprendimientoData.telefono,
+        direccion: item.emprendimientoData.direccion,
+        metodosEntrega: item.emprendimientoData.tipos_entrega || { delivery: true, retiro: true },
+        metodosPago: item.emprendimientoData.medios_pago || { tarjeta: true, efectivo: true, transferencia: false },
+        rating: 4.5,
+        horarios: item.emprendimientoData.horarios,
+        galeria: [],
+      };
+      
+      // Si está cerrado, abrir en modo preview
+      const isPreview = producto.estado === 'Cerrado' || item.emprendimientoData.estado_calculado === 'cerrado';
+      navigation.navigate("PedidoDetalle", { producto, isPreview });
+    } else {
+      // Para productos, también necesitamos mapear
+      const producto = {
+        id: item.producto.emprendimiento_id,
+        usuario_id: item.producto.emprendimiento_usuario_id, // ✅ AGREGAR usuario_id del emprendimiento
+        nombre: item.producto.emprendimiento_nombre,
+        descripcion: item.producto.emprendimiento_descripcion || '',
+        descripcionLarga: item.producto.emprendimiento_descripcion || '',
+        imagen: item.producto.emprendimiento_background ? { uri: item.producto.emprendimiento_background } : require('../assets/icon.png'),
+        logo: item.producto.emprendimiento_logo ? { uri: item.producto.emprendimiento_logo } : require('../assets/icon.png'),
+        estado: item.producto.estado_calculado || 'Abierto',
+        telefono: item.producto.emprendimiento_telefono,
+        direccion: item.producto.emprendimiento_direccion,
+        metodosEntrega: { delivery: true, retiro: true },
+        metodosPago: { tarjeta: true, efectivo: true, transferencia: false },
+        rating: 4.5,
+        horarios: item.producto.horarios || {},
+        galeria: item.producto.imagen_url ? [{
+          id: item.producto.id,
+          imagen: { uri: item.producto.imagen_url },
+          nombre: item.producto.nombre,
+          descripcion: item.producto.descripcion,
+          precio: parseFloat(item.producto.precio),
+          categoria: item.producto.categoria,
+        }] : [],
+      };
+      
+      // Si está cerrado, abrir en modo preview
+      const isPreview = producto.estado === 'Cerrado' || item.producto.estado_calculado === 'cerrado';
+      navigation.navigate("PedidoDetalle", { producto, isPreview });
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -239,7 +187,11 @@ const BusquedaScreen = () => {
           value={searchText}
           onChangeText={setSearchText}
         />
-        <FontAwesome name="search" size={20} color="#666" />
+        {cargando ? (
+          <ActivityIndicator size="small" color="#666" />
+        ) : (
+          <FontAwesome name="search" size={20} color="#666" />
+        )}
       </View>
 
       {/* Resultados de búsqueda */}
@@ -250,6 +202,11 @@ const BusquedaScreen = () => {
             <Text style={styles.emptyText}>
               Escribe al menos 3 caracteres para buscar
             </Text>
+          </View>
+        ) : cargando ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color="#2A9D8F" />
+            <Text style={styles.emptyText}>Buscando...</Text>
           </View>
         ) : resultados.length === 0 ? (
           <View style={styles.emptyState}>
@@ -263,11 +220,18 @@ const BusquedaScreen = () => {
             <TouchableOpacity 
               key={item.id} 
               style={styles.resultItem}
-              onPress={() => navigation.navigate("PedidoDetalle", { producto: item })}
+              onPress={() => navegarADetalle(item)}
             >
-              <Image 
-                source={item.logo || item.imagen || item.galeria?.[0]?.imagen} 
+              <ExpoImage 
+                source={
+                  item.logo && typeof item.logo === 'string' 
+                    ? { uri: item.logo } 
+                    : item.imagen && typeof item.imagen === 'string'
+                    ? { uri: item.imagen }
+                    : require('../assets/icon.png')
+                }
                 style={styles.resultImage}
+                contentFit="cover"
               />
               <View style={styles.resultInfo}>
                 <Text style={styles.resultTitle}>{item.nombre}</Text>
@@ -276,7 +240,7 @@ const BusquedaScreen = () => {
                 </Text>
                 {item.precio && (
                   <Text style={styles.resultPrice}>
-                    ${item.precio.toLocaleString("es-CL")}
+                    ${parseFloat(item.precio).toLocaleString("es-CL")}
                   </Text>
                 )}
                 {item.emprendimiento && (

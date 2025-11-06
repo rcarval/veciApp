@@ -4,11 +4,11 @@
     "slug": "veciApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/welcome.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
-      "image": "./assets/icon.png",
+      "image": "./assets/welcome.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,14 +17,15 @@
         "NSPhotoLibraryUsageDescription": "Permitimos el acceso a tu galería para que puedas seleccionar imágenes para tu emprendimiento",
         "NSCameraUsageDescription": "Permitimos el acceso a tu cámara para que puedas tomar fotos para tu emprendimiento",
         "NSLocationWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar tu dirección en el mapa",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar tu dirección en el mapa",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Necesitamos tu ubicación para mostrar tu dirección en el mapa"
       },
       "supportsTablet": true,
-      "usesIcloudStorage": false
+      "usesIcloudStorage": false,
+      "bundleIdentifier": "com.racarvallog.veciApp"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icon.png",
+        "foregroundImage": "./assets/welcome.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": false,
@@ -45,7 +46,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/icon.png"
+      "favicon": "./assets/welcome.png"
     },
     "extra": {
       "eas": {
@@ -53,7 +54,21 @@
       }
     },
     "plugins": [
-      "expo-location"
-    ]
+      "expo-location",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#2A9D8F",
+          "defaultChannel": "veciapp-notifications"
+        }
+      ]
+    ],
+    "notification": {
+      "icon": "./assets/icon.png",
+      "color": "#2A9D8F",
+      "androidMode": "default",
+      "androidCollapsedTitle": "VeciApp"
+    }
   }
 }

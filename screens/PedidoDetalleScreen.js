@@ -8,18 +8,22 @@ import {
   Linking,
   Animated,
   ScrollView,
-  Alert
+  Alert,
+  ActivityIndicator,
+  TextInput
 } from "react-native";
-import { FontAwesome } from "@expo/vector-icons";
+import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useFocusEffect } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
+import { useCarrito } from "../context/CarritoContext";
 import pedidoService from "../services/pedidoService";
 import { API_ENDPOINTS } from "../config/api";
 
-// Componente ItemGaleria completamente separado
+// Componente ItemGaleria completamente separado con imagen completa
 const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, onQuitar, onEliminar, cantidadEnCarrito, theme, isPreview = false }) => {
   const themeStyles = theme ? {
     backgroundColor: theme.cardBackground,
@@ -36,58 +40,84 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
   };
   
   return (
-    <View style={[styles.itemGaleria, { backgroundColor: themeStyles.backgroundColor, borderColor: themeStyles.borderColor }]}>
+    <View style={[
+      styles.itemGaleriaModerno,
+      !isPreview && styles.itemGaleriaConControles
+    ]}>
       <TouchableOpacity
         onPress={() => onImagenPress(item)}
-        activeOpacity={0.8}
+        activeOpacity={0.9}
+        style={styles.itemGaleriaTouchable}
       >
-        <View style={styles.imagenContainer}>
+        {/* Imagen de fondo completa */}
           <Image
             source={item.imagen}
-            style={styles.imagenGaleria}
+          style={styles.imagenGaleriaCompleta}
             contentFit="cover"
             cache="force-cache"
           />
-          {/* Etiqueta de categoría */}
+        
+        {/* Gradiente sobre la imagen */}
+        <LinearGradient
+          colors={['transparent', 'rgba(0,0,0,0.3)', 'rgba(0,0,0,0.85)']}
+          style={styles.gradienteProducto}
+          locations={[0, 0.5, 1]}
+        />
+        
+        {/* Etiqueta de categoría superior derecha */}
           <View
             style={[
-              styles.etiquetaCategoria,
-              item.categoria === "oferta" && styles.etiquetaOferta,
-              item.categoria === "principal" && styles.etiquetaPrincipal,
-              item.categoria === "secundario" && [styles.etiquetaSecundario, { backgroundColor: themeStyles.primaryColor }],
-            ]}
-          >
-            <Text style={styles.etiquetaTexto}>
+            styles.etiquetaCategoriaModerna,
+            item.categoria === "oferta" && styles.etiquetaOfertaModerna,
+            item.categoria === "principal" && styles.etiquetaPrincipalModerna,
+            item.categoria === "secundario" && styles.etiquetaSecundarioModerna,
+          ]}
+        >
+          <Ionicons 
+            name={
+              item.categoria === "oferta" ? "pricetag" :
+              item.categoria === "principal" ? "star" : "add-circle"
+            }
+            size={10}
+            color="white"
+          />
+          <Text style={styles.etiquetaTextoModerna}>
               {item.categoria === "oferta"
                 ? "OFERTA"
                 : item.categoria === "principal"
                 ? "DESTACADO"
                 : "ADICIONAL"}
             </Text>
-          </View>
         </View>
 
-        <View style={styles.infoGaleria}>
-          <Text style={[styles.nombreGaleria, { color: themeStyles.textColor }]} numberOfLines={2}>
+        {/* Información sobre la imagen */}
+        <View style={[
+          styles.infoGaleriaOverlay,
+          !isPreview && styles.infoGaleriaConEspacio
+        ]}>
+          <Text style={styles.nombreGaleriaModerno} numberOfLines={2}>
             {item.nombre}
           </Text>
-          <Text style={[styles.descripcionGaleria, { color: themeStyles.textSecondaryColor }]} numberOfLines={2}>
+          {item.descripcion && (
+            <Text style={styles.descripcionGaleriaModerna} numberOfLines={1}>
             {item.descripcion}
           </Text>
-          <View style={styles.precioContainer}>
-            {item.categoria === "oferta" ? (
-              <View style={styles.precioOfertaContainer}>
-                <Text style={[styles.precioOferta, { color: themeStyles.primaryColor }]}>
-                  {item.precio
-                    ? `$${item.precio.toLocaleString("es-CL")}`
-                    : "Consulte"}
+          )}
+          <View style={styles.precioContainerModerno}>
+            {item.categoria === "oferta" && item.precioOferta ? (
+              <View style={styles.precioOfertaContainerModerno}>
+                <Text style={styles.precioOriginalModerno}>
+                  ${Math.round(item.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}
+                </Text>
+                <Text style={styles.precioOfertaModerno}>
+                  ${Math.round(item.precioOferta).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}
                 </Text>
               </View>
             ) : (
-              <Text style={[styles.precioNormal, { color: themeStyles.primaryColor }]}>
-                {item.precio
-                  ? `$${item.precio.toLocaleString("es-CL")}`
-                  : "Consulte"}
+              <Text style={styles.precioNormalModerno}>
+                {item.precio && item.precio > 0
+                  ? `$${Math.round(item.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}`
+                  : "Precio a Cotizar"}
               </Text>
             )}
           </View>
@@ -96,36 +126,49 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
 
       {/* Controles del carrito - Solo mostrar si no es preview */}
       {!isPreview && (
-        <View style={[styles.carritoControls, { borderTopColor: themeStyles.borderColor }]}>
+        <View style={styles.carritoControlsModerno}>
           {cantidadEnCarrito > 0 ? (
-            <View style={styles.cantidadContainer}>
+            <View style={styles.cantidadContainerModerno}>
               <TouchableOpacity
-                style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
+                style={[styles.botonCantidadModerno, { backgroundColor: 'rgba(255,255,255,0.95)' }]}
                 onPress={() => onQuitar(index, categoria)}
+                activeOpacity={0.8}
               >
-                <FontAwesome name="minus" size={12} color={themeStyles.primaryColor} />
+                <Ionicons name="remove" size={16} color={themeStyles.primaryColor} />
               </TouchableOpacity>
-              <Text style={[styles.cantidadTexto, { color: themeStyles.textColor }]}>{cantidadEnCarrito}</Text>
+              <View style={styles.cantidadBadgeModerno}>
+                <Text style={styles.cantidadTextoModerno}>{cantidadEnCarrito}</Text>
+              </View>
               <TouchableOpacity
-                style={[styles.botonCantidad, { borderColor: themeStyles.primaryColor }]}
+                style={[styles.botonCantidadModerno, { backgroundColor: 'rgba(255,255,255,0.95)' }]}
                 onPress={() => onAgregar(item, index, categoria)}
+                activeOpacity={0.8}
               >
-                <FontAwesome name="plus" size={12} color={themeStyles.primaryColor} />
+                <Ionicons name="add" size={16} color={themeStyles.primaryColor} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.botonEliminar}
+                style={[styles.botonEliminarModerno, { backgroundColor: 'rgba(255,255,255,0.95)' }]}
                 onPress={() => onEliminar(index, categoria)}
+                activeOpacity={0.8}
               >
-                <FontAwesome name="trash" size={12} color="#e74c3c" />
+                <Ionicons name="trash" size={14} color="#e74c3c" />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity
-              style={[styles.botonAgregarCarrito, { backgroundColor: themeStyles.primaryColor }]}
+              style={styles.botonAgregarCarritoModerno}
               onPress={() => onAgregar(item, index, categoria)}
+              activeOpacity={0.9}
             >
-              <FontAwesome name="plus" size={14} color="white" />
-              <Text style={styles.botonAgregarTexto}>Agregar</Text>
+              <LinearGradient
+                colors={[themeStyles.primaryColor, themeStyles.primaryColor + 'dd']}
+                style={styles.agregarGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Ionicons name="add-circle" size={16} color="white" />
+                <Text style={styles.botonAgregarTextoModerno}>Agregar</Text>
+              </LinearGradient>
             </TouchableOpacity>
           )}
         </View>
@@ -137,7 +180,20 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
 const PedidoDetalleScreen = ({ route, navigation }) => {
   const { producto, isPreview = false } = route.params;
   const { currentTheme } = useTheme();
-  const { usuario, direcciones, direccionSeleccionada } = useUser();
+  const { usuario, direcciones, direccionSeleccionada, getTipoUsuarioEfectivo } = useUser();
+  const { carritoActivo, activarCarrito, limpiarCarrito, navegacionPendiente: navPendienteContexto, ejecutarNavegacionPendiente, cancelarNavegacionPendiente } = useCarrito();
+  
+  // ✅ EXTRAER ID REAL DEL EMPRENDIMIENTO (puede ser compuesto "emprendimiento_id-producto_id")
+  const emprendimientoIdReal = useMemo(() => {
+    const id = String(producto.id);
+    // Si el ID contiene guión, extraer solo la primera parte (emprendimiento_id)
+    if (id.includes('-')) {
+      const partes = id.split('-');
+      console.log('🔍 ID compuesto detectado:', id, '→ Emprendimiento ID:', partes[0]);
+      return parseInt(partes[0]);
+    }
+    return parseInt(id);
+  }, [producto.id]);
   
   // Función helper para mapear estado del backend al frontend
   const mapearEstado = (prod) => {
@@ -160,26 +216,168 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [imagenSeleccionada, setImagenSeleccionada] = useState(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState(null);
+  const [reporteDetalle, setReporteDetalle] = useState('');
+  const [enviandoReporte, setEnviandoReporte] = useState(false);
   const [mostrarCarrito, setMostrarCarrito] = useState(false);
+  const [mostrarConfirmacionEntrega, setMostrarConfirmacionEntrega] = useState(false);
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
+  const [navegacionPendiente, setNavegacionPendiente] = useState(null);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [calificacionesData, setCalificacionesData] = useState(null);
   const [productosApi, setProductosApi] = useState([]);
   const [cargandoProductos, setCargandoProductos] = useState(false);
+  const [esFavorito, setEsFavorito] = useState(false);
+  const [cargandoFavorito, setCargandoFavorito] = useState(false);
+  const [advertenciaPropioNegocio, setAdvertenciaPropioNegocio] = useState(false);
+  const [cuponAplicado, setCuponAplicado] = useState(null);
+  const [descuentoCupon, setDescuentoCupon] = useState(0);
   const carritoRef = useRef([]);
   const [, forceUpdate] = useState({});
 
-// Opciones de reporte
+  // Verificar si el emprendimiento pertenece al usuario actual
+  // Log para debugging
+  useEffect(() => {
+    console.log('🔍 VERIFICACIÓN DE PROPIO EMPRENDIMIENTO:');
+    console.log('  - producto completo:', producto);
+    console.log('  - producto.usuario_id:', producto.usuario_id);
+    console.log('  - producto.usuarioId:', producto.usuarioId);
+    console.log('  - usuario?.id:', usuario?.id);
+    console.log('  - usuario completo:', usuario);
+  }, [producto, usuario]);
+
+  const esPropioEmprendimiento = producto.usuario_id === usuario?.id || producto.usuarioId === usuario?.id;
+
+// Opciones de reporte mejoradas
 const reportReasons = [
-  { id: 1, title: "Contenido inapropiado", description: "Contenido ofensivo, violento o explícito" },
-  { id: 2, title: "Información falsa", description: "El anuncio contiene información engañosa o falsa" },
-  { id: 3, title: "Productos prohibidos", description: "Venta de artículos ilegales o restringidos" },
-  { id: 4, title: "Suplantación de identidad", description: "El vendedor está suplantando a otra persona o negocio" },
-  { id: 5, title: "Prácticas fraudulentas", description: "Intento de estafa o fraude" },
-  { id: 6, title: "Spam o publicidad no deseada", description: "Publicación repetitiva o no autorizada" },
-  { id: 7, title: "Problemas con el vendedor", description: "Mal comportamiento o incumplimiento de acuerdos" },
-  { id: 8, title: "Otro", description: "Otra razón no listada aquí" },
+  { 
+    id: 1, 
+    categoria: 'contenido_inapropiado',
+    title: "Contenido inapropiado", 
+    description: "Imágenes, textos o contenido ofensivo, violento o explícito",
+    icono: "alert-circle",
+    color: "#e74c3c"
+  },
+  { 
+    id: 2, 
+    categoria: 'informacion_falsa',
+    title: "Información falsa o engañosa", 
+    description: "Datos incorrectos, precios engañosos o descripciones falsas",
+    icono: "information-circle",
+    color: "#f39c12"
+  },
+  { 
+    id: 3, 
+    categoria: 'productos_prohibidos',
+    title: "Productos prohibidos", 
+    description: "Venta de artículos ilegales, restringidos o peligrosos",
+    icono: "ban",
+    color: "#c0392b"
+  },
+  { 
+    id: 4, 
+    categoria: 'suplantacion_identidad',
+    title: "Suplantación de identidad", 
+    description: "Pretende ser otra persona, empresa o marca registrada",
+    icono: "person-circle",
+    color: "#8e44ad"
+  },
+  { 
+    id: 5, 
+    categoria: 'practicas_fraudulentas',
+    title: "Prácticas fraudulentas", 
+    description: "Intento de estafa, fraude o robo de información",
+    icono: "warning",
+    color: "#d35400"
+  },
+  { 
+    id: 6, 
+    categoria: 'spam',
+    title: "Spam o publicidad engañosa", 
+    description: "Publicaciones repetitivas, spam o publicidad no autorizada",
+    icono: "megaphone",
+    color: "#95a5a6"
+  },
+  { 
+    id: 7, 
+    categoria: 'problemas_vendedor',
+    title: "Problemas con el emprendedor", 
+    description: "Mal servicio, incumplimiento de acuerdos o mala conducta",
+    icono: "chatbox-ellipses",
+    color: "#34495e"
+  },
+  { 
+    id: 8, 
+    categoria: 'otro',
+    title: "Otro motivo", 
+    description: "Describe tu motivo en el campo de texto",
+    icono: "ellipsis-horizontal-circle",
+    color: "#7f8c8d"
+  },
 ];
+
+// Función para enviar reporte
+const enviarReporte = async () => {
+  if (!selectedReportReason) {
+    Alert.alert('Error', 'Por favor selecciona un motivo de reporte');
+    return;
+  }
+
+  const razonSeleccionada = reportReasons.find(r => r.id === selectedReportReason);
+  
+  // Si es "Otro", validar que haya descripción
+  if (razonSeleccionada.categoria === 'otro' && !reporteDetalle.trim()) {
+    Alert.alert('Error', 'Por favor describe el motivo del reporte');
+    return;
+  }
+
+  try {
+    setEnviandoReporte(true);
+    
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'Debes iniciar sesión para reportar');
+      return;
+    }
+
+    console.log('📤 Enviando reporte...');
+    
+    const response = await fetch(API_ENDPOINTS.CREAR_REPORTE, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        emprendimiento_id: producto.id,
+        categoria: razonSeleccionada.categoria,
+        titulo: razonSeleccionada.title,
+        descripcion: razonSeleccionada.description,
+        descripcion_detallada: reporteDetalle.trim() || null
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.ok) {
+      console.log('✅ Reporte enviado exitosamente');
+      Alert.alert(
+        '¡Reporte Enviado!',
+        'Gracias por tu reporte. Nuestro equipo lo revisará a la brevedad y tomará las medidas necesarias.',
+        [{ text: 'Entendido' }]
+      );
+      setReportModalVisible(false);
+      setSelectedReportReason(null);
+      setReporteDetalle('');
+    } else {
+      throw new Error(data.error || 'Error al enviar reporte');
+    }
+  } catch (error) {
+    console.error('❌ Error al enviar reporte:', error);
+    Alert.alert('Error', error.message || 'No se pudo enviar el reporte. Inténtalo de nuevo.');
+  } finally {
+    setEnviandoReporte(false);
+  }
+};
   const [modoEntrega, setModoEntrega] = useState(
     producto.metodosEntrega.delivery ? "delivery" : "retiro"
   );
@@ -212,6 +410,13 @@ const reportReasons = [
 
   // Funciones del carrito que NO causan re-renders del componente padre
   const agregarAlCarrito = useCallback((item) => {
+    // Validar si es propio emprendimiento
+    const tipoEfectivo = getTipoUsuarioEfectivo ? getTipoUsuarioEfectivo() : usuario?.tipo_usuario;
+    if (esPropioEmprendimiento && tipoEfectivo === 'cliente') {
+      setAdvertenciaPropioNegocio(true);
+      return;
+    }
+    
     const existe = carritoRef.current.find(carritoItem => carritoItem.id === item.id);
     if (existe) {
       carritoRef.current = carritoRef.current.map(carritoItem =>
@@ -222,9 +427,12 @@ const reportReasons = [
     } else {
       carritoRef.current = [...carritoRef.current, { ...item, cantidad: 1 }];
     }
+    // Actualizar contexto global del carrito
+    const totalItems = carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
+    activarCarrito(totalItems);
     // Forzar actualización solo de los componentes que necesitan saber del cambio
     forceUpdate({});
-  }, []);
+  }, [activarCarrito, esPropioEmprendimiento, getTipoUsuarioEfectivo, usuario]);
 
   const quitarDelCarrito = useCallback((itemId) => {
     const item = carritoRef.current.find(carritoItem => carritoItem.id === itemId);
@@ -237,13 +445,19 @@ const reportReasons = [
     } else {
       carritoRef.current = carritoRef.current.filter(carritoItem => carritoItem.id !== itemId);
     }
+    // Actualizar contexto global del carrito
+    const totalItems = carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
+    activarCarrito(totalItems);
     forceUpdate({});
-  }, []);
+  }, [activarCarrito]);
 
   const eliminarDelCarrito = useCallback((itemId) => {
     carritoRef.current = carritoRef.current.filter(carritoItem => carritoItem.id !== itemId);
+    // Actualizar contexto global del carrito
+    const totalItems = carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
+    activarCarrito(totalItems);
     forceUpdate({});
-  }, []);
+  }, [activarCarrito]);
 
   const obtenerCantidadEnCarrito = useCallback((itemId) => {
     const item = carritoRef.current.find(carritoItem => carritoItem.id === itemId);
@@ -258,11 +472,77 @@ const reportReasons = [
     return carritoRef.current.reduce((total, item) => total + item.cantidad, 0);
   }, []);
 
+  const obtenerCostoDelivery = useCallback(() => {
+    if (modoEntrega !== 'delivery') return 0;
+    
+    // Si el emprendimiento tiene un costo fijo de delivery
+    if (producto.metodosEntrega.deliveryCosto && producto.metodosEntrega.deliveryCosto !== "Costo variable") {
+      // Extraer el número del string (ej: "$2.000" -> 2000)
+      const costoStr = producto.metodosEntrega.deliveryCosto.replace(/[$.]/g, '');
+      return parseInt(costoStr) || 0;
+    }
+    
+    return 0; // Si no hay costo definido o es variable
+  }, [modoEntrega, producto.metodosEntrega.deliveryCosto]);
+
+  const obtenerTotalConDelivery = useCallback(() => {
+    const subtotal = obtenerTotalCarrito();
+    const costoDelivery = obtenerCostoDelivery();
+    const totalSinDescuento = subtotal + costoDelivery;
+    const totalFinal = totalSinDescuento - descuentoCupon;
+    return Math.max(0, totalFinal); // Nunca menor a 0
+  }, [obtenerTotalCarrito, obtenerCostoDelivery, descuentoCupon]);
+
+  // Calcular descuento del cupón
+  const calcularDescuentoCupon = useCallback((cupon) => {
+    if (!cupon) {
+      setDescuentoCupon(0);
+      return;
+    }
+
+    const subtotal = obtenerTotalCarrito();
+    
+    switch (cupon.tipo_beneficio) {
+      case 'descuento_porcentaje':
+        const descuentoPorcentaje = Math.round((subtotal * cupon.valor) / 100);
+        setDescuentoCupon(descuentoPorcentaje);
+        break;
+      case 'descuento_monto':
+        setDescuentoCupon(Math.min(cupon.valor, subtotal)); // No puede ser mayor al subtotal
+        break;
+      case 'envio_gratis':
+        setDescuentoCupon(obtenerCostoDelivery()); // Descuento equivalente al costo de delivery
+        break;
+      default:
+        setDescuentoCupon(0);
+    }
+  }, [obtenerTotalCarrito, obtenerCostoDelivery]);
+
+  // Actualizar descuento cuando cambia el cupón o el carrito
+  useEffect(() => {
+    if (cuponAplicado) {
+      calcularDescuentoCupon(cuponAplicado);
+    }
+  }, [cuponAplicado, carritoRef.current, calcularDescuentoCupon]);
+
+  // Función para aplicar cupón seleccionado desde CuponesScreen
+  const aplicarCupon = (cupon) => {
+    console.log('🎫 Aplicando cupón:', cupon);
+    setCuponAplicado(cupon);
+    calcularDescuentoCupon(cupon);
+  };
+
+  // Función para remover cupón
+  const removerCupon = () => {
+    setCuponAplicado(null);
+    setDescuentoCupon(0);
+  };
+
   // Función para cargar calificaciones del emprendimiento
   const cargarCalificaciones = useCallback(async () => {
     try {
-      console.log('📊 Cargando calificaciones para emprendimiento:', producto.id);
-      const response = await pedidoService.obtenerCalificacionEmprendimiento(producto.id);
+      console.log('📊 Cargando calificaciones para emprendimiento:', emprendimientoIdReal);
+      const response = await pedidoService.obtenerCalificacionEmprendimiento(emprendimientoIdReal);
       if (response.ok && response.calificacion) {
         console.log('✅ Calificaciones encontradas:', response.calificacion);
         // Mapear datos del backend al formato esperado por el frontend
@@ -318,16 +598,16 @@ const reportReasons = [
         }
       });
     }
-  }, [producto.id]);
+  }, [emprendimientoIdReal]);
 
   // Función para cargar productos del emprendimiento desde la API
   const cargarProductosEmprendimiento = useCallback(async () => {
     try {
       setCargandoProductos(true);
-      console.log('📦 Cargando productos del emprendimiento:', producto.id);
+      console.log('📦 Cargando productos del emprendimiento:', emprendimientoIdReal);
       
       const { API_ENDPOINTS } = require('../config/api');
-      const response = await fetch(API_ENDPOINTS.PRODUCTOS(producto.id));
+      const response = await fetch(API_ENDPOINTS.PRODUCTOS(emprendimientoIdReal));
       
       if (!response.ok) {
         throw new Error('Error al cargar productos');
@@ -345,7 +625,7 @@ const reportReasons = [
     } finally {
       setCargandoProductos(false);
     }
-  }, [producto.id]);
+  }, [emprendimientoIdReal]);
 
   // Función para renderizar estrellas con número de votantes
   const renderEstrellasConVotantes = () => {
@@ -433,10 +713,18 @@ const reportReasons = [
   // Función para registrar visualización del emprendimiento
   const registrarVisualizacion = useCallback(async () => {
     try {
-      if (!producto?.id) return;
-      console.log('👁️ Registrando visualización del emprendimiento:', producto.id);
+      if (!emprendimientoIdReal) return;
       
-      const url = API_ENDPOINTS.REGISTRAR_VISUALIZACION(producto.id);
+      // Solo NO registrar si está en modo preview (dueño revisando su propio emprendimiento)
+      if (isPreview) {
+        console.log('👁️ Modo preview activo (dueño revisando) - No se registra visualización');
+        return;
+      }
+      
+      // En todos los demás casos, registrar (incluye clientes viendo locales cerrados)
+      console.log('👁️ Registrando visualización del emprendimiento:', emprendimientoIdReal);
+      
+      const url = API_ENDPOINTS.REGISTRAR_VISUALIZACION(emprendimientoIdReal);
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -450,9 +738,101 @@ const reportReasons = [
     } catch (error) {
       console.error('❌ Error al registrar visualización:', error);
     }
-  }, [producto?.id]);
+  }, [emprendimientoIdReal, isPreview]);
+
+  // Función para verificar si el emprendimiento está en favoritos
+  const verificarFavorito = useCallback(async () => {
+    try {
+      if (!emprendimientoIdReal) return;
+      
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+      
+      console.log('⭐ Verificando si emprendimiento está en favoritos:', emprendimientoIdReal);
+      
+      const response = await fetch(API_ENDPOINTS.VERIFICAR_FAVORITO(emprendimientoIdReal), {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      
+      const data = await response.json();
+      if (data.ok) {
+        setEsFavorito(data.esFavorito);
+        console.log('✅ Estado favorito:', data.esFavorito);
+      }
+    } catch (error) {
+      console.error('❌ Error al verificar favorito:', error);
+    }
+  }, [emprendimientoIdReal]);
+
+  // Función para toggle favorito
+  const toggleFavorito = async () => {
+    try {
+      setCargandoFavorito(true);
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'Debes iniciar sesión para agregar favoritos');
+        return;
+      }
+
+      if (esFavorito) {
+        // Eliminar de favoritos
+        console.log('🗑️ Eliminando de favoritos:', emprendimientoIdReal);
+        const response = await fetch(API_ENDPOINTS.ELIMINAR_FAVORITO(emprendimientoIdReal), {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        const data = await response.json();
+        if (data.ok) {
+          setEsFavorito(false);
+          console.log('✅ Eliminado de favoritos');
+        }
+      } else {
+        // Agregar a favoritos
+        console.log('⭐ Agregando a favoritos:', emprendimientoIdReal);
+        const response = await fetch(API_ENDPOINTS.AGREGAR_FAVORITO, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ emprendimiento_id: emprendimientoIdReal }),
+        });
+        
+        const data = await response.json();
+        if (data.ok) {
+          setEsFavorito(true);
+          console.log('✅ Agregado a favoritos');
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error al toggle favorito:', error);
+      Alert.alert('Error', 'No se pudo actualizar favoritos');
+    } finally {
+      setCargandoFavorito(false);
+    }
+  };
 
   useEffect(() => {
+    // Validar teléfono SOLO si es cliente (o emprendedor en modo cliente) y NO está en modo preview
+    const tipoEfectivo = getTipoUsuarioEfectivo ? getTipoUsuarioEfectivo() : usuario?.tipo_usuario;
+    const esCliente = tipoEfectivo === 'cliente';
+    
+    if (!isPreview && esCliente && !usuario?.telefono) {
+      console.log('⚠️ Cliente (o emprendedor en modo cliente) sin teléfono detectado - redirigiendo a verificación');
+      navigation.navigate('IngresarTelefono', {
+        onComplete: () => {
+          console.log('✅ Teléfono verificado, actualizando datos');
+        }
+      });
+      return;
+    }
+
     // Cargar dirección desde el contexto de usuario
     if (direcciones && direccionSeleccionada && direcciones.length > 0) {
       const dirSeleccionada = direcciones.find((dir) => dir.id === direccionSeleccionada);
@@ -468,7 +848,8 @@ const reportReasons = [
     cargarCalificaciones(); // Cargar calificaciones al iniciar
     cargarProductosEmprendimiento(); // Cargar productos del emprendimiento
     registrarVisualizacion(); // Registrar visualización
-  }, [direcciones, direccionSeleccionada, cargarCalificaciones, cargarProductosEmprendimiento, registrarVisualizacion]);
+    verificarFavorito(); // Verificar si está en favoritos
+  }, [direcciones, direccionSeleccionada, cargarCalificaciones, cargarProductosEmprendimiento, registrarVisualizacion, verificarFavorito, usuario, isPreview, getTipoUsuarioEfectivo]);
 
   useEffect(() => {
     if (direccionUsuario) {
@@ -522,6 +903,13 @@ const reportReasons = [
   };
 
   const mostrarConfirmacionPedido = () => {
+    // Validar si es propio emprendimiento
+    const tipoEfectivo = getTipoUsuarioEfectivo ? getTipoUsuarioEfectivo() : usuario?.tipo_usuario;
+    if (esPropioEmprendimiento && tipoEfectivo === 'cliente') {
+      setAdvertenciaPropioNegocio(true);
+      return;
+    }
+    
     if (carritoRef.current.length === 0) {
       Alert.alert(
         "Carrito vacío",
@@ -538,15 +926,27 @@ const reportReasons = [
     setConfirmacionVisible(false);
     
     try {
-      // Guardar el pedido primero (WebSocket actualizará automáticamente)
+      // Guardar el pedido (WebSocket actualizará automáticamente al emprendedor)
       await guardarPedido();
-      console.log('✅ Pedido guardado - WebSocket actualizará automáticamente');
+      console.log('✅ Pedido enviado exitosamente al emprendedor');
       
-      // Abrir WhatsApp
-      abrirWhatsApp();
+      // Limpiar el carrito local y contexto global
+      carritoRef.current = [];
+      limpiarCarrito();
+      forceUpdate({});
+      
+      // Mostrar confirmación al usuario
+      Alert.alert(
+        '¡Pedido Enviado!',
+        'Tu pedido ha sido enviado al emprendedor. Recibirás una notificación cuando lo confirme.',
+        [{ text: 'Entendido' }]
+      );
+      
+      // Volver a la pantalla anterior
+      navigation.goBack();
     } catch (error) {
       console.error('❌ Error al confirmar pedido:', error);
-      // No abrir WhatsApp si hay error
+      Alert.alert('Error', 'No se pudo enviar el pedido. Inténtalo de nuevo.');
     }
   };
 
@@ -556,10 +956,28 @@ const reportReasons = [
       console.log('🔍 producto.id:', producto.id);
       console.log('🔍 producto.nombre:', producto.nombre);
       console.log('🔍 carritoRef.current:', carritoRef.current);
+      console.log('🔍 modoEntrega:', modoEntrega);
+      console.log('🔍 direccionUsuario:', direccionUsuario);
+      console.log('🔍 direcciones disponibles:', direcciones);
+      console.log('🔍 direccionSeleccionada:', direccionSeleccionada);
+      console.log('🔍 usuario.telefono:', usuario?.telefono);
+      console.log('🔍 usuario.tipo_usuario:', usuario?.tipo_usuario);
+      console.log('🔍 getTipoUsuarioEfectivo():', getTipoUsuarioEfectivo ? getTipoUsuarioEfectivo() : 'N/A');
+      
+      // Validación de seguridad: asegurar que hay dirección si es delivery
+      if (modoEntrega === 'delivery' && !direccionUsuario) {
+        console.error('❌ ERROR: Se seleccionó delivery pero no hay dirección de usuario');
+        Alert.alert(
+          'Error de Dirección',
+          'No se pudo obtener tu dirección de entrega. Por favor verifica que tengas una dirección registrada.',
+          [{ text: 'Entendido' }]
+        );
+        throw new Error('No hay dirección de usuario para delivery');
+      }
       
       // Preparar datos para el backend
       const pedidoData = {
-        emprendimiento_id: parseInt(producto.id), // ID del emprendimiento
+        emprendimiento_id: emprendimientoIdReal, // ✅ Usar ID real del emprendimiento (sin parte de producto)
         productos: carritoRef.current.map(item => ({
           producto_id: item.id,
           nombre: item.nombre || item.descripcion,
@@ -571,7 +989,7 @@ const reportReasons = [
         modo_entrega: modoEntrega
       };
 
-      console.log('📤 Datos del pedido:', JSON.stringify(pedidoData, null, 2));
+      console.log('📤 Datos del pedido completos:', JSON.stringify(pedidoData, null, 2));
 
       // Crear pedido en el backend
       const response = await pedidoService.crearPedido(pedidoData);
@@ -680,16 +1098,63 @@ const reportReasons = [
     ).start();
   }, []);
 
+  // Sincronizar con el contexto global: si se limpia desde afuera, limpiar también localmente
+  useEffect(() => {
+    // Si el contexto global dice que NO hay carrito activo, pero localmente sí hay productos
+    if (!carritoActivo && carritoRef.current.length > 0) {
+      console.log('🧹 Limpiando carrito local porque el contexto global se limpió desde otra pantalla');
+      carritoRef.current = [];
+      forceUpdate({});
+    }
+  }, [carritoActivo]);
+
+  // Verificar y sincronizar el carrito cada vez que la pantalla vuelve a estar en foco
+  useFocusEffect(
+    useCallback(() => {
+      console.log('👁️ PedidoDetalleScreen en foco - verificando sincronización del carrito');
+      console.log('   carritoActivo (contexto):', carritoActivo);
+      console.log('   carritoRef.current.length:', carritoRef.current.length);
+      
+      // Si el contexto global dice que NO hay carrito, pero localmente sí hay productos
+      if (!carritoActivo && carritoRef.current.length > 0) {
+        console.log('🧹 LIMPIEZA EN FOCUS: Sincronizando carrito local con contexto global (limpiando)');
+        carritoRef.current = [];
+        forceUpdate({});
+      }
+    }, [carritoActivo])
+  );
+
   // Interceptar navegación hacia atrás si hay items en el carrito
   useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+    const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
       if (carritoRef.current.length > 0) {
         e.preventDefault();
+        setNavegacionPendiente({ tipo: 'back', evento: e });
         setAdvertenciaVisible(true);
       }
     });
 
-    return unsubscribe;
+    return unsubscribeBeforeRemove;
+  }, [navigation]);
+
+  // Interceptar cambios de tab (menú inferior) si hay items en el carrito
+  useEffect(() => {
+    const parent = navigation.getParent();
+    if (!parent) return;
+
+    const unsubscribeTabPress = parent.addListener('tabPress', (e) => {
+      if (carritoRef.current.length > 0) {
+        e.preventDefault();
+        setNavegacionPendiente({ tipo: 'tab', evento: e });
+        setAdvertenciaVisible(true);
+      }
+    });
+
+    return () => {
+      if (unsubscribeTabPress) {
+        unsubscribeTabPress();
+      }
+    };
   }, [navigation]);
 
   // ✅ Horarios estáticos si no existen
@@ -777,75 +1242,150 @@ const reportReasons = [
       colors={[currentTheme.background, currentTheme.background, currentTheme.background, currentTheme.primary]}
       style={[styles.container, { backgroundColor: currentTheme.background }]}
     >
-      {/* Modal de Reporte */}
+      {/* Modal de Reporte Mejorado */}
 <Modal
   animationType="slide"
   transparent={true}
   visible={reportModalVisible}
   onRequestClose={() => {
-    setReportModalVisible(!reportModalVisible);
+          setReportModalVisible(false);
     setSelectedReportReason(null);
+          setReporteDetalle('');
   }}
 >
   <View style={styles.reportModalContainer}>
-    <View style={styles.reportModalContent}>
-      <Text style={[styles.reportModalTitle, { color: currentTheme.text }]}>Reportar Emprendimiento</Text>
-      <Text style={[styles.reportModalSubtitle, { color: currentTheme.textSecondary }]}>Selecciona el motivo del reporte</Text>
+          <View style={[styles.reportModalContent, { backgroundColor: currentTheme.cardBackground }]}>
+            {/* Header Moderno */}
+            <LinearGradient
+              colors={['#e74c3c', '#c0392b']}
+              style={styles.reportModalHeader}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.reportIconWrapper}>
+                <Ionicons name="shield-checkmark" size={32} color="white" />
+              </View>
+              <View style={styles.reportHeaderTexts}>
+                <Text style={styles.reportModalTitle}>Reportar Emprendimiento</Text>
+                <Text style={styles.reportModalSubtitle}>
+                  Ayúdanos a mantener veciApp segura
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.reportCloseButton}
+                onPress={() => {
+                  setReportModalVisible(false);
+                  setSelectedReportReason(null);
+                  setReporteDetalle('');
+                }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="close-circle" size={28} color="white" />
+              </TouchableOpacity>
+            </LinearGradient>
       
-      <ScrollView style={styles.reportOptionsContainer}>
-        {reportReasons.map((reason) => (
+            <ScrollView 
+              style={styles.reportOptionsContainer}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={[styles.reportInstrucciones, { color: currentTheme.textSecondary }]}>
+                Selecciona el motivo que mejor describa el problema:
+              </Text>
+              
+              {reportReasons.map((reason) => {
+                const isSelected = selectedReportReason === reason.id;
+                return (
           <TouchableOpacity
             key={reason.id}
             style={[
-              styles.reportOption,
-              selectedReportReason === reason.id && styles.reportOptionSelected
+                      styles.reportOptionModerna,
+                      { backgroundColor: currentTheme.background, borderColor: currentTheme.border },
+                      isSelected && { borderColor: reason.color, borderWidth: 2 }
             ]}
             onPress={() => setSelectedReportReason(reason.id)}
+                    activeOpacity={0.7}
           >
-            <View style={styles.reportOptionRadio}>
-              {selectedReportReason === reason.id && (
-                <View style={styles.reportOptionRadioSelected} />
-              )}
+                    <View style={[styles.reportOptionIcono, { backgroundColor: reason.color }]}>
+                      <Ionicons name={reason.icono} size={22} color="white" />
             </View>
             <View style={styles.reportOptionTextContainer}>
-              <Text style={styles.reportOptionTitle}>{reason.title}</Text>
-              <Text style={styles.reportOptionDescription}>{reason.description}</Text>
+                      <Text style={[styles.reportOptionTitleModerno, { color: currentTheme.text }]}>
+                        {reason.title}
+                      </Text>
+                      <Text style={[styles.reportOptionDescriptionModerno, { color: currentTheme.textSecondary }]}>
+                        {reason.description}
+                      </Text>
             </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={24} color={reason.color} />
+                    )}
           </TouchableOpacity>
-        ))}
+                );
+              })}
+
+              {/* Campo de texto para "Otro" */}
+              {selectedReportReason === 8 && (
+                <View style={[styles.reportDetalleContainer, { backgroundColor: currentTheme.background }]}>
+                  <Text style={[styles.reportDetalleLabel, { color: currentTheme.text }]}>
+                    Describe el motivo (obligatorio):
+                  </Text>
+                  <TextInput
+                    style={[styles.reportDetalleInput, { 
+                      backgroundColor: currentTheme.cardBackground,
+                      color: currentTheme.text,
+                      borderColor: currentTheme.border
+                    }]}
+                    placeholder="Explica detalladamente el problema..."
+                    placeholderTextColor={currentTheme.textSecondary}
+                    multiline
+                    numberOfLines={4}
+                    value={reporteDetalle}
+                    onChangeText={setReporteDetalle}
+                    textAlignVertical="top"
+                  />
+                </View>
+              )}
       </ScrollView>
 
-      <View style={styles.reportModalButtons}>
+            <View style={[styles.reportModalButtons, { borderTopColor: currentTheme.border }]}>
         <TouchableOpacity
-          style={styles.reportModalCancelButton}
+                style={[styles.reportModalCancelButton, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}
           onPress={() => {
             setReportModalVisible(false);
             setSelectedReportReason(null);
+                  setReporteDetalle('');
           }}
+                activeOpacity={0.8}
         >
-          <Text style={styles.reportModalCancelButtonText}>Cancelar</Text>
+                <Ionicons name="close-circle-outline" size={20} color={currentTheme.textSecondary} />
+                <Text style={[styles.reportModalCancelButtonText, { color: currentTheme.textSecondary }]}>
+                  Cancelar
+                </Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
             styles.reportModalSubmitButton,
-            { backgroundColor: currentTheme.primary },
-            !selectedReportReason && styles.reportModalSubmitButtonDisabled
+                  (!selectedReportReason || (selectedReportReason === 8 && !reporteDetalle.trim())) && styles.reportModalSubmitButtonDisabled
           ]}
-          disabled={!selectedReportReason}
-          onPress={() => {
-            // Aquí iría la lógica para enviar el reporte
-            Alert.alert(
-              "Reporte enviado", // ✅ Este es el título
-              `Motivo: ${reportReasons.find(r => r.id === selectedReportReason).title}`, // ✅ Este es el mensaje
-              [
-                { text: "OK" }
-              ]
-            );
-            setReportModalVisible(false);
-            setSelectedReportReason(null);
-          }}
-        >
-          <Text style={styles.reportModalSubmitButtonText}>Enviar reporte</Text>
+                disabled={!selectedReportReason || (selectedReportReason === 8 && !reporteDetalle.trim()) || enviandoReporte}
+                onPress={enviarReporte}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={['#e74c3c', '#c0392b']}
+                  style={styles.reportSubmitGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  {enviandoReporte ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <>
+                      <Ionicons name="send" size={20} color="white" />
+                      <Text style={styles.reportModalSubmitButtonText}>Enviar Reporte</Text>
+                    </>
+                  )}
+                </LinearGradient>
         </TouchableOpacity>
       </View>
     </View>
@@ -861,34 +1401,95 @@ const reportReasons = [
       >
         <View style={styles.advertenciaModalContainer}>
           <View style={styles.advertenciaModalContent}>
-            <View style={styles.advertenciaHeader}>
-              <FontAwesome name="exclamation-triangle" size={32} color="#f39c12" />
-              <Text style={styles.advertenciaTitulo}>¡Carrito con productos!</Text>
+            {/* Header con gradiente */}
+            <LinearGradient
+              colors={['#f39c12', '#e67e22']}
+              style={styles.advertenciaHeaderModerno}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.advertenciaIconoWrapper}>
+                <Ionicons name="cart" size={32} color="white" />
+                <View style={styles.advertenciaBadge}>
+                  <Text style={styles.advertenciaBadgeTexto}>{obtenerCantidadTotalItems()}</Text>
             </View>
+              </View>
+              <View style={styles.advertenciaHeaderTextos}>
+                <Text style={styles.advertenciaTituloModerno}>¡Carrito Activo!</Text>
+                <Text style={styles.advertenciaSubtituloModerno}>
+                  {obtenerCantidadTotalItems()} {obtenerCantidadTotalItems() === 1 ? 'producto' : 'productos'} en tu carrito
+                </Text>
+              </View>
+            </LinearGradient>
             
-            <Text style={styles.advertenciaMensaje}>
-              Tienes {obtenerCantidadTotalItems()} producto(s) en tu carrito. Si sales de esta pantalla, perderás todos los productos seleccionados.
+            {/* Cuerpo del modal */}
+            <View style={styles.advertenciaBody}>
+              <View style={styles.advertenciaInfoBox}>
+                <Ionicons name="information-circle" size={20} color="#f39c12" />
+                <Text style={styles.advertenciaMensajeModerno}>
+                  Si sales de esta pantalla, perderás todos los productos seleccionados.
             </Text>
+              </View>
             
-            <View style={styles.advertenciaButtons}>
+              {/* Botones modernos */}
+              <View style={styles.advertenciaButtonsModerno}>
               <TouchableOpacity
-                style={styles.advertenciaCancelar}
-                onPress={() => setAdvertenciaVisible(false)}
+                  style={styles.advertenciaCancelarModerno}
+                  onPress={() => {
+                    setAdvertenciaVisible(false);
+                    setNavegacionPendiente(null);
+                    cancelarNavegacionPendiente();
+                  }}
+                  activeOpacity={0.8}
               >
-                <Text style={styles.advertenciaCancelarTexto}>Continuar comprando</Text>
+                  <Ionicons name="arrow-back-circle" size={22} color={currentTheme.primary} />
+                  <Text style={[styles.advertenciaCancelarTextoModerno, { color: currentTheme.primary }]}>
+                    Volver
+                  </Text>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={styles.advertenciaSalir}
+                  style={styles.advertenciaSalirModerno}
                 onPress={() => {
+                    // Limpiar el carrito local y contexto global
                   carritoRef.current = [];
+                    limpiarCarrito();
                   forceUpdate({});
                   setAdvertenciaVisible(false);
+                    
+                    // Ejecutar la navegación pendiente del contexto global si existe
+                    if (navPendienteContexto) {
+                      ejecutarNavegacionPendiente();
+                      setNavegacionPendiente(null);
+                    }
+                    // Si no, ejecutar la navegación local pendiente
+                    else if (navegacionPendiente) {
+                      if (navegacionPendiente.tipo === 'back') {
+                        navigation.dispatch(navegacionPendiente.evento.data.action);
+                      } else if (navegacionPendiente.tipo === 'tab') {
+                        const targetRoute = navegacionPendiente.evento.target?.split('-')[0];
+                        if (targetRoute) {
+                          navigation.getParent()?.navigate(targetRoute);
+                        }
+                      }
+                      setNavegacionPendiente(null);
+                    } else {
                   navigation.goBack();
-                }}
+                    }
+                  }}
+                  activeOpacity={0.9}
+                >
+                  <LinearGradient
+                    colors={['#e74c3c', '#c0392b']}
+                    style={styles.advertenciaSalirGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.advertenciaSalirTexto}>Salir sin guardar</Text>
+                    <Ionicons name="trash" size={20} color="white" />
+                    <Text style={styles.advertenciaSalirTextoModerno}>Vaciar</Text>
+                  </LinearGradient>
               </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -903,46 +1504,151 @@ const reportReasons = [
       >
         <View style={styles.confirmacionModalContainer}>
           <View style={[styles.confirmacionModalContent, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.confirmacionHeader}>
-              <FontAwesome name="check-circle" size={32} color={currentTheme.primary} />
-              <Text style={[styles.confirmacionTitulo, { color: currentTheme.text }]}>Confirmar Pedido</Text>
+            <LinearGradient
+              colors={[currentTheme.primary, currentTheme.secondary]}
+              style={styles.confirmacionHeader}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.confirmacionIconWrapper}>
+                <Ionicons name="send" size={32} color="white" />
             </View>
-            
-            <Text style={[styles.confirmacionMensaje, { color: currentTheme.textSecondary }]}>
-              ¿Está seguro que su pedido está completo?
+              <View>
+                <Text style={styles.confirmacionTitulo}>Confirmar Pedido</Text>
+                <Text style={styles.confirmacionSubtitulo}>
+                  Se enviará directamente al emprendedor
             </Text>
+              </View>
+            </LinearGradient>
             
+            <View style={styles.confirmacionBody}>
             <View style={[styles.confirmacionResumen, { backgroundColor: currentTheme.background }]}>
-              <Text style={[styles.confirmacionResumenTitulo, { color: currentTheme.text }]}>Resumen del pedido:</Text>
-              {carritoRef.current.map((item, index) => (
-                <Text key={index} style={[styles.confirmacionItem, { color: currentTheme.textSecondary }]}>
-                  • {item.nombre || item.descripcion} (x{item.cantidad})
+                <Text style={[styles.confirmacionResumenTitulo, { color: currentTheme.text }]}>
+                  📦 Resumen del pedido
                 </Text>
-              ))}
-              <Text style={[styles.confirmacionTotal, { color: currentTheme.primary, borderTopColor: currentTheme.border }]}>
-                Total: ${obtenerTotalCarrito().toLocaleString("es-CL")}
+              {carritoRef.current.map((item, index) => (
+                  <View key={index} style={styles.confirmacionItemRow}>
+                    <Text style={[styles.confirmacionItem, { color: currentTheme.text }]}>
+                      {item.nombre || item.descripcion}
+                </Text>
+                    <Text style={[styles.confirmacionItemCantidad, { color: currentTheme.textSecondary }]}>
+                      x{item.cantidad}
+                    </Text>
+                  </View>
+                ))}
+                <View style={[styles.confirmacionTotalRow, { borderTopColor: currentTheme.border }]}>
+                  <Text style={[styles.confirmacionTotalLabel, { color: currentTheme.textSecondary }]}>
+                    Total:
+                  </Text>
+                  <Text style={[styles.confirmacionTotal, { color: currentTheme.primary }]}>
+                    ${obtenerTotalCarrito().toLocaleString("es-CL")}
               </Text>
+                </View>
+              </View>
+
+              <View style={[styles.confirmacionInfo, { backgroundColor: currentTheme.primary + '10', borderLeftColor: currentTheme.primary }]}>
+                <Ionicons name="information-circle" size={18} color={currentTheme.primary} />
+                <Text style={[styles.confirmacionInfoTexto, { color: currentTheme.primary }]}>
+                  El emprendedor recibirá tu pedido al instante y te notificará cuando lo confirme
+                </Text>
+              </View>
             </View>
             
             <View style={styles.confirmacionButtons}>
               <TouchableOpacity
-                style={styles.confirmacionCancelar}
+                style={[styles.confirmacionCancelar, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}
                 onPress={() => setConfirmacionVisible(false)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.confirmacionCancelarTexto}>Revisar</Text>
+                <Ionicons name="close-circle-outline" size={20} color={currentTheme.textSecondary} />
+                <Text style={[styles.confirmacionCancelarTexto, { color: currentTheme.textSecondary }]}>
+                  Revisar
+                </Text>
               </TouchableOpacity>
               
               <TouchableOpacity
                 style={styles.confirmacionEnviar}
                 onPress={confirmarEnvioPedido}
+                activeOpacity={0.9}
               >
-                <Text style={styles.confirmacionEnviarTexto}>Enviar Pedido</Text>
+                <LinearGradient
+                  colors={[currentTheme.primary, currentTheme.secondary]}
+                  style={styles.confirmacionEnviarGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="checkmark-circle" size={22} color="white" />
+                  <Text style={styles.confirmacionEnviarTexto}>Confirmar Pedido</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
+      {/* Modal de Advertencia - Propio Negocio */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={advertenciaPropioNegocio}
+        onRequestClose={() => setAdvertenciaPropioNegocio(false)}
+      >
+        <View style={styles.advertenciaModalContainer}>
+          <View style={styles.advertenciaModalContent}>
+            {/* Header con gradiente */}
+            <LinearGradient
+              colors={['#e74c3c', '#c0392b']}
+              style={styles.advertenciaHeaderModerno}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <View style={styles.advertenciaIconoWrapper}>
+                <Ionicons name="close-circle" size={48} color="white" />
+              </View>
+              <View style={styles.advertenciaHeaderTextos}>
+                <Text style={styles.advertenciaTituloModerno}>¡No puedes comprar aquí!</Text>
+                <Text style={styles.advertenciaSubtituloModerno}>
+                  Este es tu propio emprendimiento
+                </Text>
+              </View>
+            </LinearGradient>
+            
+            {/* Cuerpo del modal */}
+            <View style={styles.advertenciaBody}>
+              <View style={[styles.advertenciaInfoBox, { backgroundColor: '#fee', borderLeftColor: '#e74c3c' }]}>
+                <Ionicons name="alert-circle" size={24} color="#e74c3c" />
+                <Text style={[styles.advertenciaMensajeModerno, { color: '#c0392b' }]}>
+                  No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.
+                </Text>
+              </View>
+
+              <View style={[styles.advertenciaInfoBox, { backgroundColor: '#e8f4f8', borderLeftColor: '#3498db' }]}>
+                <Ionicons name="information-circle" size={20} color="#3498db" />
+                <Text style={[styles.advertenciaMensajeModerno, { color: '#2c3e50', fontSize: 13 }]}>
+                  💡 <Text style={{ fontWeight: '700' }}>Consejo:</Text> Vuelve a tu vista de emprendedor para gestionar este negocio o explora otros emprendimientos para comprar.
+                </Text>
+              </View>
+
+              {/* Botón de cerrar */}
+              <TouchableOpacity
+                style={styles.advertenciaBotonEntendido}
+                onPress={() => setAdvertenciaPropioNegocio(false)}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={[currentTheme.primary, currentTheme.secondary]}
+                  style={styles.advertenciaBotonGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="checkmark-circle" size={22} color="white" />
+                  <Text style={styles.advertenciaBotonTexto}>Entendido</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Modal del Carrito */}
       <Modal
@@ -963,20 +1669,21 @@ const reportReasons = [
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.carritoLista}>
+            <ScrollView style={styles.carritoLista} showsVerticalScrollIndicator={false}>
               {carritoRef.current.length === 0 ? (
                 <View style={styles.carritoVacio}>
-                  <FontAwesome name="shopping-cart" size={48} color={currentTheme.textSecondary} />
+                  <Ionicons name="cart-outline" size={64} color={currentTheme.textSecondary} />
                   <Text style={[styles.carritoVacioTexto, { color: currentTheme.text }]}>Tu carrito está vacío</Text>
                   <Text style={[styles.carritoVacioSubtexto, { color: currentTheme.textSecondary }]}>Agrega productos para comenzar tu pedido</Text>
                 </View>
               ) : (
-                carritoRef.current.map((item) => (
+                <>
+                  {carritoRef.current.map((item) => (
                   <View key={item.id} style={[styles.carritoItem, { borderBottomColor: currentTheme.border }]}>
                     <View style={styles.carritoItemInfo}>
                       <Text style={[styles.carritoItemNombre, { color: currentTheme.text }]}>{item.nombre || item.descripcion}</Text>
                       <Text style={[styles.carritoItemPrecio, { color: currentTheme.textSecondary }]}>
-                        ${item.precio ? item.precio.toLocaleString("es-CL") : "Consulte"} c/u
+                          ${item.precio ? Math.round(item.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.') : "Consulte"} c/u
                       </Text>
                     </View>
                     
@@ -985,47 +1692,342 @@ const reportReasons = [
                         style={[styles.carritoBotonCantidad, { borderColor: currentTheme.primary }]}
                         onPress={() => quitarDelCarrito(item.id)}
                       >
-                        <FontAwesome name="minus" size={14} color={currentTheme.primary} />
+                          <Ionicons name="remove" size={16} color={currentTheme.primary} />
                       </TouchableOpacity>
                       <Text style={[styles.carritoCantidad, { color: currentTheme.text }]}>{item.cantidad}</Text>
                       <TouchableOpacity
                         style={[styles.carritoBotonCantidad, { borderColor: currentTheme.primary }]}
                         onPress={() => agregarAlCarrito(item)}
                       >
-                        <FontAwesome name="plus" size={14} color={currentTheme.primary} />
+                          <Ionicons name="add" size={16} color={currentTheme.primary} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.carritoBotonEliminar}
                         onPress={() => eliminarDelCarrito(item.id)}
                       >
-                        <FontAwesome name="trash" size={14} color="#e74c3c" />
+                          <Ionicons name="trash" size={14} color="#e74c3c" />
                       </TouchableOpacity>
                     </View>
                   </View>
-                ))
+                  ))}
+                </>
               )}
             </ScrollView>
 
             {carritoRef.current.length > 0 && (
               <View style={[styles.carritoFooter, { borderTopColor: currentTheme.border }]}>
-                <View style={styles.carritoTotal}>
+                <View style={styles.carritoTotalContainer}>
+                  <View>
+                    <Text style={[styles.carritoTotalLabel, { color: currentTheme.textSecondary }]}>
+                      Total del pedido
+                    </Text>
                   <Text style={[styles.carritoTotalTexto, { color: currentTheme.primary }]}>
-                    Total: ${obtenerTotalCarrito().toLocaleString("es-CL")}
+                      ${obtenerTotalCarrito().toLocaleString("es-CL")}
                   </Text>
                 </View>
-                
                 <TouchableOpacity
-                  style={styles.carritoBotonPedido}
+                    style={styles.carritoBotonPedidoModerno}
                   onPress={() => {
                     setMostrarCarrito(false);
-                    mostrarConfirmacionPedido();
+                      setMostrarConfirmacionEntrega(true);
                   }}
+                    activeOpacity={0.9}
                 >
-                  <FontAwesome name="whatsapp" size={20} color="white" />
-                  <Text style={styles.carritoBotonPedidoTexto}>Enviar Pedido</Text>
+                    <LinearGradient
+                      colors={[currentTheme.primary, currentTheme.secondary]}
+                      style={styles.botonPedidoGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="arrow-forward" size={20} color="white" />
+                      <Text style={styles.carritoBotonPedidoTextoModerno}>Siguiente</Text>
+                    </LinearGradient>
                 </TouchableOpacity>
+                </View>
               </View>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Nuevo Modal de Confirmación de Entrega */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={mostrarConfirmacionEntrega}
+        onRequestClose={() => setMostrarConfirmacionEntrega(false)}
+      >
+        <View style={styles.carritoModalContainer}>
+          <View style={[styles.carritoModalContent, { backgroundColor: currentTheme.cardBackground }]}>
+            <View style={[styles.carritoHeader, { borderBottomColor: currentTheme.border }]}>
+              <TouchableOpacity
+                style={styles.botonVolverModal}
+                onPress={() => {
+                  setMostrarConfirmacionEntrega(false);
+                  setMostrarCarrito(true);
+                }}
+              >
+                <Ionicons name="arrow-back" size={24} color={currentTheme.text} />
+              </TouchableOpacity>
+              <Text style={[styles.carritoTitulo, { color: currentTheme.text }]}>Confirmar Pedido</Text>
+              <TouchableOpacity
+                style={styles.carritoCerrar}
+                onPress={() => setMostrarConfirmacionEntrega(false)}
+              >
+                <FontAwesome name="times" size={24} color={currentTheme.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.carritoLista} showsVerticalScrollIndicator={false}>
+              {/* Opciones de Entrega */}
+              <View style={[styles.entregaEnModal, { backgroundColor: currentTheme.background }]}>
+                <Text style={[styles.modalSeccionTitulo, { color: currentTheme.text }]}>
+                  🚚 Opciones de Entrega
+                </Text>
+                <View style={styles.selectorContainerModal}>
+                  {producto.metodosEntrega.delivery && (
+                    <TouchableOpacity
+                      style={styles.selectorBotonModal}
+                      onPress={() => cambiarModoEntrega("delivery")}
+                      activeOpacity={0.8}
+                    >
+                      {modoEntrega === "delivery" ? (
+                        <LinearGradient
+                          colors={[currentTheme.primary, currentTheme.secondary]}
+                          style={styles.selectorGradientModal}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                        >
+                          <Ionicons name="bicycle" size={22} color="white" />
+                          <View style={styles.selectorTextoContainerModal}>
+                            <Text style={styles.selectorTextoSeleccionadoModal}>Delivery</Text>
+                            <Text style={styles.selectorSubtextoSeleccionadoModal}>
+                              {producto.metodosEntrega.deliveryCosto || "Costo variable"}
+                            </Text>
+                          </View>
+                          <Ionicons name="checkmark-circle" size={20} color="white" />
+                        </LinearGradient>
+                      ) : (
+                        <View style={[styles.selectorNoSeleccionadoModal, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+                          <Ionicons name="bicycle-outline" size={22} color={currentTheme.textSecondary} />
+                          <View style={styles.selectorTextoContainerModal}>
+                            <Text style={[styles.selectorTextoNoSeleccionadoModal, { color: currentTheme.text }]}>Delivery</Text>
+                            <Text style={[styles.selectorSubtextoNoSeleccionadoModal, { color: currentTheme.textSecondary }]}>
+                              {producto.metodosEntrega.deliveryCosto || "Costo variable"}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  )}
+
+                  {producto.metodosEntrega.retiro && (
+                    <TouchableOpacity
+                      style={styles.selectorBotonModal}
+                      onPress={() => cambiarModoEntrega("retiro")}
+                      activeOpacity={0.8}
+                    >
+                      {modoEntrega === "retiro" ? (
+                        <LinearGradient
+                          colors={[currentTheme.primary, currentTheme.secondary]}
+                          style={styles.selectorGradientModal}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 0 }}
+                        >
+                          <Ionicons name="bag-handle" size={22} color="white" />
+                          <View style={styles.selectorTextoContainerModal}>
+                            <Text style={styles.selectorTextoSeleccionadoModal}>Retiro en Local</Text>
+                            <Text style={styles.selectorSubtextoSeleccionadoModal}>Sin costo adicional</Text>
+                          </View>
+                          <Ionicons name="checkmark-circle" size={20} color="white" />
+                        </LinearGradient>
+                      ) : (
+                        <View style={[styles.selectorNoSeleccionadoModal, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+                          <Ionicons name="bag-handle-outline" size={22} color={currentTheme.textSecondary} />
+                          <View style={styles.selectorTextoContainerModal}>
+                            <Text style={[styles.selectorTextoNoSeleccionadoModal, { color: currentTheme.text }]}>Retiro en Local</Text>
+                            <Text style={[styles.selectorSubtextoNoSeleccionadoModal, { color: currentTheme.textSecondary }]}>Sin costo adicional</Text>
+                          </View>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Información de Dirección si es Delivery */}
+                {modoEntrega === "delivery" && direccionUsuario && (
+                  <View style={[styles.direccionInfoBox, { backgroundColor: currentTheme.primary + '10', borderLeftColor: currentTheme.primary }]}>
+                    <Ionicons name="location" size={18} color={currentTheme.primary} />
+                    <View style={styles.direccionInfoTextos}>
+                      <Text style={[styles.direccionInfoLabel, { color: currentTheme.textSecondary }]}>
+                        Dirección de entrega:
+                      </Text>
+                      <Text style={[styles.direccionInfoTexto, { color: currentTheme.text }]}>
+                        {direccionUsuario}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Medios de Pago */}
+              <View style={[styles.mediosPagoEnModal, { backgroundColor: currentTheme.background }]}>
+                <Text style={[styles.modalSeccionTitulo, { color: currentTheme.text }]}>
+                  💳 Aceptamos
+                </Text>
+                <View style={styles.metodosPagoListaModal}>
+                  {producto.metodosPago.tarjeta && (
+                    <View style={styles.metodoPagoItemModal}>
+                      <Ionicons name="card" size={16} color="#3498db" />
+                      <Text style={[styles.metodoPagoTextoModal, { color: currentTheme.textSecondary }]}>
+                        Tarjeta de crédito/débito
+                      </Text>
+                    </View>
+                  )}
+                  {producto.metodosPago.efectivo && (
+                    <View style={styles.metodoPagoItemModal}>
+                      <Ionicons name="cash" size={16} color="#27ae60" />
+                      <Text style={[styles.metodoPagoTextoModal, { color: currentTheme.textSecondary }]}>
+                        Efectivo
+                      </Text>
+                    </View>
+                  )}
+                  {producto.metodosPago.transferencia && (
+                    <View style={styles.metodoPagoItemModal}>
+                      <Ionicons name="swap-horizontal" size={16} color="#9b59b6" />
+                      <Text style={[styles.metodoPagoTextoModal, { color: currentTheme.textSecondary }]}>
+                        Transferencia bancaria
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Cupón de Descuento */}
+              <View style={[styles.cuponEnModal, { backgroundColor: currentTheme.background }]}>
+                <Text style={[styles.modalSeccionTitulo, { color: currentTheme.text }]}>
+                  🎫 Cupón de Descuento
+                </Text>
+                
+                {cuponAplicado ? (
+                  <View style={[styles.cuponAplicadoBox, { backgroundColor: currentTheme.cardBackground, borderColor: '#27ae60' }]}>
+                    <View style={styles.cuponAplicadoHeader}>
+                      <View style={styles.cuponAplicadoIcono}>
+                        <Ionicons name="checkmark-circle" size={24} color="#27ae60" />
+                      </View>
+                      <View style={styles.cuponAplicadoInfo}>
+                        <Text style={[styles.cuponAplicadoCodigo, { color: currentTheme.text }]}>
+                          {cuponAplicado.codigo || 'CUPÓN'}
+                        </Text>
+                        <Text style={[styles.cuponAplicadoDescripcion, { color: '#27ae60' }]}>
+                          {cuponAplicado.descripcion}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.cuponRemover}
+                        onPress={removerCupon}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="close-circle" size={24} color="#e74c3c" />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.cuponBotonAgregar}
+                    onPress={() => {
+                      navigation.navigate('Cupones', {
+                        modoSeleccion: true,
+                        emprendimientoId: emprendimientoIdReal,
+                        onCuponSeleccionado: aplicarCupon
+                      });
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <LinearGradient
+                      colors={[currentTheme.primary + '20', currentTheme.secondary + '20']}
+                      style={styles.cuponBotonGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <Ionicons name="add-circle" size={20} color={currentTheme.primary} />
+                      <Text style={[styles.cuponBotonTexto, { color: currentTheme.primary }]}>
+                        Aplicar Cupón
+                      </Text>
+                      <Ionicons name="chevron-forward" size={18} color={currentTheme.primary} />
+                    </LinearGradient>
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Resumen del Pedido */}
+              <View style={[styles.resumenPedidoBox, { backgroundColor: currentTheme.background }]}>
+                <Text style={[styles.modalSeccionTitulo, { color: currentTheme.text }]}>
+                  📦 Resumen del Pedido
+                </Text>
+                
+                <View style={styles.resumenLinea}>
+                  <Text style={[styles.resumenLabel, { color: currentTheme.textSecondary }]}>
+                    Subtotal ({obtenerCantidadTotalItems()} productos)
+                  </Text>
+                  <Text style={[styles.resumenValor, { color: currentTheme.text }]}>
+                    ${obtenerTotalCarrito().toLocaleString("es-CL")}
+                  </Text>
+                </View>
+
+                {modoEntrega === "delivery" && obtenerCostoDelivery() > 0 && (
+                  <View style={styles.resumenLinea}>
+                    <Text style={[styles.resumenLabel, { color: currentTheme.textSecondary }]}>
+                      Costo de Delivery
+                    </Text>
+                    <Text style={[styles.resumenValor, { color: currentTheme.text }]}>
+                      ${obtenerCostoDelivery().toLocaleString("es-CL")}
+                    </Text>
+                  </View>
+                )}
+
+                {cuponAplicado && descuentoCupon > 0 && (
+                  <View style={styles.resumenLinea}>
+                    <Text style={[styles.resumenLabel, { color: '#27ae60' }]}>
+                      🎫 Descuento ({cuponAplicado.codigo || 'Cupón'})
+                    </Text>
+                    <Text style={[styles.resumenValor, { color: '#27ae60' }]}>
+                      -${descuentoCupon.toLocaleString("es-CL")}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={[styles.resumenLineaTotal, { borderTopColor: currentTheme.border }]}>
+                  <Text style={[styles.resumenLabelTotal, { color: currentTheme.text }]}>
+                    Total
+                  </Text>
+                  <Text style={[styles.resumenValorTotal, { color: currentTheme.primary }]}>
+                    ${obtenerTotalConDelivery().toLocaleString("es-CL")}
+                  </Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <View style={[styles.carritoFooter, { borderTopColor: currentTheme.border }]}>
+              <TouchableOpacity
+                style={styles.carritoBotonConfirmarModerno}
+                onPress={() => {
+                  setMostrarConfirmacionEntrega(false);
+                  mostrarConfirmacionPedido();
+                }}
+                activeOpacity={0.9}
+              >
+                <LinearGradient
+                  colors={[currentTheme.primary, currentTheme.secondary]}
+                  style={styles.botonPedidoGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                >
+                  <Ionicons name="checkmark-circle" size={22} color="white" />
+                  <Text style={styles.carritoBotonPedidoTextoModerno}>Confirmar Pedido</Text>
+                </LinearGradient>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1106,53 +2108,56 @@ const reportReasons = [
         />
       </View>
 
+      {/* Navbar Superior Moderna */}
       <View style={styles.navbar}>
-        {/* 🔥 Botón de volver atrás */}
         <TouchableOpacity
-          style={styles.botonAtras}
+          style={styles.botonNavModerno}
           onPress={() => navigation.goBack()}
+          activeOpacity={0.8}
         >
-          <FontAwesome name="arrow-left" size={24} color="white" />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.6)', 'rgba(0,0,0,0.5)']}
+            style={styles.botonNavGradient}
+          >
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </LinearGradient>
         </TouchableOpacity>
 
-        {/* 🔥 Botón de marcar favorito */}
         {!isPreview && (
           <View style={styles.rightButtonsContainer}>
-              {/* Botón de Reporte */}
             <TouchableOpacity
-              style={styles.botonReporte}
+              style={styles.botonNavModerno}
               onPress={() => setReportModalVisible(true)}
+              activeOpacity={0.8}
             >
-              <FontAwesome name="exclamation-triangle" size={24} color="white" />
+              <LinearGradient
+                colors={['rgba(255,193,7,0.85)', 'rgba(255,152,0,0.85)']}
+                style={styles.botonNavGradient}
+            >
+                <Ionicons name="flag" size={22} color="white" />
+              </LinearGradient>
             </TouchableOpacity>
             
-            {/* Botón del Carrito */}
             <TouchableOpacity
-              style={styles.botonCarrito}
-              onPress={() => setMostrarCarrito(true)}
+              style={[styles.botonNavModerno, esFavorito && styles.botonFavoritoActivo]}
+              onPress={toggleFavorito}
+              disabled={cargandoFavorito}
+              activeOpacity={0.8}
             >
-              <FontAwesome name="shopping-cart" size={24} color="white" />
-              {obtenerCantidadTotalItems() > 0 && (
-                <View style={styles.badgeCarrito}>
-                  <Text style={styles.badgeTexto}>{obtenerCantidadTotalItems()}</Text>
-                </View>
+              <LinearGradient
+                colors={esFavorito ? ['rgba(231,76,60,1)', 'rgba(192,57,43,1)'] : ['rgba(231,76,60,0.85)', 'rgba(192,57,43,0.85)']}
+                style={styles.botonNavGradient}
+            >
+              {cargandoFavorito ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                  <Ionicons 
+                    name={esFavorito ? "heart" : "heart-outline"} 
+                    size={22} 
+                  color="white" 
+                />
               )}
-            </TouchableOpacity>
-            
-            {/* Botón de WhatsApp */}
-            <TouchableOpacity
-              style={styles.botonContacto}
-              onPress={abrirWhatsApp}
-            >
-              <FontAwesome name="whatsapp" size={29} color="white" />
-            </TouchableOpacity>
-
-            {/* Botón de Favorito */}
-            <TouchableOpacity
-              style={styles.botonFavorito}
-              onPress={() => console.log("Marcado como favorito!")}
-            >
-              <FontAwesome name="heart" size={24} color="white" />
+              </LinearGradient>
             </TouchableOpacity>
           </View>
         )}
@@ -1164,239 +2169,217 @@ const reportReasons = [
         contentContainerStyle={styles.scrollContent}
       >
         <View style={[styles.contenedorSuperpuesto, { backgroundColor: currentTheme.cardBackground }]}>
-          <View style={styles.productoHeader}>
-            {/* 🔥 Logo a la izquierda */}
+          {/* Header del Emprendimiento Moderno */}
+          <View style={styles.emprendimientoHeaderModerno}>
+            <View style={styles.logoWrapper}>
             <Image
-              source={
-                producto.logo
-              }
-              style={styles.productoLogo}
-            />
-
-            {/* 🔥 Contenedor del nombre y las estrellas */}
-            <View style={styles.infoContainer}>
-              <Text style={[styles.nombreEmpresa, { color: currentTheme.text }]}>{producto.nombre}</Text>
-
-              {/* ✅ Evaluación con estrellas mejorada */}
-              {renderEstrellasConVotantes()}
+                source={producto.logo}
+                style={styles.logoModerno}
+              />
+              <View style={[
+                styles.estadoBadgeFloat,
+                {
+                  backgroundColor: isOpen === "Abierto" 
+                    ? "#27ae60" 
+                    : isOpen === "Cierra Pronto"
+                    ? "#f39c12"
+                    : "#e74c3c"
+                }
+              ]}>
+                <Animated.View
+                  style={[
+                    styles.puntitoPulso,
+                    {
+                      opacity: isOpen === "Abierto" || isOpen === "Cierra Pronto" ? animatedValue : 1,
+                    },
+                  ]}
+                />
             </View>
           </View>
 
-          <Text style={[styles.descripcion, { color: currentTheme.textSecondary }]}>{producto.descripcion}</Text>
+            <View style={styles.infoHeaderModerno}>
+              <Text style={[styles.nombreModerno, { color: currentTheme.text }]} numberOfLines={2}>
+                {producto.nombre}
+              </Text>
           
-          {/* ✅ Precio y estado */}
-          <View style={styles.productoEstadoContainer}>
-            <Animated.View
-              style={[
-                styles.luzEstado,
+              {renderEstrellasConVotantes()}
+              
+              <View style={styles.metasContainer}>
+                <View style={[
+                  styles.estadoBadgeModerno,
                 {
-                  backgroundColor:
-                    isOpen === "Abierto"
-                      ? "#4CAF50" // Verde más profesional
+                    backgroundColor: isOpen === "Abierto" 
+                      ? "#27ae60" + '15' 
                       : isOpen === "Cierra Pronto"
-                      ? "#FF9800" // Naranja más profesional
-                      : "#F44336", // Rojo más profesional
-                  opacity:
-                    isOpen === "Abierto" || isOpen === "Cierra Pronto"
-                      ? animatedValue
-                      : 1,
-                },
-              ]}
+                      ? "#f39c12" + '15'
+                      : "#e74c3c" + '15'
+                  }
+                ]}>
+                  <Ionicons 
+                    name={isOpen === "Abierto" ? "checkmark-circle" : "time"} 
+                    size={14} 
+                    color={
+                    isOpen === "Abierto"
+                        ? "#27ae60" 
+                      : isOpen === "Cierra Pronto"
+                        ? "#f39c12"
+                        : "#e74c3c"
+                    } 
             />
-            <View style={styles.estadoTextoContainer}>
-              <Text
-                style={[
-                  styles.productoEstado,
+                  <Text style={[
+                    styles.estadoTextoModerno,
                   {
-                    color:
-                      isOpen === "Abierto"
-                        ? "#4CAF50"
+                      color: isOpen === "Abierto" 
+                        ? "#27ae60" 
                         : isOpen === "Cierra Pronto"
-                        ? "#FF9800"
-                        : "#F44336",
-                  },
-                ]}
-              >
+                        ? "#f39c12"
+                        : "#e74c3c"
+                    }
+                  ]}>
                 {estadoMapeado}
               </Text>
             </View>
+                
+                {distancia && (
+                  <View style={[styles.distanciaBadgeModerno, { backgroundColor: currentTheme.primary + '15' }]}>
+                    <Ionicons name="location" size={14} color={currentTheme.primary} />
+                    <Text style={[styles.distanciaTextoModerno, { color: currentTheme.primary }]}>
+                      {cargandoDistancia ? "..." : distancia}
+                    </Text>
           </View>
-          <View style={styles.distanciaContainer}>
-            <FontAwesome name="map-marker" size={16} color={currentTheme.primary} />
-            <Text style={[styles.distanciaTexto, { color: currentTheme.text }]}>
-              {cargandoDistancia
-                ? "Calculando distancia..."
-                : "A " + distancia + " de tu ubicación" ||
-                  "Distancia no disponible"}
+                )}
+              </View>
+            </View>
+          </View>
+
+          {/* Descripción */}
+          {producto.descripcion && (
+            <View style={[styles.descripcionCard, { backgroundColor: currentTheme.background }]}>
+              <Text style={[styles.descripcionModerna, { color: currentTheme.textSecondary }]}>
+                {producto.descripcion}
             </Text>
           </View>
-          {/* ✅ Dirección y botones */}
-          {/* ✅ Sección de Contacto con Acordeón */}
+          )}
+
+          {/* Descripción Larga - Sobre el Negocio */}
+          {producto.descripcionLarga && (
+            <View style={[styles.descripcionLargaCard, { backgroundColor: currentTheme.background }]}>
+              <View style={styles.seccionHeaderContent}>
+                <View style={[styles.seccionIconWrapper, { backgroundColor: currentTheme.primary + '20' }]}>
+                  <Ionicons name="document-text" size={20} color={currentTheme.primary} />
+                </View>
+                <Text style={[styles.seccionTituloModerno, { color: currentTheme.text }]}>
+                  Sobre el Negocio
+                </Text>
+              </View>
+              <Text style={[styles.descripcionLargaTexto, { color: currentTheme.textSecondary }]}>
+                {producto.descripcionLarga}
+              </Text>
+            </View>
+          )}
+
+          {/* Información de Contacto Moderna */}
           <TouchableOpacity
-            style={[styles.acordeonTitulo, { borderBottomColor: currentTheme.border }]}
+            style={[styles.seccionHeaderModerno, { backgroundColor: currentTheme.background }]}
             onPress={() => setContactoAbierto(!contactoAbierto)}
+            activeOpacity={0.7}
           >
-            <Text style={[styles.seccionTituloAcordeon, { color: currentTheme.text }]}>
+            <View style={styles.seccionHeaderContent}>
+              <View style={[styles.seccionIconWrapper, { backgroundColor: currentTheme.primary + '20' }]}>
+                <Ionicons name="information-circle" size={20} color={currentTheme.primary} />
+              </View>
+              <Text style={[styles.seccionTituloModerno, { color: currentTheme.text }]}>
               Información de Contacto
             </Text>
-            <FontAwesome
+            </View>
+            <Ionicons
               name={contactoAbierto ? "chevron-up" : "chevron-down"}
-              size={18}
+              size={24}
               color={currentTheme.primary}
             />
           </TouchableOpacity>
 
           {contactoAbierto && (
-            <View style={styles.acordeonContenido}>
+            <View style={[styles.contactoContainerModerno, { backgroundColor: currentTheme.background }]}>
               <TouchableOpacity
-                style={styles.contactoItem}
+                style={[styles.contactoItemModerno, { borderBottomColor: currentTheme.border }]}
                 onPress={llamarTelefono}
+                activeOpacity={0.7}
               >
-                <FontAwesome name="phone" size={18} color={currentTheme.primary} />
-                <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>{producto.telefono}</Text>
-                <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Tocar para llamar)</Text>
+                <View style={[styles.contactoIconContainer, { backgroundColor: '#3498db' + '20' }]}>
+                  <Ionicons name="call" size={20} color="#3498db" />
+                </View>
+                <View style={styles.contactoTextoContainer}>
+                  <Text style={[styles.contactoLabelModerno, { color: currentTheme.textSecondary }]}>
+                    Teléfono
+                </Text>
+                  <Text style={[styles.contactoValueModerno, { color: currentTheme.text }]}>
+                    {producto.telefono}
+                  </Text>
+              </View>
+                <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
               </TouchableOpacity>
 
-              <View style={styles.contactoItem}>
-                <FontAwesome name="map-marker" size={18} color={currentTheme.primary} />
-                <Text
-                  style={[styles.contactoTexto, { color: currentTheme.text }]}
-                  numberOfLines={2} // Permite hasta 2 líneas
-                  ellipsizeMode="tail"
+                <TouchableOpacity
+                style={[styles.contactoItemModerno, { borderBottomColor: currentTheme.border }]}
+                onPress={abrirMapa}
+                activeOpacity={0.7}
                 >
-                  {producto.direccion}
-                </Text>
-                <TouchableOpacity onPress={abrirMapa}>
-                  <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Ver en mapa)</Text>
+                <View style={[styles.contactoIconContainer, { backgroundColor: '#e74c3c' + '20' }]}>
+                  <Ionicons name="location" size={20} color="#e74c3c" />
+                </View>
+                <View style={styles.contactoTextoContainer}>
+                  <Text style={[styles.contactoLabelModerno, { color: currentTheme.textSecondary }]}>
+                    Dirección
+                    </Text>
+                  <Text style={[styles.contactoValueModerno, { color: currentTheme.text }]} numberOfLines={2}>
+                    {producto.direccion}
+                    </Text>
+                  </View>
+                <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
                 </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={styles.contactoItem}
+
+                <TouchableOpacity
+                style={styles.contactoItemModerno}
                 onPress={() => setModalVisible(true)}
+                activeOpacity={0.7}
               >
-                <FontAwesome name="clock-o" size={18} color={currentTheme.primary} />
-                <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>Horarios de atención</Text>
-                <Text style={[styles.contactoAccion, { color: currentTheme.primary }]}> (Ver horarios)</Text>
-              </TouchableOpacity>
+                <View style={[styles.contactoIconContainer, { backgroundColor: '#f39c12' + '20' }]}>
+                  <Ionicons name="time" size={20} color="#f39c12" />
+                </View>
+                <View style={styles.contactoTextoContainer}>
+                  <Text style={[styles.contactoLabelModerno, { color: currentTheme.textSecondary }]}>
+                    Horarios
+                    </Text>
+                  <Text style={[styles.contactoValueModerno, { color: currentTheme.text }]}>
+                    Ver horarios de atención
+                    </Text>
+                  </View>
+                <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
             </View>
           )}
-          <View style={styles.seccionEntrega}>
-            <Text style={[styles.seccionTitulo, { color: currentTheme.text }]}>Opciones de Entrega</Text>
-            {/* 🔥 Métodos de pago disponibles */}
-            <Text style={[styles.contactoTexto, { color: currentTheme.text }]}>Medios de Pago:</Text>
-            <View style={styles.metodosPagoContainer}>
-              {producto.metodosPago.tarjeta && (
-                <View style={styles.metodoPago}>
-                  <FontAwesome name="credit-card" size={20} color={currentTheme.primary} />
-                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Tarjeta</Text>
-                </View>
-              )}
-              {producto.metodosPago.efectivo && (
-                <View style={styles.metodoPago}>
-                  <FontAwesome name="money" size={20} color="#FFD700" />
-                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Efectivo</Text>
-                </View>
-              )}
-              {producto.metodosPago.transferencia && (
-                <View style={styles.metodoPago}>
-                  <FontAwesome name="exchange" size={20} color="#FFD700" />
-                  <Text style={[styles.metodoPagoTexto, { color: currentTheme.text }]}>Transferencia</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.selectorContainer}>
-              {producto.metodosEntrega.delivery && (
-                <TouchableOpacity
-                  style={[
-                    styles.selectorBoton,
-                    modoEntrega === "delivery" && [styles.seleccionado, { backgroundColor: currentTheme.primary }],
-                  ]}
-                  onPress={() => cambiarModoEntrega("delivery")}
-                >
-                  <FontAwesome
-                    name="truck"
-                    size={24}
-                    color={modoEntrega === "delivery" ? "white" : "#555"}
-                  />
-                  <View style={styles.selectorTextoContainer}>
-                    <Text
-                      style={[
-                        styles.selectorTexto,
-                        modoEntrega === "delivery" && styles.textoSeleccionado,
-                      ]}
-                    >
-                      Delivery
-                    </Text>
-                    <Text
-                      style={[
-                        styles.selectorSubtexto,
-                        modoEntrega === "delivery" && styles.textoSeleccionado,
-                      ]}
-                    >
-                      {producto.metodosEntrega.deliveryCosto ||
-                        "Costo variable"}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
 
-              {producto.metodosEntrega.retiro && (
-                <TouchableOpacity
-                  style={[
-                    styles.selectorBoton,
-                    modoEntrega === "retiro" && [styles.seleccionado, { backgroundColor: currentTheme.primary }],
-                  ]}
-                  onPress={() => cambiarModoEntrega("retiro")}
-                >
-                  <FontAwesome
-                    name="shopping-bag"
-                    size={24}
-                    color={modoEntrega === "retiro" ? "white" : "#555"}
-                  />
-                  <View style={styles.selectorTextoContainer}>
-                    <Text
-                      style={[
-                        styles.selectorTexto,
-                        modoEntrega === "retiro" && styles.textoSeleccionado,
-                      ]}
-                    >
-                      Retiro
-                    </Text>
-                    <Text
-                      style={[
-                        styles.selectorSubtexto,
-                        modoEntrega === "retiro" && styles.textoSeleccionado,
-                      ]}
-                    >
-                      Sin costo adicional
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <Text style={styles.entregaNota}>
-              {modoEntrega === "delivery"
-                ? "El tiempo de entrega es responsabilidad de cada establecimiento"
-                : "Puedes retirar tu pedido en nuestro local durante horario de atención"}
-            </Text>
-          </View>
-          <View style={styles.seccionEntrega}>
-            <Text style={[styles.seccionTitulo, { color: currentTheme.text }]}>Productos o Servicios</Text>
-            <Text style={[styles.descripcionLarga, { color: currentTheme.textSecondary }]}>
-              {producto.descripcionLarga ||
-                "Descripción detallada no disponible"}
-            </Text>
-            {/* Sección de Productos/Servicios */}
-            <View style={styles.seccionProductos}>
+          {/* Sección de Productos/Servicios Moderna */}
+          <View style={styles.seccionProductosModerna}>
               {/* Sección Principal */}
               {imagenesPorCategoria.principal.length > 0 && (
                 <>
-                  <View style={styles.headerSeccion}>
-                    <View style={styles.iconoSeccionContainer}>
-                      <FontAwesome name="star" size={16} color="#FFD700" />
+                  <View style={styles.headerSeccionModerna}>
+                    <LinearGradient
+                      colors={['#f39c12', '#e67e22']}
+                      style={styles.headerSeccionGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                    >
+                      <View style={styles.iconoSeccionModerno}>
+                        <Ionicons name="star" size={20} color="white" />
                     </View>
-                    <Text style={[styles.tituloSeccionGaleria, { color: currentTheme.text }]}>Destacados</Text>
+                      <Text style={styles.tituloSeccionModerna}>Productos Destacados</Text>
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{imagenesPorCategoria.principal.length}</Text>
+                      </View>
+                    </LinearGradient>
                   </View>
                   <ScrollView
                     horizontal
@@ -1425,23 +2408,21 @@ const reportReasons = [
               {/* Sección Ofertas */}
               {imagenesPorCategoria.oferta.length > 0 && (
                 <>
-                  <View style={styles.headerSeccion}>
-                    <View
-                      style={[
-                        styles.iconoSeccionContainer,
-                        { backgroundColor: "#FFEBEE" },
-                      ]}
+                  <View style={styles.headerSeccionModerna}>
+                    <LinearGradient
+                      colors={['#e74c3c', '#c0392b']}
+                      style={styles.headerSeccionGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
                     >
-                      <FontAwesome name="tag" size={16} color="#FF5252" />
+                      <View style={styles.iconoSeccionModerno}>
+                        <Ionicons name="pricetag" size={20} color="white" />
                     </View>
-                    <Text
-                      style={[
-                        styles.tituloSeccionGaleria,
-                        { color: "#FF5252" },
-                      ]}
-                    >
-                      Ofertas Imperdibles
-                    </Text>
+                      <Text style={styles.tituloSeccionModerna}>Ofertas Imperdibles</Text>
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{imagenesPorCategoria.oferta.length}</Text>
+                      </View>
+                    </LinearGradient>
                   </View>
                   <ScrollView
                     horizontal
@@ -1470,27 +2451,21 @@ const reportReasons = [
               {/* Sección Complementos */}
               {imagenesPorCategoria.secundario.length > 0 && (
                 <>
-                  <View style={styles.headerSeccion}>
-                    <View
-                      style={[
-                        styles.iconoSeccionContainer,
-                        { backgroundColor: "#E8F5E9" },
-                      ]}
+                  <View style={styles.headerSeccionModerna}>
+                    <LinearGradient
+                      colors={[currentTheme.primary, currentTheme.secondary]}
+                      style={styles.headerSeccionGradient}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
                     >
-                      <FontAwesome
-                        name="plus-circle"
-                        size={16}
-                        color="#2A9D8F"
-                      />
+                      <View style={styles.iconoSeccionModerno}>
+                        <Ionicons name="add-circle" size={20} color="white" />
                     </View>
-                    <Text
-                      style={[
-                        styles.tituloSeccionGaleria,
-                        { color: currentTheme.primary },
-                      ]}
-                    >
-                      Adicionales
-                    </Text>
+                      <Text style={styles.tituloSeccionModerna}>Productos Adicionales</Text>
+                      <View style={styles.countBadge}>
+                        <Text style={styles.countBadgeText}>{imagenesPorCategoria.secundario.length}</Text>
+                      </View>
+                    </LinearGradient>
                   </View>
                   <View style={styles.galeriaGrid}>
                     {imagenesPorCategoria.secundario.map((item, index) => (
@@ -1511,10 +2486,30 @@ const reportReasons = [
                   </View>
                 </>
               )}
-            </View>
           </View>
         </View>
       </ScrollView>
+
+      {/* Botón FAB Carrito Flotante - Solo cuando hay productos */}
+      {!isPreview && obtenerCantidadTotalItems() > 0 && (
+        <TouchableOpacity
+          style={styles.fabPedido}
+          onPress={() => setMostrarCarrito(true)}
+          activeOpacity={0.9}
+        >
+          <LinearGradient
+            colors={[currentTheme.primary, currentTheme.secondary]}
+            style={styles.fabGradient}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+          >
+            <Ionicons name="cart" size={32} color="white" />
+            <View style={styles.fabBadge}>
+              <Text style={styles.fabBadgeTexto}>{obtenerCantidadTotalItems()}</Text>
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
     </LinearGradient>
   );
 };
@@ -1641,47 +2636,58 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: "row",
-    justifyContent: "space-between", // Esto separa los elementos a los extremos
+    justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
     height: 50,
-    zIndex: 10, // Asegura que esté por encima de otros elementos
+    zIndex: 10,
   },
-
   rightButtonsContainer: {
-    flexDirection: "row", // Coloca los botones en fila
+    flexDirection: "row",
     alignItems: "center",
-    gap: 10, // Espacio entre los botones (si usas React Native 0.71+)
+    gap: 10,
   },
-
-  botonAtras: {
-    backgroundColor: "rgba(10, 10, 10, 0.55)",
-    padding: 8,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
+  botonNavWrapper: {
+    position: 'relative',
+  },
+  botonNavModerno: {
+    borderRadius: 25,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  botonNavGradient: {
     width: 50,
     height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-
-  botonContacto: {
-    backgroundColor: "rgba(37, 211, 102, 0.83)", // Verde de WhatsApp
-    padding: 8,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 50,
-    height: 50,
+  badgeCarritoModerno: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    backgroundColor: '#e74c3c',
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 4,
   },
-
-  botonFavorito: {
-    backgroundColor: "rgba(183, 32, 32, 0.83)",
-    padding: 8,
-    borderRadius: 50,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 50,
-    height: 50,
+  badgeTextoModerno: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "800",
   },
   selectorContainer: {
     flexDirection: "row",
@@ -2075,101 +3081,201 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#333",
   },
-  itemGaleria: {
-    width: 220,
-    marginRight: 15,
-    marginBottom: 20,
-    backgroundColor: "#FFF",
-    borderRadius: 12,
-    overflow: "hidden",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
+  // Nuevo ItemGaleria Moderno con imagen completa
+  itemGaleriaModerno: {
+    width: 180,
+    height: 200,
+    marginRight: 12,
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
-  imagenContainer: {
-    position: "relative",
-    height: 150,
+  itemGaleriaConControles: {
+    height: 250, // Altura extendida cuando tiene controles del carrito
   },
-  imagenGaleria: {
-    width: "100%",
-    height: "100%",
+  itemGaleriaTouchable: {
+    flex: 1,
+    position: 'relative',
   },
-  etiquetaCategoria: {
-    position: "absolute",
-    top: 10,
-    right: 10,
-    paddingVertical: 3,
+  imagenGaleriaCompleta: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  gradienteProducto: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+  },
+  etiquetaCategoriaModerna: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
     paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: "#2A9D8F",
+    borderRadius: 14,
+    gap: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  etiquetaOferta: {
-    backgroundColor: "#FF5252",
+  etiquetaOfertaModerna: {
+    backgroundColor: '#e74c3c',
   },
-  etiquetaPrincipal: {
-    backgroundColor: "#FFA000",
+  etiquetaPrincipalModerna: {
+    backgroundColor: '#f39c12',
   },
-  etiquetaSecundario: {
-    backgroundColor: "#2A9D8F",
+  etiquetaSecundarioModerna: {
+    backgroundColor: '#2A9D8F',
   },
-  etiquetaTexto: {
-    color: "white",
-    fontWeight: "bold",
+  etiquetaTextoModerna: {
+    color: 'white',
+    fontWeight: '800',
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  infoGaleriaOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+  },
+  infoGaleriaConEspacio: {
+    paddingBottom: 56, // Espacio reservado para controles del carrito cuando NO es preview
+  },
+  nombreGaleriaModerno: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 3,
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  descripcionGaleriaModerna: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 6,
+    fontWeight: '500',
+  },
+  precioContainerModerno: {
+    marginTop: 2,
+  },
+  precioNormalModerno: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  precioOfertaContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  precioOriginalModerno: {
     fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+    textDecorationLine: 'line-through',
   },
-  infoGaleria: {
-    padding: 15,
+  precioOfertaModerno: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#27ae60',
+    letterSpacing: 0.3,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
-  nombreGaleria: {
+  // Controles modernos del carrito en tarjeta (reducidos)
+  carritoControlsModerno: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 8,
+  },
+  cantidadContainerModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  botonCantidadModerno: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  cantidadBadgeModerno: {
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    flex: 1,
+    alignItems: 'center',
+  },
+  cantidadTextoModerno: {
     fontSize: 15,
-    color: "#333",
-    fontWeight: "500",
+    fontWeight: '800',
+    color: '#2c3e50',
   },
-  descripcionGaleria: {
-    fontSize: 14,
-    color: "#333",
-    height: 40,
+  botonEliminarModerno: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
   },
-  precioContainer: {
-    marginBottom: 12,
+  botonAgregarCarritoModerno: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  precioNormal: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2A9D8F",
-  },
-  precioOfertaContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  precioOriginal: {
-    fontSize: 14,
-    color: "#999",
-    textDecorationLine: "line-through",
-    marginRight: 8,
-  },
-  precioOferta: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#2A9D8F",
-  },
-  botonAgregar: {
-    backgroundColor: "#2A9D8F",
+  agregarGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    flexDirection: "row",
+    paddingHorizontal: 14,
+    gap: 6,
   },
-  botonAgregarTexto: {
-    color: "white",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  iconoAgregar: {
-    marginLeft: 8,
+  botonAgregarTextoModerno: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   galeriaGrid: {
     flexDirection: "row",
@@ -2188,254 +3294,337 @@ botonReporte: {
   height: 50,
 },
 
-// Estilos para el modal de reporte
+// Modal de Reporte Moderno
 reportModalContainer: {
   flex: 1,
   justifyContent: 'flex-end',
-  backgroundColor: 'rgba(0,0,0,0.5)',
+  backgroundColor: 'rgba(0,0,0,0.6)',
 },
 reportModalContent: {
-  backgroundColor: '#FFF',
-  borderTopLeftRadius: 20,
-  borderTopRightRadius: 20,
-  padding: 20,
-  maxHeight: '80%',
+  borderTopLeftRadius: 28,
+  borderTopRightRadius: 28,
+  maxHeight: '90%',
+  minHeight: '75%',
+  overflow: 'hidden',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: -4 },
+  shadowOpacity: 0.3,
+  shadowRadius: 12,
+  elevation: 15,
+},
+reportModalHeader: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingVertical: 20,
+  paddingHorizontal: 20,
+  gap: 14,
+},
+reportIconWrapper: {
+  width: 52,
+  height: 52,
+  borderRadius: 26,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 2,
+  borderColor: 'rgba(255,255,255,0.3)',
+},
+reportHeaderTexts: {
+  flex: 1,
 },
 reportModalTitle: {
   fontSize: 20,
-  fontWeight: 'bold',
-  color: '#333',
-  marginBottom: 5,
-  textAlign: 'center',
+  fontWeight: '800',
+  color: 'white',
+  letterSpacing: 0.5,
+  marginBottom: 2,
 },
 reportModalSubtitle: {
-  fontSize: 14,
-  color: '#666',
-  marginBottom: 20,
-  textAlign: 'center',
+  fontSize: 13,
+  color: 'rgba(255,255,255,0.85)',
+  fontWeight: '600',
+},
+reportCloseButton: {
+  width: 40,
+  height: 40,
+  justifyContent: 'center',
+  alignItems: 'center',
+},
+reportInstrucciones: {
+  fontSize: 15,
+  fontWeight: '600',
+  marginVertical: 16,
+  paddingHorizontal: 4,
+  letterSpacing: 0.2,
 },
 reportOptionsContainer: {
-  maxHeight: '70%',
-  marginBottom: 20,
+  paddingHorizontal: 20,
+  maxHeight: '65%',
 },
-reportOption: {
+reportOptionModerna: {
   flexDirection: 'row',
   alignItems: 'center',
-  paddingVertical: 12,
-  paddingHorizontal: 15,
-  borderBottomWidth: 1,
-  borderBottomColor: '#EEE',
+  padding: 16,
+  borderRadius: 14,
+  marginBottom: 12,
+  borderWidth: 1,
+  gap: 14,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.05,
+  shadowRadius: 4,
+  elevation: 2,
 },
-reportOptionSelected: {
-  backgroundColor: '#F5F9F8',
-},
-reportOptionRadio: {
-  width: 22,
-  height: 22,
-  borderRadius: 11,
-  borderWidth: 2,
-  borderColor: '#2A9D8F',
-  alignItems: 'center',
+reportOptionIcono: {
+  width: 48,
+  height: 48,
+  borderRadius: 24,
   justifyContent: 'center',
-  marginRight: 15,
-},
-reportOptionRadioSelected: {
-  width: 12,
-  height: 12,
-  borderRadius: 6,
-  backgroundColor: '#2A9D8F',
+  alignItems: 'center',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.2,
+  shadowRadius: 4,
+  elevation: 3,
 },
 reportOptionTextContainer: {
   flex: 1,
 },
-reportOptionTitle: {
+reportOptionTitleModerno: {
   fontSize: 16,
-  fontWeight: '600',
-  color: '#333',
-  marginBottom: 3,
+  fontWeight: '700',
+  marginBottom: 4,
+  letterSpacing: 0.3,
 },
-reportOptionDescription: {
+reportOptionDescriptionModerno: {
   fontSize: 13,
-  color: '#666',
+  lineHeight: 18,
+  fontWeight: '500',
+},
+reportDetalleContainer: {
+  borderRadius: 14,
+  padding: 16,
+  marginTop: 16,
+  marginBottom: 8,
+},
+reportDetalleLabel: {
+  fontSize: 15,
+  fontWeight: '700',
+  marginBottom: 10,
+  letterSpacing: 0.3,
+},
+reportDetalleInput: {
+  borderRadius: 12,
+  borderWidth: 1,
+  padding: 14,
+  fontSize: 15,
+  minHeight: 100,
+  lineHeight: 20,
 },
 reportModalButtons: {
   flexDirection: 'row',
-  justifyContent: 'space-between',
-  marginTop: 10,
+  padding: 20,
+  paddingTop: 16,
+  gap: 12,
+  borderTopWidth: 1,
 },
 reportModalCancelButton: {
   flex: 1,
-  backgroundColor: '#EEE',
-  padding: 15,
-  borderRadius: 10,
+  flexDirection: 'row',
   alignItems: 'center',
-  marginRight: 10,
+  justifyContent: 'center',
+  paddingVertical: 14,
+  borderRadius: 14,
+  gap: 6,
+  borderWidth: 2,
 },
 reportModalCancelButtonText: {
-  color: '#333',
-  fontWeight: 'bold',
-  fontSize: 16,
+  fontWeight: '700',
+  fontSize: 15,
+  letterSpacing: 0.3,
 },
 reportModalSubmitButton: {
   flex: 1,
-  backgroundColor: '#2A9D8F',
-  padding: 15,
-  borderRadius: 10,
-  alignItems: 'center',
+  borderRadius: 14,
+  overflow: 'hidden',
+  shadowColor: '#e74c3c',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.3,
+  shadowRadius: 6,
+  elevation: 6,
 },
 reportModalSubmitButtonDisabled: {
-  backgroundColor: '#CCC',
+  opacity: 0.4,
+  shadowOpacity: 0,
+  elevation: 0,
+},
+reportSubmitGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 14,
+  gap: 8,
 },
 reportModalSubmitButtonText: {
   color: 'white',
-  fontWeight: 'bold',
-  fontSize: 16,
+  fontWeight: '800',
+  fontSize: 15,
+  letterSpacing: 0.3,
 },
-// Estilos del carrito
-botonCarrito: {
-  backgroundColor: "rgba(52, 152, 219, 0.83)",
-  padding: 8,
-  borderRadius: 50,
-  alignItems: "center",
-  justifyContent: "center",
-  width: 50,
-  height: 50,
-  position: "relative",
-},
-badgeCarrito: {
-  position: "absolute",
-  top: -5,
-  right: -5,
-  backgroundColor: "#e74c3c",
-  borderRadius: 10,
-  minWidth: 20,
-  height: 20,
-  alignItems: "center",
-  justifyContent: "center",
-},
-badgeTexto: {
-  color: "white",
-  fontSize: 12,
-  fontWeight: "bold",
-},
-carritoControls: {
-  padding: 10,
-  borderTopWidth: 1,
-  borderTopColor: "#f0f0f0",
-},
-cantidadContainer: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "space-between",
-},
-botonCantidad: {
-  backgroundColor: "#f8f9fa",
-  width: 30,
-  height: 30,
-  borderRadius: 15,
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: 1,
-  borderColor: "#2A9D8F",
-},
-cantidadTexto: {
-  fontSize: 16,
-  fontWeight: "bold",
-  color: "#333",
-  marginHorizontal: 10,
-},
-botonEliminar: {
-  backgroundColor: "#ffeaea",
-  width: 30,
-  height: 30,
-  borderRadius: 15,
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: 1,
-  borderColor: "#e74c3c",
-  marginLeft: 10,
-},
-botonAgregarCarrito: {
-  backgroundColor: "#2A9D8F",
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  paddingVertical: 8,
-  paddingHorizontal: 12,
-  borderRadius: 8,
-},
-botonAgregarTexto: {
-  color: "white",
-  fontWeight: "bold",
-  fontSize: 14,
-  marginLeft: 5,
-},
-// Modal de advertencia
+// Modal de advertencia modernos
 advertenciaModalContainer: {
   flex: 1,
   justifyContent: 'center',
   alignItems: 'center',
-  backgroundColor: 'rgba(0,0,0,0.5)',
+  backgroundColor: 'rgba(0,0,0,0.6)',
   padding: 20,
 },
 advertenciaModalContent: {
   backgroundColor: '#FFF',
-  borderRadius: 16,
-  padding: 24,
+  borderRadius: 20,
   width: '100%',
-  maxWidth: 400,
+  maxWidth: 380,
+  overflow: 'hidden',
   shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.25,
-  shadowRadius: 8,
-  elevation: 8,
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.3,
+  shadowRadius: 16,
+  elevation: 12,
 },
-advertenciaHeader: {
-  alignItems: 'center',
-  marginBottom: 20,
-},
-advertenciaTitulo: {
-  fontSize: 20,
-  fontWeight: 'bold',
-  color: '#2c3e50',
-  marginTop: 12,
-  textAlign: 'center',
-},
-advertenciaMensaje: {
-  fontSize: 16,
-  color: '#7f8c8d',
-  textAlign: 'center',
-  lineHeight: 22,
-  marginBottom: 24,
-},
-advertenciaButtons: {
+advertenciaHeaderModerno: {
   flexDirection: 'row',
-  justifyContent: 'space-between',
-  gap: 12,
+  alignItems: 'center',
+  padding: 20,
+  gap: 14,
 },
-advertenciaCancelar: {
-  flex: 1,
-  backgroundColor: '#2A9D8F',
-  padding: 15,
-  borderRadius: 12,
+advertenciaIconoWrapper: {
+  position: 'relative',
+  width: 48,
+  height: 48,
+  borderRadius: 24,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  justifyContent: 'center',
   alignItems: 'center',
 },
-advertenciaCancelarTexto: {
-  color: 'white',
-  fontWeight: 'bold',
-  fontSize: 16,
-},
-advertenciaSalir: {
-  flex: 1,
+advertenciaBadge: {
+  position: 'absolute',
+  top: -4,
+  right: -4,
   backgroundColor: '#e74c3c',
-  padding: 15,
-  borderRadius: 12,
+  borderRadius: 10,
+  minWidth: 20,
+  height: 20,
+  justifyContent: 'center',
   alignItems: 'center',
+  paddingHorizontal: 6,
+  borderWidth: 2,
+  borderColor: 'white',
 },
-advertenciaSalirTexto: {
+advertenciaBadgeTexto: {
   color: 'white',
-  fontWeight: 'bold',
+  fontSize: 11,
+  fontWeight: '800',
+},
+advertenciaHeaderTextos: {
+  flex: 1,
+},
+advertenciaTituloModerno: {
+  fontSize: 18,
+  fontWeight: '800',
+  color: 'white',
+  letterSpacing: 0.3,
+},
+advertenciaSubtituloModerno: {
+  fontSize: 13,
+  color: 'rgba(255,255,255,0.9)',
+  fontWeight: '600',
+  marginTop: 2,
+},
+advertenciaBody: {
+  padding: 20,
+},
+advertenciaInfoBox: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  backgroundColor: '#fff3cd',
+  padding: 14,
+  borderRadius: 12,
+  gap: 10,
+  marginBottom: 20,
+  borderLeftWidth: 3,
+  borderLeftColor: '#f39c12',
+},
+advertenciaMensajeModerno: {
+  flex: 1,
+  fontSize: 14,
+  color: '#856404',
+  lineHeight: 20,
+  fontWeight: '500',
+},
+advertenciaButtonsModerno: {
+  flexDirection: 'row',
+  gap: 10,
+},
+advertenciaCancelarModerno: {
+  flex: 1,
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 14,
+  paddingHorizontal: 16,
+  borderRadius: 12,
+  gap: 6,
+  backgroundColor: '#f8f9fa',
+  borderWidth: 2,
+  borderColor: '#e9ecef',
+},
+advertenciaCancelarTextoModerno: {
+  fontWeight: '700',
+  fontSize: 15,
+  letterSpacing: 0.3,
+},
+advertenciaSalirModerno: {
+  flex: 1,
+  borderRadius: 12,
+  overflow: 'hidden',
+},
+advertenciaSalirGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 18,
+  paddingHorizontal: 16,
+  gap: 6,
+},
+advertenciaSalirTextoModerno: {
+  color: 'white',
+  fontWeight: '800',
+  fontSize: 15,
+  letterSpacing: 0.3,
+},
+// Estilos para modal de advertencia de propio negocio
+advertenciaBotonEntendido: {
+  borderRadius: 14,
+  overflow: 'hidden',
+  marginTop: 8,
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.2,
+  shadowRadius: 6,
+  elevation: 6,
+},
+advertenciaBotonGradient: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 16,
+  gap: 8,
+},
+advertenciaBotonTexto: {
+  color: 'white',
+  fontWeight: '800',
   fontSize: 16,
+  letterSpacing: 0.5,
 },
 // Modal del carrito
 carritoModalContainer: {
@@ -2445,10 +3634,11 @@ carritoModalContainer: {
 },
 carritoModalContent: {
   backgroundColor: '#FFF',
-  borderTopLeftRadius: 20,
-  borderTopRightRadius: 20,
+  borderTopLeftRadius: 24,
+  borderTopRightRadius: 24,
   padding: 20,
-  maxHeight: '80%',
+  maxHeight: '90%',
+  minHeight: '70%',
 },
 carritoHeader: {
   flexDirection: 'row',
@@ -2544,129 +3734,782 @@ carritoBotonEliminar: {
 },
 carritoFooter: {
   borderTopWidth: 1,
-  borderTopColor: '#f0f0f0',
   paddingTop: 20,
+  paddingHorizontal: 4,
 },
-carritoTotal: {
+carritoTotalContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
   alignItems: 'center',
-  marginBottom: 15,
+  gap: 16,
+},
+carritoTotalLabel: {
+  fontSize: 13,
+  fontWeight: '600',
+  marginBottom: 4,
 },
 carritoTotalTexto: {
-  fontSize: 20,
-  fontWeight: 'bold',
-  color: '#2A9D8F',
+  fontSize: 24,
+  fontWeight: '900',
+  letterSpacing: 0.5,
 },
-carritoBotonPedido: {
-  backgroundColor: '#25D366',
+carritoBotonPedidoModerno: {
+  borderRadius: 16,
+  overflow: 'hidden',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.2,
+  shadowRadius: 6,
+  elevation: 6,
+},
+botonPedidoGradient: {
   flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
-  padding: 15,
-  borderRadius: 12,
-  shadowColor: '#25D366',
-  shadowOffset: { width: 0, height: 2 },
-  shadowOpacity: 0.3,
-  shadowRadius: 4,
-  elevation: 4,
+  paddingVertical: 14,
+  paddingHorizontal: 24,
+  gap: 8,
 },
-carritoBotonPedidoTexto: {
+carritoBotonPedidoTextoModerno: {
   color: 'white',
   fontSize: 16,
-  fontWeight: 'bold',
-  marginLeft: 8,
+  fontWeight: '800',
+  letterSpacing: 0.5,
 },
-// Estilos del modal de confirmación
+// Medios de Pago en Modal
+mediosPagoEnModal: {
+  borderRadius: 12,
+  padding: 14,
+  marginTop: 16,
+  marginBottom: 12,
+},
+modalSeccionTitulo: {
+  fontSize: 16,
+  fontWeight: '700',
+  marginBottom: 12,
+  letterSpacing: 0.3,
+},
+metodosPagoListaModal: {
+  gap: 8,
+},
+metodoPagoItemModal: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  gap: 10,
+  paddingVertical: 6,
+},
+metodoPagoTextoModal: {
+  fontSize: 14,
+  fontWeight: '500',
+},
+// Entrega en Modal
+entregaEnModal: {
+  borderRadius: 12,
+  padding: 14,
+  marginBottom: 12,
+},
+selectorContainerModal: {
+  gap: 10,
+},
+selectorBotonModal: {
+  borderRadius: 12,
+  overflow: 'hidden',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.08,
+  shadowRadius: 4,
+  elevation: 3,
+},
+selectorGradientModal: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 14,
+  gap: 10,
+},
+selectorNoSeleccionadoModal: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  padding: 14,
+  gap: 10,
+  borderWidth: 1.5,
+  borderRadius: 12,
+},
+selectorTextoContainerModal: {
+  flex: 1,
+},
+selectorTextoSeleccionadoModal: {
+  fontSize: 15,
+  fontWeight: '700',
+  color: 'white',
+  letterSpacing: 0.3,
+},
+selectorSubtextoSeleccionadoModal: {
+  fontSize: 12,
+  color: 'rgba(255,255,255,0.85)',
+  fontWeight: '500',
+  marginTop: 2,
+},
+selectorTextoNoSeleccionadoModal: {
+  fontSize: 15,
+  fontWeight: '600',
+  letterSpacing: 0.3,
+},
+selectorSubtextoNoSeleccionadoModal: {
+  fontSize: 12,
+  fontWeight: '500',
+  marginTop: 2,
+},
+// Modal de confirmación moderno
 confirmacionModalContainer: {
   flex: 1,
   justifyContent: 'center',
   alignItems: 'center',
-  backgroundColor: 'rgba(0,0,0,0.5)',
+  backgroundColor: 'rgba(0,0,0,0.6)',
   padding: 20,
 },
 confirmacionModalContent: {
-  backgroundColor: '#FFF',
-  borderRadius: 16,
-  padding: 24,
+  borderRadius: 24,
   width: '100%',
-  maxWidth: 400,
+  maxWidth: 420,
+  overflow: 'hidden',
   shadowColor: '#000',
-  shadowOffset: { width: 0, height: 4 },
-  shadowOpacity: 0.25,
-  shadowRadius: 8,
-  elevation: 8,
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.3,
+  shadowRadius: 16,
+  elevation: 12,
 },
 confirmacionHeader: {
+  flexDirection: 'row',
   alignItems: 'center',
-  marginBottom: 20,
+  padding: 20,
+  gap: 14,
+},
+confirmacionIconWrapper: {
+  width: 52,
+  height: 52,
+  borderRadius: 26,
+  backgroundColor: 'rgba(255,255,255,0.2)',
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 2,
+  borderColor: 'rgba(255,255,255,0.3)',
 },
 confirmacionTitulo: {
   fontSize: 20,
-  fontWeight: 'bold',
-  color: '#2c3e50',
-  marginTop: 12,
-  textAlign: 'center',
+  fontWeight: '800',
+  color: 'white',
+  letterSpacing: 0.5,
 },
-confirmacionMensaje: {
-  fontSize: 16,
-  color: '#7f8c8d',
-  textAlign: 'center',
-  lineHeight: 22,
-  marginBottom: 20,
+confirmacionSubtitulo: {
+  fontSize: 13,
+  color: 'rgba(255,255,255,0.85)',
+  fontWeight: '600',
+  marginTop: 2,
+},
+confirmacionBody: {
+  padding: 20,
 },
 confirmacionResumen: {
-  backgroundColor: '#f8f9fa',
-  padding: 15,
-  borderRadius: 10,
-  marginBottom: 20,
+  borderRadius: 14,
+  padding: 16,
+  marginBottom: 16,
 },
 confirmacionResumenTitulo: {
   fontSize: 16,
-  fontWeight: 'bold',
-  color: '#333',
-  marginBottom: 10,
+  fontWeight: '700',
+  marginBottom: 14,
+  letterSpacing: 0.3,
+},
+confirmacionItemRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginBottom: 8,
 },
 confirmacionItem: {
+  fontSize: 15,
+  fontWeight: '500',
+  flex: 1,
+},
+confirmacionItemCantidad: {
   fontSize: 14,
-  color: '#666',
-  marginBottom: 5,
+  fontWeight: '700',
+},
+confirmacionTotalRow: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  marginTop: 12,
+  paddingTop: 12,
+  borderTopWidth: 2,
+},
+confirmacionTotalLabel: {
+  fontSize: 16,
+  fontWeight: '600',
 },
 confirmacionTotal: {
-  fontSize: 16,
-  fontWeight: 'bold',
-  color: '#2A9D8F',
-  marginTop: 10,
-  borderTopWidth: 1,
-  borderTopColor: '#ddd',
-  paddingTop: 10,
+  fontSize: 22,
+  fontWeight: '900',
+  letterSpacing: 0.5,
+},
+confirmacionInfo: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  padding: 14,
+  borderRadius: 12,
+  gap: 10,
+  borderLeftWidth: 3,
+},
+confirmacionInfoTexto: {
+  flex: 1,
+  fontSize: 13,
+  lineHeight: 18,
+  fontWeight: '500',
 },
 confirmacionButtons: {
   flexDirection: 'row',
-  justifyContent: 'space-between',
+  padding: 20,
   gap: 12,
 },
 confirmacionCancelar: {
   flex: 1,
-  backgroundColor: '#6c757d',
-  padding: 15,
-  borderRadius: 12,
+  flexDirection: 'row',
   alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 14,
+  borderRadius: 14,
+  gap: 6,
+  borderWidth: 2,
 },
 confirmacionCancelarTexto: {
-  color: 'white',
-  fontWeight: 'bold',
-  fontSize: 16,
+  fontWeight: '700',
+  fontSize: 15,
+  letterSpacing: 0.3,
 },
 confirmacionEnviar: {
   flex: 1,
-  backgroundColor: '#25D366',
-  padding: 15,
-  borderRadius: 12,
+  borderRadius: 14,
+  overflow: 'hidden',
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.2,
+  shadowRadius: 6,
+  elevation: 6,
+},
+confirmacionEnviarGradient: {
+  flexDirection: 'row',
   alignItems: 'center',
+  justifyContent: 'center',
+  paddingVertical: 14,
+  gap: 8,
 },
 confirmacionEnviarTexto: {
   color: 'white',
-  fontWeight: 'bold',
+  fontWeight: '800',
+  fontSize: 15,
+  letterSpacing: 0.3,
+},
+  // Estilos Modernos del Header del Emprendimiento
+  emprendimientoHeaderModerno: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 20,
+    gap: 16,
+  },
+  logoWrapper: {
+    position: 'relative',
+  },
+  logoModerno: {
+    width: 88,
+    height: 88,
+    borderRadius: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    borderWidth: 3,
+    borderColor: 'white',
+  },
+  estadoBadgeFloat: {
+    position: 'absolute',
+    bottom: -4,
+    right: -4,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 3,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  puntitoPulso: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: 'white',
+  },
+  infoHeaderModerno: {
+    flex: 1,
+    gap: 8,
+  },
+  nombreModerno: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    lineHeight: 28,
+  },
+  metasContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  estadoBadgeModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  estadoTextoModerno: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  distanciaBadgeModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    gap: 6,
+  },
+  distanciaTextoModerno: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  descripcionCard: {
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+  },
+  descripcionModerna: {
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  // Estilos de Secciones Modernas
+  seccionHeaderModerno: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  seccionHeaderContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  seccionIconWrapper: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  seccionTituloModerno: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // Contacto Moderno
+  contactoContainerModerno: {
+    borderRadius: 16,
+    padding: 4,
+    marginBottom: 12,
+  },
+  contactoItemModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderBottomWidth: 1,
+    gap: 12,
+  },
+  contactoIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  contactoTextoContainer: {
+    flex: 1,
+  },
+  contactoLabelModerno: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  contactoValueModerno: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  // Medios de Pago Modernos - Solo Informativo
+  mediosPagoSection: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  metodosPagoListaModerna: {
+    marginTop: 12,
+    gap: 10,
+  },
+  metodoPagoItemModerno: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  metodoPagoTextoInfo: {
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  // Entrega Moderna
+  entregaSection: {
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 20,
+    marginBottom: 12,
+  },
+  selectorContainerModerno: {
+    gap: 12,
+    marginTop: 16,
+  },
+  selectorBotonModerno: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  selectorGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    gap: 14,
+  },
+  selectorNoSeleccionado: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 18,
+    gap: 14,
+    borderWidth: 2,
+    borderRadius: 16,
+  },
+  selectorTextoSeleccionado: {
   fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.3,
+  },
+  selectorSubtextoSeleccionado: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.85)',
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  selectorTextoNoSeleccionado: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  selectorSubtextoNoSeleccionado: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  notaEntregaModerna: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 16,
+    borderLeftWidth: 3,
+    gap: 10,
+  },
+  notaEntregaTexto: {
+  flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  // Descripción Larga Card
+  descripcionLargaCard: {
+    borderRadius: 16,
+    padding: 14,
+    marginTop: 12,
+    marginBottom: 10,
+  },
+  descripcionLargaTexto: {
+    fontSize: 15,
+    lineHeight: 22,
+    letterSpacing: 0.2,
+    marginTop: 10,
+  },
+  // Headers de Secciones de Productos
+  seccionProductosModerna: {
+    marginTop: 12,
+  },
+  headerSeccionModerna: {
+    marginBottom: 14,
+    marginTop: 14,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  headerSeccionGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  iconoSeccionModerno: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tituloSeccionModerna: {
+    flex: 1,
+    fontSize: 17,
+    fontWeight: '800',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  countBadge: {
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  countBadgeText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  // Botón FAB Carrito Flotante - Solo cuando hay productos
+  fabPedido: {
+    position: 'absolute',
+    bottom: 140, // Más padding para que no lo tape el menú inferior
+    right: 20,
+    borderRadius: 35,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  fabGradient: {
+    width: 70,
+    height: 70,
+    justifyContent: 'center',
+  alignItems: 'center',
+    position: 'relative',
+  },
+  fabBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: '#e74c3c',
+    borderRadius: 14,
+    minWidth: 28,
+    height: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    borderWidth: 3,
+    borderColor: 'white',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  fabBadgeTexto: {
+  color: 'white',
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  // Estilos para el nuevo modal de confirmación de entrega
+  botonVolverModal: {
+    padding: 5,
+    marginRight: 12,
+  },
+  direccionInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    borderLeftWidth: 3,
+    gap: 10,
+  },
+  direccionInfoTextos: {
+    flex: 1,
+  },
+  direccionInfoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  direccionInfoTexto: {
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 20,
+    letterSpacing: 0.2,
+  },
+  cuponEnModal: {
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  cuponAplicadoBox: {
+    borderRadius: 14,
+    padding: 14,
+    marginTop: 12,
+    borderWidth: 2,
+    shadowColor: '#27ae60',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  cuponAplicadoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  cuponAplicadoIcono: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#27ae60' + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cuponAplicadoInfo: {
+    flex: 1,
+  },
+  cuponAplicadoCodigo: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  cuponAplicadoDescripcion: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  cuponRemover: {
+    padding: 4,
+  },
+  cuponBotonAgregar: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderStyle: 'dashed',
+  },
+  cuponBotonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 8,
+  },
+  cuponBotonTexto: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  resumenPedidoBox: {
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  resumenLinea: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  resumenLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  resumenValor: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  resumenLineaTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    marginTop: 12,
+    borderTopWidth: 2,
+  },
+  resumenLabelTotal: {
+  fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  resumenValorTotal: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  carritoBotonConfirmarModerno: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 6,
+    width: '100%',
 },
 });
 

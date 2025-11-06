@@ -17,6 +17,7 @@ export const UserProvider = ({ children }) => {
   const [lastFetch, setLastFetch] = useState(null);
   const [direccionesLastFetch, setDireccionesLastFetch] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [modoVista, setModoVista] = useState(null); // 'cliente' cuando emprendedor está viendo como cliente, null = normal
 
   // Función para limpiar todo el cache
   const limpiarCacheCompleto = useCallback(async () => {
@@ -80,6 +81,12 @@ export const UserProvider = ({ children }) => {
       const cachedDireccionSeleccionada = await AsyncStorage.getItem('direccionSeleccionada');
       if (cachedDireccionSeleccionada) {
         setDireccionSeleccionada(cachedDireccionSeleccionada);
+      }
+      
+      // Cargar modo vista del cache
+      const cachedModoVista = await AsyncStorage.getItem('modoVista');
+      if (cachedModoVista) {
+        setModoVista(cachedModoVista);
       }
     } catch (error) {
       console.error('Error al cargar cache:', error);
@@ -181,10 +188,18 @@ export const UserProvider = ({ children }) => {
   }, [usuario, lastFetch, limpiarCacheCompleto]);
 
   const cargarDirecciones = async (forceRefresh = false) => {
+    console.log('📍 UserContext: cargarDirecciones llamado', {
+      forceRefresh,
+      direccionesActuales: direcciones.length,
+      direccionesLastFetch,
+      tieneToken: !!(await AsyncStorage.getItem("token"))
+    });
+    
     // Si no es forzado y tenemos datos recientes, no recargar
     if (!forceRefresh && direcciones.length > 0 && direccionesLastFetch) {
       const ahora = Date.now();
       if (ahora - direccionesLastFetch < CACHE_TTL) {
+        console.log('📍 UserContext: Usando cache de direcciones (reciente)');
         return direcciones;
       }
     }
@@ -193,10 +208,12 @@ export const UserProvider = ({ children }) => {
       const token = await AsyncStorage.getItem("token");
       
       if (!token) {
+        console.log('📍 UserContext: No hay token, estableciendo direcciones vacías');
         setDirecciones([]);
         return [];
       }
 
+      console.log('📍 UserContext: Haciendo petición al backend...');
       const response = await fetch(API_ENDPOINTS.DIRECCIONES, {
         method: "GET",
         headers: {
@@ -207,6 +224,11 @@ export const UserProvider = ({ children }) => {
       });
 
       const data = await response.json();
+      console.log('📍 UserContext: Respuesta del backend:', {
+        ok: response.ok,
+        dataOk: data.ok,
+        cantidadDirecciones: data.direcciones?.length || 0
+      });
 
       if (response.ok && data.ok) {
         // Mapear datos del backend al formato esperado por la app
@@ -222,6 +244,7 @@ export const UserProvider = ({ children }) => {
           fechaCreacion: dir.created_at
         }));
         
+        console.log('📍 UserContext: Direcciones mapeadas:', direccionesMapeadas.length);
         setDirecciones(direccionesMapeadas);
         setDireccionesLastFetch(Date.now());
         
@@ -231,11 +254,12 @@ export const UserProvider = ({ children }) => {
 
         return direccionesMapeadas;
       } else {
+        console.log('📍 UserContext: Respuesta no ok, estableciendo direcciones vacías');
         setDirecciones([]);
         return [];
       }
     } catch (error) {
-      console.error("Error al cargar direcciones:", error);
+      console.error("📍 UserContext: Error al cargar direcciones:", error);
       return direcciones; // Retornar datos existentes si hay error
     }
   };
@@ -278,6 +302,29 @@ export const UserProvider = ({ children }) => {
     await AsyncStorage.setItem('direccionSeleccionada', direccionId || '');
   }, []);
 
+  // Funciones para cambiar modo de vista (emprendedor viendo como cliente)
+  const cambiarAVistaCliente = useCallback(async () => {
+    if (usuario?.tipo_usuario === 'emprendedor') {
+      console.log('👁️ Cambiando a vista de cliente');
+      setModoVista('cliente');
+      await AsyncStorage.setItem('modoVista', 'cliente');
+    }
+  }, [usuario]);
+
+  const volverAVistaEmprendedor = useCallback(async () => {
+    console.log('👁️ Volviendo a vista de emprendedor');
+    setModoVista(null);
+    await AsyncStorage.removeItem('modoVista');
+  }, []);
+
+  // Función helper para obtener el tipo de usuario efectivo (considerando modo vista)
+  const getTipoUsuarioEfectivo = useCallback(() => {
+    if (modoVista === 'cliente' && usuario?.tipo_usuario === 'emprendedor') {
+      return 'cliente';
+    }
+    return usuario?.tipo_usuario;
+  }, [usuario, modoVista]);
+
   // Crear el objeto value - sin useMemo por ahora para simplificar
   const value = {
     _isRealContext: true, // Marca única para identificar el contexto real
@@ -290,10 +337,16 @@ export const UserProvider = ({ children }) => {
     invalidarUsuario,
     invalidarDirecciones,
     actualizarUsuarioLocal,
+    actualizarUsuario: actualizarUsuarioLocal, // Alias para compatibilidad
     actualizarDireccionesLocal,
     establecerDireccionSeleccionada,
     limpiarCacheCompleto,
     isInitialized,
+    // Modo vista
+    modoVista,
+    cambiarAVistaCliente,
+    volverAVistaEmprendedor,
+    getTipoUsuarioEfectivo,
   };
 
 

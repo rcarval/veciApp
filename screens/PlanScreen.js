@@ -16,6 +16,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const PlanScreen = () => {
   const navigation = useNavigation();
@@ -31,47 +32,45 @@ const PlanScreen = () => {
     basico: {
       nombre: "Plan Básico",
       precio: "Gratis",
-      descripcion: "Perfecto para comenzar",
+      descripcion: "Ideal para iniciar tu negocio",
       color: "#95a5a6",
       icono: "star-o",
       caracteristicas: [
-        "Perfil de usuario completo",
-        "Acceso a todos los negocios",
-        "Sistema de pedidos básico",
+        "1 emprendimiento",
+        "Presentación de tu negocio",
+        "Contacto directo con clientes",
+        "Gestión de pedidos",
         "Soporte por email",
-        "Hasta 3 direcciones guardadas",
       ],
-      limitaciones: [
-        "Sin promoción destacada",
-        "Sin vitrina virtual",
-        "Sin estadísticas avanzadas",
-        "Sin soporte prioritario",
+      beneficios: [
+        "Comienza sin inversión",
+        "Prueba la plataforma",
+        "Valida tu idea de negocio",
       ]
     },
     premium: {
       nombre: "Plan Premium",
       precio: "$4.990",
       periodo: "mensual",
-      descripcion: "Para emprendedores serios",
+      descripcion: "Maximiza tu potencial de ventas",
       color: "#2A9D8F",
       icono: "star",
       caracteristicas: [
-        "Todo lo del Plan Básico",
-        "Vitrina virtual completa",
-        "Promoción destacada en búsquedas",
-        "Estadísticas avanzadas de ventas",
-        "Soporte prioritario 24/7",
-        "Direcciones ilimitadas",
-        "Gestión de inventario",
-        "Notificaciones push personalizadas",
-        "Análisis de clientes",
-        "Herramientas de marketing",
+        "Hasta 3 emprendimientos",
+        "1 vendedor por emprendimiento",
+        "Vitrina virtual con hasta 30 productos",
+        "Categorías: Principal, Secundario, Ofertas",
+        "Mayor visibilidad en la app",
+        "Estadísticas de ventas en tiempo real",
+        "Soporte personalizado prioritario",
+        "Panel de administración avanzado",
       ],
       beneficios: [
-        "Mayor visibilidad en la app",
-        "Herramientas profesionales",
-        "Crecimiento acelerado del negocio",
-        "Soporte especializado",
+        "3x más emprendimientos que el plan básico",
+        "Delega la gestión con vendedores",
+        "Expón productos en vitrina destacada",
+        "Toma decisiones con estadísticas",
+        "Aumenta tus ventas con mayor visibilidad",
       ]
     }
   };
@@ -90,6 +89,16 @@ const PlanScreen = () => {
     };
     cargarPlan();
   }, []);
+
+  // Recargar cuando la pantalla gana foco
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', async () => {
+      console.log('🔄 PlanScreen ganó foco, recargando usuario...');
+      await cargarUsuario(true); // Forzar recarga para ver cambios recientes
+    });
+
+    return unsubscribe;
+  }, [navigation]);
 
   // Actualizar planActual cuando cambia el usuario
   useEffect(() => {
@@ -256,78 +265,147 @@ const PlanScreen = () => {
     const esPremium = planKey === "premium";
 
     return (
-      <View key={planKey} style={[styles.planCard, esPlanActual && [styles.planCardActual, { shadowColor: currentTheme.shadow }], !esPlanActual && { shadowColor: currentTheme.shadow }]}>
+      <View key={planKey} style={[
+        styles.planCard, 
+        esPremium && styles.planCardPremium,
+        esPlanActual && styles.planCardActual
+      ]}>
+        {/* Badge "Recomendado" solo para Premium */}
+        {esPremium && !esPlanActual && (
+          <View style={styles.badgeRecomendado}>
+            <LinearGradient
+              colors={['#f39c12', '#e67e22']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.badgeGradient}
+            >
+              <Ionicons name="star" size={14} color="white" />
+              <Text style={styles.badgeTexto}>MÁS POPULAR</Text>
+            </LinearGradient>
+          </View>
+        )}
+
+        {/* Badge "Plan Actual" */}
+        {esPlanActual && (
+          <View style={styles.badgeActual}>
+            <LinearGradient
+              colors={['#27ae60', '#229954']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.badgeGradient}
+            >
+              <Ionicons name="checkmark-circle" size={14} color="white" />
+              <Text style={styles.badgeTexto}>TU PLAN</Text>
+            </LinearGradient>
+          </View>
+        )}
+
         <LinearGradient
-          colors={esPlanActual ? [currentTheme.primary, currentTheme.secondary] : [currentTheme.cardBackground, currentTheme.cardBackground]}
+          colors={esPremium ? ['#2A9D8F', '#1a7a6e'] : ['#ecf0f1', '#d5dbdb']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={styles.planGradient}
         >
+          {/* Header con icono */}
           <View style={styles.planHeader}>
-            <View style={[styles.planIconContainer, { backgroundColor: esPlanActual ? 'rgba(255,255,255,0.2)' : currentTheme.primary + '20' }]}>
-              <FontAwesome 
-                name={plan.icono} 
+            <View style={[
+              styles.planIconContainer, 
+              { backgroundColor: esPremium ? 'rgba(255,255,255,0.25)' : 'rgba(149,165,166,0.2)' }
+            ]}>
+              <Ionicons 
+                name={esPremium ? "diamond-outline" : "cube-outline"} 
                 size={24} 
-                color={esPlanActual ? "white" : currentTheme.primary} 
+                color={esPremium ? "white" : "#7f8c8d"} 
               />
-            </View>
-            <View style={styles.planInfo}>
-              <Text style={[styles.planNombre, esPlanActual && styles.planNombreActual, !esPlanActual && { color: currentTheme.text }]}>
-                {plan.nombre}
-              </Text>
-              <Text style={[styles.planPrecio, esPlanActual && styles.planPrecioActual, !esPlanActual && { color: currentTheme.primary }]}>
-                {plan.precio}
-                {plan.periodo && (
-                  <Text style={[styles.planPeriodo, esPlanActual && { color: 'rgba(255,255,255,0.8)' }, !esPlanActual && { color: currentTheme.textSecondary }]}> / {plan.periodo}</Text>
-                )}
-              </Text>
-              <Text style={[styles.planDescripcion, esPlanActual && styles.planDescripcionActual, !esPlanActual && { color: currentTheme.textSecondary }]}>
-                {plan.descripcion}
-              </Text>
             </View>
           </View>
 
-          <View style={styles.caracteristicasContainer}>
-            <Text style={[styles.caracteristicasTitulo, esPlanActual && styles.caracteristicasTituloActual, !esPlanActual && { color: currentTheme.text }]}>
-              {esPlanActual ? "✅ Incluye:" : "Características:"}
+          {/* Título y precio */}
+          <View style={styles.planTitleSection}>
+            <Text style={[
+              styles.planNombre, 
+              esPremium && styles.planNombrePremium
+            ]}>
+              {plan.nombre}
             </Text>
+            <Text style={[
+              styles.planDescripcion, 
+              esPremium && styles.planDescripcionPremium
+            ]}>
+              {plan.descripcion}
+            </Text>
+            <View style={styles.planPrecioContainer}>
+              <Text style={[
+                styles.planPrecio, 
+                esPremium && styles.planPrecioPremium
+              ]}>
+                {plan.precio}
+              </Text>
+              {plan.periodo && (
+                <Text style={[
+                  styles.planPeriodo, 
+                  esPremium && { color: 'rgba(255,255,255,0.8)' }
+                ]}> / {plan.periodo}</Text>
+              )}
+            </View>
+            {esPremium && (
+              <View style={styles.valorAgregadoContainer}>
+                <Ionicons name="trending-up" size={14} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.valorAgregadoTexto}>
+                  3x más ventas potenciales
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Características con iconos */}
+          <View style={styles.caracteristicasContainer}>
             {plan.caracteristicas.map((caracteristica, index) => (
-              <View key={index} style={styles.caracteristicaItem}>
-                <FontAwesome 
-                  name="check" 
-                  size={12} 
-                  color={esPlanActual ? "white" : "#27ae60"} 
+              <View key={index} style={[
+                styles.caracteristicaItem,
+                esPremium && styles.caracteristicaItemPremium
+              ]}>
+                <Ionicons 
+                  name="checkmark-circle-outline" 
+                  size={16} 
+                  color={esPremium ? "#fff" : "#27ae60"} 
+                  style={styles.checkIcon}
                 />
-                <Text style={[styles.caracteristicaTexto, esPlanActual && styles.caracteristicaTextoActual, !esPlanActual && { color: currentTheme.text }]}>
+                <Text style={[
+                  styles.caracteristicaTexto, 
+                  esPremium && styles.caracteristicaTextoPremium
+                ]}>
                   {caracteristica}
                 </Text>
               </View>
             ))}
           </View>
 
-          {plan.limitaciones && (
-            <View style={styles.limitacionesContainer}>
-              <Text style={[styles.limitacionesTitulo, { color: esPlanActual ? 'rgba(255,255,255,0.8)' : currentTheme.textSecondary }]}>Limitaciones:</Text>
-              {plan.limitaciones.map((limitacion, index) => (
-                <View key={index} style={styles.limitacionItem}>
-                  <FontAwesome name="times" size={12} color={esPlanActual ? 'rgba(255,255,255,0.7)' : "#e74c3c"} />
-                  <Text style={[styles.limitacionTexto, { color: esPlanActual ? 'rgba(255,255,255,0.8)' : currentTheme.textSecondary }]}>{limitacion}</Text>
-                </View>
-              ))}
-            </View>
-          )}
 
+          {/* Beneficios destacados */}
           {plan.beneficios && (
-            <View style={styles.beneficiosContainer}>
-              <Text style={[styles.beneficiosTitulo, esPlanActual && styles.beneficiosTituloActual, !esPlanActual && { color: currentTheme.text }]}>
-                🚀 Beneficios:
+            <View style={[
+              styles.beneficiosContainer,
+              esPremium && styles.beneficiosContainerPremium
+            ]}>
+              <Text style={[
+                styles.beneficiosTitulo, 
+                esPremium && styles.beneficiosTituloPremium
+              ]}>
+                🎯 ¿Por qué elegir {esPremium ? 'Premium' : 'Básico'}?
               </Text>
               {plan.beneficios.map((beneficio, index) => (
                 <View key={index} style={styles.beneficioItem}>
-                  <FontAwesome 
-                    name="rocket" 
-                    size={12} 
-                    color={esPlanActual ? "white" : "#f39c12"} 
+                  <Ionicons 
+                    name="flash-outline" 
+                    size={13} 
+                    color={esPremium ? "#fff" : "#f39c12"} 
+                    style={styles.beneficioIcon}
                   />
-                  <Text style={[styles.beneficioTexto, esPlanActual && styles.beneficioTextoActual, !esPlanActual && { color: currentTheme.text }]}>
+                  <Text style={[
+                    styles.beneficioTexto, 
+                    esPremium && styles.beneficioTextoPremium
+                  ]}>
                     {beneficio}
                   </Text>
                 </View>
@@ -335,29 +413,50 @@ const PlanScreen = () => {
             </View>
           )}
 
+          {/* Botón de acción */}
           <View style={styles.planActions}>
             {esPlanActual ? (
-              <View style={styles.planActualContainer}>
-                <FontAwesome name="check-circle" size={20} color="white" />
-                <Text style={styles.planActualTexto}>Plan Actual</Text>
+              <>
+                <View style={[
+                  styles.planActualContainer,
+                  esPremium && styles.planActualContainerPremium
+                ]}>
+                  <Ionicons name="checkmark-circle" size={22} color="white" />
+                  <Text style={styles.planActualTexto}>Plan Actual</Text>
+                </View>
                 {esPremium && (
                   <TouchableOpacity
-                    style={styles.cancelarButton}
+                    style={styles.cancelarButtonFull}
                     onPress={cancelarSuscripcion}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.cancelarButtonText}>Cancelar Suscripción</Text>
+                    <View style={styles.cancelarButtonContent}>
+                      <Ionicons name="close-circle-outline" size={18} color="rgba(255,255,255,0.9)" />
+                      <Text style={styles.cancelarButtonTextFull}>Cancelar Suscripción</Text>
+                    </View>
                   </TouchableOpacity>
                 )}
-              </View>
+              </>
             ) : (
               <TouchableOpacity
-                style={[styles.suscribirseButton, { backgroundColor: esPremium ? currentTheme.primary : plan.color || currentTheme.primary }]}
+                style={styles.suscribirseButtonContainer}
                 onPress={esPremium ? handleSuscribirsePremium : () => {}}
                 disabled={!esPremium}
+                activeOpacity={0.8}
               >
-                <Text style={styles.suscribirseButtonText}>
-                  {esPremium ? "Suscribirse Ahora" : "Plan Actual"}
-                </Text>
+                <LinearGradient
+                  colors={esPremium ? ['#f39c12', '#e67e22'] : ['#95a5a6', '#7f8c8d']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.suscribirseButton}
+                >
+                  <Text style={styles.suscribirseButtonText}>
+                    {esPremium ? "🚀 Actualizar a Premium" : "Plan Básico"}
+                  </Text>
+                  {esPremium && (
+                    <Ionicons name="arrow-forward-circle" size={20} color="white" />
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
             )}
           </View>
@@ -368,8 +467,11 @@ const PlanScreen = () => {
 
   return (
     <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
+      {/* Header Moderno */}
       <LinearGradient
-        colors={[currentTheme.primary, currentTheme.secondary]}
+        colors={['#2A9D8F', '#1a7a6e']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={styles.headerGradient}
       >
         <View style={styles.headerContainer}>
@@ -380,8 +482,13 @@ const PlanScreen = () => {
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
           <View style={styles.headerTitleContainer}>
-            <FontAwesome name="star" size={24} color="white" />
-            <Text style={styles.tituloPrincipal}>Mi Plan</Text>
+            <View style={styles.headerIconContainer}>
+              <Ionicons name="diamond" size={28} color="white" />
+            </View>
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.tituloPrincipal}>Mi Plan</Text>
+              <Text style={styles.subtituloPrincipal}>Gestiona tu suscripción</Text>
+            </View>
           </View>
         </View>
       </LinearGradient>
@@ -389,8 +496,10 @@ const PlanScreen = () => {
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContainer}>
         {cargandoPlan ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={currentTheme.primary} />
-            <Text style={[styles.loadingText, { color: currentTheme.textSecondary }]}>Cargando información del plan...</Text>
+            <LoadingVeciApp size={120} color={currentTheme.primary} />
+            <Text style={[styles.loadingText, { color: currentTheme.textSecondary, marginTop: 30 }]}>
+              Cargando información del plan...
+            </Text>
           </View>
         ) : (
           <>
@@ -403,9 +512,9 @@ const PlanScreen = () => {
                 borderWidth: 1
               }]}>
                 <View style={[styles.resumenIconWrapper, { backgroundColor: currentTheme.primary + '20' }]}>
-                  <FontAwesome 
-                    name={planes[planActual].icono} 
-                    size={32} 
+                  <Ionicons 
+                    name={planActual === 'premium' ? "diamond-outline" : "cube-outline"} 
+                    size={24} 
                     color={currentTheme.primary} 
                   />
                 </View>
@@ -441,23 +550,35 @@ const PlanScreen = () => {
         </View>
 
         <View style={[styles.infoContainer, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
-          <Text style={[styles.infoTitulo, { color: currentTheme.text }]}>💡 Información Importante</Text>
+          <Text style={[styles.infoTitulo, { color: currentTheme.text }]}>💡 ¿Por qué Premium?</Text>
           <View style={styles.infoItem}>
-            <FontAwesome name="info-circle" size={16} color={currentTheme.primary} />
+            <FontAwesome name="rocket" size={16} color={currentTheme.primary} />
             <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
-              Puedes cambiar de plan en cualquier momento desde esta pantalla.
+              Expande tu negocio con hasta 3 emprendimientos simultáneos.
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <FontAwesome name="credit-card" size={16} color={currentTheme.primary} />
+            <FontAwesome name="users" size={16} color={currentTheme.primary} />
             <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
-              El Plan Premium se renueva automáticamente cada mes.
+              Asigna 1 vendedor por emprendimiento para gestionar mejor tus ventas.
             </Text>
           </View>
           <View style={styles.infoItem}>
-            <FontAwesome name="shield" size={16} color={currentTheme.primary} />
+            <FontAwesome name="star" size={16} color={currentTheme.primary} />
             <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
-              Tus datos están protegidos con encriptación de nivel bancario.
+              Crea vitrinas virtuales con hasta 30 productos destacados.
+            </Text>
+          </View>
+          <View style={styles.infoItem}>
+            <FontAwesome name="bar-chart" size={16} color={currentTheme.primary} />
+            <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
+              Accede a estadísticas de ventas para tomar mejores decisiones.
+            </Text>
+          </View>
+          <View style={styles.infoItem}>
+            <FontAwesome name="eye" size={16} color={currentTheme.primary} />
+            <Text style={[styles.infoTexto, { color: currentTheme.text }]}>
+              Mayor visibilidad = más clientes encontrándote en la app.
             </Text>
           </View>
         </View>
@@ -465,7 +586,7 @@ const PlanScreen = () => {
         )}
       </ScrollView>
 
-      {/* Modal de confirmación */}
+      {/* Modal de confirmación moderno */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -473,45 +594,97 @@ const PlanScreen = () => {
         onRequestClose={() => setModalVisible(false)}
       >
         <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { backgroundColor: currentTheme.cardBackground }]}>
-            <View style={styles.modalHeader}>
-              <FontAwesome name="star" size={24} color={currentTheme.primary} />
-              <Text style={[styles.modalTitulo, { color: currentTheme.text }]}>Suscribirse al Plan Premium</Text>
-            </View>
-            
-            <View style={styles.modalInfo}>
-              <Text style={[styles.modalPrecio, { color: currentTheme.primary }]}>$4.990 / mes</Text>
-              <Text style={[styles.modalDescripcion, { color: currentTheme.textSecondary }]}>
-                Accede a todas las funcionalidades premium y haz crecer tu negocio.
+          <View style={styles.modalContent}>
+            {/* Header del modal con gradiente */}
+            <LinearGradient
+              colors={['#2A9D8F', '#1a7a6e']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.modalHeaderGradient}
+            >
+              <View style={styles.modalIconContainer}>
+                <Ionicons name="rocket-outline" size={32} color="white" />
+              </View>
+              <Text style={styles.modalTitulo}>¡Actualiza a Premium!</Text>
+              <Text style={styles.modalSubtitulo}>
+                Triplica tu potencial de ventas
               </Text>
+            </LinearGradient>
+            
+            {/* Precio destacado */}
+            <View style={styles.modalPrecioContainer}>
+              <View style={styles.modalPrecioBox}>
+                <Text style={styles.modalPrecioLabel}>Inversión mensual</Text>
+                <Text style={styles.modalPrecio}>$4.990</Text>
+                <Text style={styles.modalPrecioPeriodo}>por mes</Text>
+                <View style={styles.modalRetornoContainer}>
+                  <Ionicons name="trending-up" size={16} color="#27ae60" />
+                  <Text style={styles.modalRetornoTexto}>ROI potencial: 10x</Text>
+                </View>
+              </View>
             </View>
 
+            {/* Beneficios destacados */}
             <View style={styles.modalBeneficios}>
-              <Text style={[styles.modalBeneficiosTitulo, { color: currentTheme.text }]}>Incluye:</Text>
-              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Vitrina virtual completa</Text>
-              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Promoción destacada</Text>
-              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Estadísticas avanzadas</Text>
-              <Text style={[styles.modalBeneficio, { color: currentTheme.text }]}>✓ Soporte prioritario</Text>
+              <Text style={styles.modalBeneficiosTitulo}>🎁 Obtendrás acceso inmediato a:</Text>
+              <View style={styles.modalBeneficiosList}>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="business-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>Hasta 3 emprendimientos</Text>
+                </View>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="people-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>1 vendedor por emprendimiento</Text>
+                </View>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="storefront-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>Vitrina con 30 productos</Text>
+                </View>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="stats-chart-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>Estadísticas en tiempo real</Text>
+                </View>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="eye-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>Mayor visibilidad</Text>
+                </View>
+                <View style={styles.modalBeneficioItem}>
+                  <Ionicons name="headset-outline" size={16} color="#2A9D8F" />
+                  <Text style={styles.modalBeneficio}>Soporte personalizado</Text>
+                </View>
+              </View>
             </View>
 
+            {/* Botones de acción */}
             <View style={styles.modalActions}>
               <TouchableOpacity
-                style={[styles.modalCancelButton, { borderColor: currentTheme.border }]}
+                style={styles.modalCancelButton}
                 onPress={() => setModalVisible(false)}
               >
-                <Text style={styles.modalCancelButtonText}>Cancelar</Text>
+                <Text style={styles.modalCancelButtonText}>Ahora no</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[styles.modalConfirmButton, { backgroundColor: currentTheme.primary }, cargando && styles.modalConfirmButtonDisabled]}
+                style={styles.modalConfirmButtonContainer}
                 onPress={confirmarSuscripcion}
                 disabled={cargando}
+                activeOpacity={0.8}
               >
-                {cargando ? (
-                  <Text style={styles.modalConfirmButtonText}>Procesando...</Text>
-                ) : (
-                  <Text style={styles.modalConfirmButtonText}>Confirmar Suscripción</Text>
-                )}
+                <LinearGradient
+                  colors={['#f39c12', '#e67e22']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.modalConfirmButton}
+                >
+                  {cargando ? (
+                    <ActivityIndicator size="small" color="white" />
+                  ) : (
+                    <>
+                      <Text style={styles.modalConfirmButtonText}>🚀 Activar Premium</Text>
+                      <Ionicons name="arrow-forward" size={18} color="white" />
+                    </>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           </View>
@@ -527,17 +700,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f9fa",
   },
   headerGradient: {
-    paddingTop: 50,
-    paddingBottom: 20,
+    paddingTop: 60,
+    paddingBottom: 25,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   headerContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 15,
   },
   headerTitleContainer: {
@@ -545,33 +729,50 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flex: 1,
   },
+  headerIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  headerTextContainer: {
+    flex: 1,
+  },
   tituloPrincipal: {
     fontSize: 24,
-    fontWeight: "bold",
+    fontWeight: "800",
     color: "white",
-    marginLeft: 10,
+    letterSpacing: 0.5,
+  },
+  subtituloPrincipal: {
+    fontSize: 13,
+    color: "rgba(255, 255, 255, 0.85)",
+    marginTop: 2,
+    fontWeight: "500",
   },
   container: {
     flex: 1,
-    paddingBottom: 130, // Espacio para la barra inferior
   },
   scrollContainer: {
-    padding: 20,
-    paddingBottom: 150, // Espacio para la barra inferior + margen extra
+    padding: 16,
+    paddingBottom: 150, // Espacio para la barra inferior
   },
   resumenContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   resumenTitulo: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#2c3e50",
-    marginBottom: 15,
+    marginBottom: 10,
   },
   resumenCard: {
     backgroundColor: "white",
     borderRadius: 15,
-    padding: 20,
+    padding: 16,
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
@@ -581,12 +782,12 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   resumenIconWrapper: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 15,
+    marginRight: 12,
   },
   resumenInfo: {
     marginLeft: 0,
@@ -631,192 +832,306 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   loadingText: {
-    marginTop: 10,
     fontSize: 16,
     color: "#7f8c8d",
+    fontWeight: "500",
   },
   planesContainer: {
-    marginBottom: 30,
+    marginBottom: 20,
   },
   planesTitulo: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#2c3e50",
-    marginBottom: 15,
+    marginBottom: 12,
   },
   planCard: {
-    marginBottom: 20,
-    borderRadius: 15,
-    overflow: "hidden",
+    marginBottom: 16,
+    borderRadius: 16,
+    overflow: "visible",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  planCardPremium: {
+    shadowColor: "#2A9D8F",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+    transform: [{ scale: 1.01 }],
   },
   planCardActual: {
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  // Badges
+  badgeRecomendado: {
+    position: "absolute",
+    top: -10,
+    right: 20,
+    zIndex: 10,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#f39c12",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
     shadowRadius: 8,
-    elevation: 6,
+    elevation: 8,
   },
-  planGradient: {
-    padding: 20,
+  badgeActual: {
+    position: "absolute",
+    top: -10,
+    right: 20,
+    zIndex: 10,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#27ae60",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  planHeader: {
+  badgeGradient: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 6,
+    gap: 5,
+  },
+  badgeTexto: {
+    color: "white",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  planGradient: {
+    padding: 14,
+    borderRadius: 16,
+  },
+  planHeader: {
+    alignItems: "center",
+    marginBottom: 8,
   },
   planIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "rgba(255,255,255,0.2)",
+    width: 45,
+    height: 45,
+    borderRadius: 23,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 15,
   },
-  planInfo: {
-    flex: 1,
-  },
-  planNombre: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2c3e50",
-  },
-  planNombreActual: {
-    color: "white",
-  },
-  planPrecio: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2A9D8F",
-    marginTop: 2,
-  },
-  planPrecioActual: {
-    color: "white",
-  },
-  planPeriodo: {
-    fontSize: 14,
-    fontWeight: "normal",
-  },
-  planDescripcion: {
-    fontSize: 14,
-    color: "#7f8c8d",
-    marginTop: 2,
-  },
-  planDescripcionActual: {
-    color: "rgba(255,255,255,0.8)",
-  },
-  caracteristicasContainer: {
-    marginBottom: 15,
-  },
-  caracteristicasTitulo: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#2c3e50",
+  // Títulos y precios
+  planTitleSection: {
+    alignItems: "center",
     marginBottom: 10,
   },
-  caracteristicasTituloActual: {
+  planNombre: {
+    fontSize: 19,
+    fontWeight: "900",
+    color: "#2c3e50",
+    textAlign: "center",
+  },
+  planNombrePremium: {
     color: "white",
+    fontSize: 20,
+  },
+  planDescripcion: {
+    fontSize: 11,
+    color: "#7f8c8d",
+    marginTop: 2,
+    textAlign: "center",
+  },
+  planDescripcionPremium: {
+    color: "rgba(255,255,255,0.85)",
+    fontSize: 11,
+  },
+  planPrecioContainer: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    marginTop: 5,
+  },
+  planPrecio: {
+    fontSize: 26,
+    fontWeight: "900",
+    color: "#2A9D8F",
+    letterSpacing: -1,
+  },
+  planPrecioPremium: {
+    color: "white",
+    fontSize: 28,
+  },
+  planPeriodo: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#7f8c8d",
+  },
+  valorAgregadoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginTop: 5,
+    gap: 3,
+  },
+  valorAgregadoTexto: {
+    color: "rgba(255,255,255,0.95)",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  caracteristicasContainer: {
+    marginBottom: 8,
   },
   caracteristicaItem: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 5,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    paddingHorizontal: 7,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  caracteristicaItemPremium: {
+    backgroundColor: "rgba(255,255,255,0.15)",
+  },
+  checkIcon: {
+    marginRight: 7,
   },
   caracteristicaTexto: {
-    fontSize: 14,
-    color: "#34495e",
-    marginLeft: 8,
+    fontSize: 12,
+    color: "#2c3e50",
+    flex: 1,
+    lineHeight: 16,
+    fontWeight: "500",
   },
-  caracteristicaTextoActual: {
+  caracteristicaTextoPremium: {
     color: "white",
+    fontWeight: "600",
   },
   limitacionesContainer: {
-    marginBottom: 15,
+    marginBottom: 8,
   },
   limitacionesTitulo: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     color: "#e74c3c",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   limitacionItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 3,
+    marginBottom: 2,
   },
   limitacionTexto: {
-    fontSize: 13,
+    fontSize: 11,
     color: "#7f8c8d",
-    marginLeft: 8,
+    marginLeft: 6,
   },
   beneficiosContainer: {
-    marginBottom: 20,
+    marginBottom: 8,
+    backgroundColor: "rgba(0,0,0,0.05)",
+    padding: 8,
+    borderRadius: 6,
+  },
+  beneficiosContainerPremium: {
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   beneficiosTitulo: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#f39c12",
-    marginBottom: 10,
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#2c3e50",
+    marginBottom: 4,
   },
-  beneficiosTituloActual: {
-    color: "white",
+  beneficiosTituloPremium: {
+    color: "rgba(255,255,255,0.95)",
   },
   beneficioItem: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 5,
+    marginBottom: 4,
+  },
+  beneficioIcon: {
+    marginRight: 6,
   },
   beneficioTexto: {
-    fontSize: 14,
-    color: "#34495e",
-    marginLeft: 8,
+    fontSize: 11,
+    color: "#2c3e50",
+    flex: 1,
+    lineHeight: 14,
+    fontWeight: "500",
   },
-  beneficioTextoActual: {
-    color: "white",
+  beneficioTextoPremium: {
+    color: "rgba(255,255,255,0.9)",
   },
   planActions: {
-    marginTop: 10,
+    marginTop: 8,
   },
   planActualContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.2)",
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  planActualContainerPremium: {
+    backgroundColor: "rgba(255,255,255,0.25)",
   },
   planActualTexto: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: "700",
+    marginLeft: 6,
   },
-  cancelarButton: {
-    backgroundColor: "rgba(255,255,255,0.2)",
-    paddingHorizontal: 15,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginLeft: 15,
+  cancelarButtonFull: {
+    backgroundColor: "rgba(231,76,60,0.15)",
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
   },
-  cancelarButtonText: {
-    color: "white",
+  cancelarButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  cancelarButtonTextFull: {
+    color: "rgba(255,255,255,0.9)",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  suscribirseButtonContainer: {
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#f39c12",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   suscribirseButton: {
-    padding: 15,
-    borderRadius: 10,
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 13,
+    gap: 8,
   },
   suscribirseButtonText: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.3,
   },
   infoContainer: {
     backgroundColor: "white",
     borderRadius: 15,
-    padding: 20,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -824,111 +1139,178 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   infoTitulo: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#2c3e50",
-    marginBottom: 15,
+    marginBottom: 10,
   },
   infoItem: {
     flexDirection: "row",
     alignItems: "flex-start",
-    marginBottom: 10,
+    marginBottom: 8,
   },
   infoTexto: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#34495e",
     marginLeft: 10,
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 18,
   },
-  // Estilos del modal
+  // Estilos del modal moderno
   modalContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   modalContent: {
     backgroundColor: "white",
-    borderRadius: 20,
-    padding: 25,
+    borderRadius: 25,
     width: "90%",
-    maxWidth: 400,
+    maxWidth: 420,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    elevation: 15,
   },
-  modalHeader: {
-    flexDirection: "row",
+  modalHeaderGradient: {
+    paddingVertical: 25,
+    paddingHorizontal: 20,
     alignItems: "center",
-    marginBottom: 20,
+  },
+  modalIconContainer: {
+    width: 65,
+    height: 65,
+    borderRadius: 33,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
   },
   modalTitulo: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#2c3e50",
-    marginLeft: 10,
+    fontSize: 22,
+    fontWeight: "900",
+    color: "white",
+    textAlign: "center",
+    letterSpacing: 0.5,
   },
-  modalInfo: {
+  modalSubtitulo: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.9)",
+    textAlign: "center",
+    marginTop: 4,
+    fontWeight: "500",
+  },
+  modalPrecioContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 20,
     alignItems: "center",
-    marginBottom: 20,
+    backgroundColor: "#f8f9fa",
+  },
+  modalPrecioBox: {
+    alignItems: "center",
+  },
+  modalPrecioLabel: {
+    fontSize: 12,
+    color: "#7f8c8d",
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   modalPrecio: {
-    fontSize: 24,
-    fontWeight: "bold",
+    fontSize: 40,
+    fontWeight: "900",
     color: "#2A9D8F",
-    marginBottom: 5,
+    letterSpacing: -1,
+    marginTop: 4,
   },
-  modalDescripcion: {
-    fontSize: 14,
-    color: "#7f8c8d",
-    textAlign: "center",
-    lineHeight: 20,
+  modalPrecioPeriodo: {
+    fontSize: 13,
+    color: "#95a5a6",
+    fontWeight: "500",
+  },
+  modalRetornoContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#d5f4e6",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    marginTop: 10,
+    gap: 4,
+  },
+  modalRetornoTexto: {
+    fontSize: 11,
+    color: "#27ae60",
+    fontWeight: "700",
   },
   modalBeneficios: {
-    marginBottom: 25,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   modalBeneficiosTitulo: {
-    fontSize: 16,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     color: "#2c3e50",
     marginBottom: 10,
   },
+  modalBeneficiosList: {
+    gap: 8,
+  },
+  modalBeneficioItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   modalBeneficio: {
-    fontSize: 14,
-    color: "#34495e",
-    marginBottom: 5,
+    fontSize: 13,
+    color: "#2c3e50",
+    fontWeight: "500",
+    flex: 1,
   },
   modalActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    gap: 10,
   },
   modalCancelButton: {
     flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e74c3c",
-    marginRight: 10,
+    paddingVertical: 13,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: "#e9ecef",
     alignItems: "center",
+    backgroundColor: "#f8f9fa",
   },
   modalCancelButtonText: {
-    color: "#e74c3c",
-    fontSize: 16,
-    fontWeight: "bold",
+    color: "#7f8c8d",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  modalConfirmButtonContainer: {
+    flex: 1.5,
+    borderRadius: 12,
+    overflow: "hidden",
+    shadowColor: "#f39c12",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
   modalConfirmButton: {
-    flex: 1,
-    backgroundColor: "#2A9D8F",
-    padding: 15,
-    borderRadius: 10,
-    marginLeft: 10,
+    flexDirection: "row",
     alignItems: "center",
-  },
-  modalConfirmButtonDisabled: {
-    backgroundColor: "#bdc3c7",
+    justifyContent: "center",
+    paddingVertical: 13,
+    gap: 8,
   },
   modalConfirmButtonText: {
     color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
+    fontSize: 14,
+    fontWeight: "800",
   },
 });
 
