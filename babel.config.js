@@ -9,6 +9,7 @@ module.exports = function (api) {
           path: '.env.development', // Usa .env.development por defecto
         },
       ],
+      'react-native-reanimated/plugin', // Debe ser el ÚLTIMO plugin
     ],
   };
 };

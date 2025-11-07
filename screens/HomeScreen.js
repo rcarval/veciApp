@@ -10,19 +10,22 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
+  FlatList,
+  Dimensions,
   //BackHandler,
   Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import Swiper from "react-native-swiper";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const HomeScreen = ({ navigation }) => {
   const userContext = useUser();
@@ -37,6 +40,8 @@ const HomeScreen = ({ navigation }) => {
   const modalYaMostrado = useRef(false);
   const direccionesRef = useRef([]); // Ref para tener valor actualizado en closures
   const [emprendimientosDestacados, setEmprendimientosDestacados] = useState([]);
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
+  const carouselRef = useRef(null);
   const [productosDestacados, setProductosDestacados] = useState([]);
   const [productosOferta, setProductosOferta] = useState([]);
   const [emprendimientosPorCategoria, setEmprendimientosPorCategoria] = useState({});
@@ -97,6 +102,28 @@ const HomeScreen = ({ navigation }) => {
 
     return () => clearInterval(interval); // Evita fugas de memoria
   }, []);
+
+  // Auto-scroll para el carrusel de emprendimientos destacados
+  useEffect(() => {
+    if (emprendimientosDestacados.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setCurrentCarouselIndex((prevIndex) => {
+        const nextIndex = (prevIndex + 1) % emprendimientosDestacados.length;
+        
+        if (carouselRef.current) {
+          carouselRef.current.scrollToIndex({
+            index: nextIndex,
+            animated: true,
+          });
+        }
+        
+        return nextIndex;
+      });
+    }, 3000); // Cambia cada 3 segundos
+
+    return () => clearInterval(interval);
+  }, [emprendimientosDestacados.length]);
 
   useEffect(() => {
     Animated.loop(
@@ -1012,28 +1039,37 @@ const getIconForCategory = (categoria) => {
 
           <View style={styles.destacados}>
             {emprendimientosDestacados.length > 0 ? (
-              <Swiper
-                autoplay={true}
-                autoplayTimeout={3}
-                showsPagination={true}
-                style={styles.swiper}
-                dotStyle={styles.swiperDot}
-                activeDotStyle={styles.swiperActiveDot}
-                paginationStyle={styles.swiperPagination}
-              >
-                {emprendimientosDestacados.map((producto) => {
-                const isOpen = producto.estado;
-                const isVip = !producto.nombre; // Asume que los VIP no tienen nombre
-                // Verificar si es propio emprendimiento
-                const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
-                const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
-                const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
+              <>
+                <FlatList
+                  ref={carouselRef}
+                  data={emprendimientosDestacados}
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  keyExtractor={(item) => item.id.toString()}
+                  onMomentumScrollEnd={(event) => {
+                    const index = Math.round(event.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+                    setCurrentCarouselIndex(index);
+                  }}
+                  onScrollToIndexFailed={(info) => {
+                    const wait = new Promise(resolve => setTimeout(resolve, 500));
+                    wait.then(() => {
+                      carouselRef.current?.scrollToIndex({ index: info.index, animated: true });
+                    });
+                  }}
+                  renderItem={({ item: producto }) => {
+                    const isOpen = producto.estado;
+                    const isVip = !producto.nombre; // Asume que los VIP no tienen nombre
+                    // Verificar si es propio emprendimiento
+                    const esPropioEmprendimiento = producto.usuario_id === usuario?.id;
+                    const tipoEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
+                    const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
-                return (
-                  <TouchableOpacity
-                    key={producto.id}
-                    style={styles.productoContainer}
-                    onPress={() => {
+                    return (
+                      <View style={{ width: SCREEN_WIDTH, paddingHorizontal: 16 }}>
+                        <TouchableOpacity
+                          style={styles.productoContainer}
+                          onPress={() => {
                       if (isVip) {
                         navigation.navigate("PlanScreen");
                       } else {
@@ -1155,10 +1191,25 @@ const getIconForCategory = (categoria) => {
                         style={styles.productoImagenPrincipalVip}
                       />
                     )}
-                  </TouchableOpacity>
-                );
-              })}
-              </Swiper>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  }}
+                />
+                
+                {/* Dots de paginación personalizados */}
+                <View style={styles.paginationContainer}>
+                  {emprendimientosDestacados.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.swiperDot,
+                        index === currentCarouselIndex && styles.swiperActiveDot
+                      ]}
+                    />
+                  ))}
+                </View>
+              </>
             ) : (
               <View style={styles.emptyStateHome}>
                 <FontAwesome name="clock-o" size={64} color="#95a5a6" />
@@ -1795,13 +1846,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
 
-  swiper: {
-    paddingTop: 10,
-    paddingBottom: 20,
-    height: 410,
-  },
-  swiperPagination: {
-    bottom: -5,
+  paginationContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 15,
   },
   swiperDot: {
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
