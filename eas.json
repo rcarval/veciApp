@@ -20,13 +20,7 @@
         "NODE_ENV": "production"
       },
       "android": {
-        "buildType": "apk",
-        "gradleProperties": {
-          "newArchEnabled": "true",
-          "hermesEnabled": "true",
-          "android.useAndroidX": "true",
-          "android.enableJetifier": "true"
-        }
+        "buildType": "apk"
       }
     },
     "production": {
