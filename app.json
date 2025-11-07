@@ -30,6 +30,7 @@
       },
       "edgeToEdgeEnabled": false,
       "package": "com.racarvallog.veciApp",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.CAMERA",
