@@ -43,16 +43,7 @@ export const registerForPushNotifications = async () => {
 
     console.log('✅ Permisos de notificaciones otorgados');
 
-    // Obtener el token de Expo Push Notifications
-    const projectId = Constants.expoConfig?.extra?.eas?.projectId || Constants.easConfig?.projectId;
-    
-    const token = await Notifications.getExpoPushTokenAsync({
-      projectId,
-    });
-
-    console.log('✅ Expo Push Token obtenido:', token.data);
-
-    // Configurar canal de notificaciones para Android
+    // Configurar canal de notificaciones para Android ANTES de obtener el token
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('veciapp-notifications', {
         name: 'VeciApp Notificaciones',
@@ -64,7 +55,13 @@ export const registerForPushNotifications = async () => {
       console.log('✅ Canal de notificaciones Android configurado');
     }
 
-    return token.data;
+    // Obtener el token NATIVO de FCM (no el de Expo)
+    const deviceToken = await Notifications.getDevicePushTokenAsync();
+    const fcmToken = deviceToken.data;
+
+    console.log('✅ Token FCM obtenido:', fcmToken);
+
+    return fcmToken;
   } catch (error) {
     console.error('❌ Error al registrar para notificaciones:', error);
     return null;
