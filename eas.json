@@ -16,8 +16,17 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "NODE_ENV": "production"
+      },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleProperties": {
+          "newArchEnabled": "true",
+          "hermesEnabled": "true",
+          "android.useAndroidX": "true",
+          "android.enableJetifier": "true"
+        }
       }
     },
     "production": {
