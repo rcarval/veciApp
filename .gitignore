@@ -15,8 +15,7 @@ yarn-error.log
 .env.production.local
 .env.production
 
-# Firebase configuration
-google-services.json
+# Firebase configuration (iOS only - Android se necesita en git para EAS Build)
 GoogleService-Info.plist
 
 # macOS
