@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   Modal,
   ActivityIndicator,
@@ -20,6 +19,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const { width, height } = Dimensions.get('window');
 
@@ -204,6 +205,9 @@ const LoginScreen = ({ navigation }) => {
   const [contrasena, setContrasena] = useState("");
   const [loading, setLoading] = useState(false);
   
+  // Toast para notificaciones
+  const toast = useToast();
+  
   // Animaciones
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -269,7 +273,7 @@ const LoginScreen = ({ navigation }) => {
 
   const handleLogin = async () => {
     if (!correo || !contrasena) {
-      Alert.alert("Error", "Por favor, ingresa tu correo y contraseña.");
+      toast.error("Por favor, ingresa tu correo y contraseña");
       return;
     }
 
@@ -344,10 +348,19 @@ const LoginScreen = ({ navigation }) => {
       
     } catch (error) {
       console.error("Error:", error);
-      Alert.alert(
-        "Error", 
-        error.message || "No se pudo conectar al servidor. Verifica tu conexión a internet."
-      );
+      
+      // Mensajes de error más amigables en español
+      let mensajeError = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
+      
+      if (error.message?.includes('Network request failed')) {
+        mensajeError = "Error de conexión. Verifica tu internet e intenta nuevamente.";
+      } else if (error.message?.includes('timeout')) {
+        mensajeError = "La conexión tardó demasiado. Intenta nuevamente.";
+      } else if (error.message) {
+        mensajeError = error.message;
+      }
+      
+      toast.error(mensajeError, 4000);
       setLoading(false);
     }
   };
@@ -508,6 +521,15 @@ const LoginScreen = ({ navigation }) => {
           <LoadingAnimation />
         </LinearGradient>
       </Modal>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };

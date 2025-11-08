@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   Modal,
   Image,
   TextInput,
@@ -20,12 +19,18 @@ import { useUser } from '../context/UserContext';
 import pedidoService from '../services/pedidoService';
 import io from 'socket.io-client';
 import env from '../config/env';
+import Toast from '../components/Toast';
+import { useToast } from '../hooks/useToast';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { currentTheme } = useTheme();
   const { usuario } = useUser();
+  
+  // Toast para notificaciones
+  const toast = useToast();
+  
   const [pedidos, setPedidos] = useState([]);
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
@@ -129,7 +134,7 @@ const MisPedidosScreen = () => {
       }
     } catch (error) {
       console.log('❌ Error al cargar pedidos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los pedidos');
+      toast.error('No se pudieron cargar los pedidos. Verifica tu conexión');
       setPedidosPendientes([]);
       setPedidosCompletados([]);
       setPedidosRechazadosPendientes([]);
@@ -271,7 +276,7 @@ const MisPedidosScreen = () => {
       }
     } catch (error) {
       console.log('❌ Error al marcar recibido:', error);
-      Alert.alert('Error', 'No se pudo confirmar la entrega. Inténtalo de nuevo.');
+      toast.error('No se pudo confirmar la entrega. Inténtalo de nuevo');
     }
   };
 
@@ -290,7 +295,7 @@ const MisPedidosScreen = () => {
     const motivoFinal = motivoSeleccionado === 'Otro' ? motivoPersonalizado : motivoSeleccionado;
     
     if (!motivoFinal.trim()) {
-      Alert.alert('Motivo requerido', 'Por favor selecciona un motivo para cancelar el pedido.');
+      toast.warning('Por favor selecciona un motivo para cancelar el pedido');
       return;
     }
 
@@ -310,10 +315,10 @@ const MisPedidosScreen = () => {
       // Recargar pedidos desde el backend
       await cargarPedidos();
       
-      Alert.alert('Pedido cancelado', 'El pedido ha sido cancelado exitosamente.');
+      toast.success('El pedido ha sido cancelado exitosamente');
     } catch (error) {
       console.log('❌ Error al cancelar pedido:', error);
-      Alert.alert('Error', error.message || 'No se pudo cancelar el pedido.');
+      toast.error(error.message || 'No se pudo cancelar el pedido');
     }
   };
 
@@ -362,11 +367,7 @@ const MisPedidosScreen = () => {
       const criteriosCalificados = Object.values(calificacionesUsuario).every(valor => valor > 0);
       
       if (!criteriosCalificados) {
-        Alert.alert(
-          "Calificación incompleta",
-          "Por favor califica todos los criterios antes de enviar.",
-          [{ text: "OK" }]
-        );
+        toast.warning("Por favor califica todos los criterios antes de enviar");
         return;
       }
 
@@ -393,19 +394,11 @@ const MisPedidosScreen = () => {
       // Recargar pedidos desde el backend
       await cargarPedidos();
 
-      Alert.alert(
-        "¡Gracias!",
-        "Tu calificación ha sido registrada exitosamente.",
-        [{ text: "OK" }]
-      );
+      toast.success("¡Gracias! Tu calificación ha sido registrada exitosamente");
 
     } catch (error) {
       console.log('❌ Error al guardar calificación:', error);
-      Alert.alert(
-        "Error",
-        error.message || "No se pudo guardar tu calificación. Inténtalo de nuevo.",
-        [{ text: "OK" }]
-      );
+      toast.error(error.message || "No se pudo guardar tu calificación. Inténtalo de nuevo");
     }
   };
 
@@ -419,10 +412,10 @@ const MisPedidosScreen = () => {
       // Recargar pedidos desde el backend
       await cargarPedidos();
       
-      Alert.alert('Confirmado', 'El pedido rechazado ha sido movido al historial.');
+      toast.success('El pedido rechazado ha sido movido al historial');
     } catch (error) {
       console.log('❌ Error al confirmar rechazo:', error);
-      Alert.alert('Error', error.message || 'No se pudo confirmar el rechazo.');
+      toast.error(error.message || 'No se pudo confirmar el rechazo');
     }
   };
 
@@ -485,7 +478,7 @@ const MisPedidosScreen = () => {
                 style={styles.confirmarRechazoButtonModerno}
                 onPress={() => {
                   if (pedido.estado === 'cancelado') {
-                    Alert.alert('Info', 'El emprendedor debe confirmar tu cancelación primero.');
+                    toast.info('El emprendedor debe confirmar tu cancelación primero');
                   } else {
                     confirmarRechazo(pedido);
                   }
@@ -1001,6 +994,15 @@ const MisPedidosScreen = () => {
         )}
       </ScrollView>
       </View>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </>
   );
 };

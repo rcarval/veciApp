@@ -4,7 +4,6 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  Alert,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
@@ -12,12 +11,15 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const { width, height } = Dimensions.get('window');
 
@@ -36,6 +38,9 @@ const RegisterScreen = ({ navigation }) => {
   const [verPassword, setVerPassword] = useState(false);
   const [verConfirmPassword, setVerConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Toast para notificaciones
+  const toast = useToast();
 
   // Animaciones
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -133,23 +138,23 @@ const RegisterScreen = ({ navigation }) => {
 
   const handleRegister = async () => {
     if (!nombre || !correo || !confirmarCorreo || !contrasena || !confirmarContrasena) {
-      Alert.alert("Error", "Todos los campos son obligatorios.");
+      toast.error("Todos los campos son obligatorios");
       return;
     }
     if (!validarCorreo(correo)) {
-      Alert.alert("Error", "Ingresa un correo válido.");
+      toast.error("Ingresa un correo válido");
       return;
     }
     if (correo !== confirmarCorreo) {
-      Alert.alert("Error", "Los correos no coinciden.");
+      toast.error("Los correos no coinciden");
       return;
     }
     if (!validarContrasena(contrasena)) {
-      Alert.alert("Error", "La contraseña debe tener 8-16 caracteres, con mayúscula y número.");
+      toast.error("La contraseña debe tener 8-16 caracteres, con mayúscula y número");
       return;
     }
     if (contrasena !== confirmarContrasena) {
-      Alert.alert("Error", "Las contraseñas no coinciden.");
+      toast.error("Las contraseñas no coinciden");
       return;
     }
     
@@ -179,23 +184,27 @@ const RegisterScreen = ({ navigation }) => {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert(
-          "✅ ¡Registro exitoso!",
-          "Hemos enviado un correo de verificación a:\n\n" + correo + "\n\nPor favor verifica tu email para activar tu cuenta.",
-          [
-            {
-              text: "Entendido",
-              onPress: () => navigation.navigate("Login")
-            }
-          ]
-        );
+        toast.success("✅ ¡Registro exitoso! Hemos enviado un correo de verificación a " + correo, 5000);
+        
+        // Navegar al login después de 3 segundos
+        setTimeout(() => {
+          navigation.navigate("Login");
+        }, 3000);
       } else {
         const mensajeError = data.mensaje || data.error || "No se pudo completar el registro.";
-        Alert.alert("Error", mensajeError);
+        toast.error(mensajeError);
       }
     } catch (error) {
       console.error("Error:", error);
-      Alert.alert("Error de conexión", "No se pudo conectar al servidor.");
+      
+      let mensajeError = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
+      if (error.message?.includes('Network request failed')) {
+        mensajeError = "Error de conexión. Verifica tu internet e intenta nuevamente.";
+      } else if (error.message?.includes('timeout')) {
+        mensajeError = "La conexión tardó demasiado. Intenta nuevamente.";
+      }
+      
+      toast.error(mensajeError, 4000);
     } finally {
       setLoading(false);
     }
@@ -453,6 +462,15 @@ const RegisterScreen = ({ navigation }) => {
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
