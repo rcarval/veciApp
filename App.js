@@ -618,10 +618,12 @@ export default function App() {
         const token = await AsyncStorage.getItem("token");
         
         if (token) {
-          // Si hay token, cargar usuario
+          // Si hay token, cargar usuario y marcar sesión activa
           const usuarioGuardado = await AsyncStorage.getItem("usuario");
           if (usuarioGuardado) {
             setUsuario(JSON.parse(usuarioGuardado));
+            // Asegurar que sesionActiva esté marcada para que AppWithBottomBar funcione
+            await AsyncStorage.setItem("sesionActiva", "true");
             console.log("✅ Sesión restaurada desde AsyncStorage");
           }
         } else {
