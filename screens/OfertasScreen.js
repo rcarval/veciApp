@@ -133,7 +133,7 @@ const OfertasScreen = () => {
       }
     } catch (error) {
       console.error('❌ Error al cargar ofertas:', error);
-      toast.warning('Error', 'No se pudieron cargar las ofertas');
+      toast.error('No se pudieron cargar las ofertas');
       setProductosOferta([]);
     } finally {
       setCargando(false);
