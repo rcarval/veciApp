@@ -149,7 +149,6 @@ const ComidaScreen = ({ navigation, route }) => {
     if (mostrarAdvertencia) {
       toast.warning(
         "No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
-      );
       return;
     }
 
