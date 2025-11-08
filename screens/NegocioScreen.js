@@ -6,7 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Alert,
+  
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,12 +14,13 @@ import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
-import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const NegocioScreen = ({ navigation, route }) => {
   const { currentTheme } = useTheme();
   const { usuario, modoVista } = useUser();
-  const { categoria = 'tiendas', titulo = 'Tiendas & Negocios', icono = 'shopping-bag' } = route.params || {};
+  const toast = useToast();  const { categoria = 'tiendas', titulo = 'Tiendas & Negocios', icono = 'shopping-bag' } = route.params || {};
   
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -44,7 +45,7 @@ const NegocioScreen = ({ navigation, route }) => {
       }
     } catch (error) {
       console.error('❌ Error al cargar emprendimientos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los emprendimientos');
+      toast.error('No se pudieron cargar los emprendimientos');
       setEmprendimientos([]);
     } finally {
       setCargando(false);
@@ -130,10 +131,8 @@ const NegocioScreen = ({ navigation, route }) => {
     const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
     if (mostrarAdvertencia) {
-      Alert.alert(
-        "⚠️ Tu Propio Negocio",
-        "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-        [{ text: "Entendido" }]
+      toast.warning(
+        "No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
       );
       return;
     }
@@ -364,6 +363,14 @@ const NegocioScreen = ({ navigation, route }) => {
   );
 };
 
+      
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
 const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,
