@@ -12,7 +12,8 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
-  Platform
+  Platform,
+  Alert
 } from "react-native";
 import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
