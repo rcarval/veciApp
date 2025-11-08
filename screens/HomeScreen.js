@@ -718,25 +718,13 @@ const getIconForCategory = (categoria) => {
       {modoVista === 'cliente' && usuario?.tipo_usuario === 'emprendedor' && (
         <TouchableOpacity
           style={styles.modoVistaBanner}
-          onPress={() => {
-            Alert.alert(
-              "Vista de Cliente Activa",
-              "Estás viendo la app como cliente para probar tu negocio. ¿Quieres volver a tu perfil de emprendedor?",
-              [
-                { text: "Seguir como Cliente", style: "cancel" },
-                {
-                  text: "Volver a Emprendedor",
-                  onPress: async () => {
-                    await volverAVistaEmprendedor();
-                    navigation.dispatch(
-                      require('@react-navigation/native').CommonActions.reset({
-                        index: 0,
-                        routes: [{ name: 'Perfil' }],
-                      })
-                    );
-                  }
-                }
-              ]
+          onPress={async () => {
+            await volverAVistaEmprendedor();
+            navigation.dispatch(
+              require('@react-navigation/native').CommonActions.reset({
+                index: 0,
+                routes: [{ name: 'Perfil' }],
+              })
             );
           }}
           activeOpacity={0.9}
@@ -747,10 +735,11 @@ const getIconForCategory = (categoria) => {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Ionicons name="eye" size={18} color="white" />
+            <Ionicons name="eye" size={14} color="white" />
             <Text style={styles.modoVistaBannerTexto}>
-              Modo Cliente Activo - Toca para volver
+              Vista Cliente
             </Text>
+            <Ionicons name="chevron-forward" size={14} color="white" />
           </LinearGradient>
         </TouchableOpacity>
       )}
@@ -1580,27 +1569,28 @@ const styles = StyleSheet.create({
   // Banner de modo vista cliente
   modoVistaBanner: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 45,
+    right: 10,
     zIndex: 9999,
+    borderRadius: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
-    elevation: 8,
+    elevation: 6,
   },
   modoVistaBannerGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    paddingTop: 50, // Espacio para el notch
-    gap: 10,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    gap: 6,
+    borderRadius: 20,
   },
   modoVistaBannerTexto: {
     color: 'white',
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
