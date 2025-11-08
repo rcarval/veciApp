@@ -55,18 +55,14 @@ const MisPedidosScreen = () => {
     'Demora excesiva'
   ];
 
-  // Función para obtener el logo de la empresa basado en el nombre del negocio
-  const obtenerLogoEmpresa = (nombreNegocio) => {
-    const logosEmpresas = {
-      'Pizzeria Donatelo': require('../assets/donatelo.png'),
-      'Grill Burger': require('../assets/grillburger_logo.jpg'),
-      'Los Chinitos': require('../assets/loschinitos_logo.jpg'),
-      'Maestro José': require('../assets/maestrojose_logo.jpeg'),
-      'Pelucan': require('../assets/pelucan_logo.png'),
-      'Gasfiter': require('../assets/gasfiter_logo.jpeg'),
-    };
-    
-    return logosEmpresas[nombreNegocio] || null;
+  // Nota: Los logos ahora vienen directamente del backend en emprendimiento_logo
+  // Esta función ya no es necesaria, pero se mantiene para compatibilidad
+  const obtenerLogoEmpresa = (pedido) => {
+    // Si el pedido tiene logo del backend, usarlo
+    if (pedido.emprendimiento_logo) {
+      return { uri: pedido.emprendimiento_logo };
+    }
+    return null;
   };
 
   // Función para cargar pedidos del backend
@@ -431,7 +427,7 @@ const MisPedidosScreen = () => {
   };
 
   const renderPedidoRechazado = (pedido) => {
-    const logoEmpresa = obtenerLogoEmpresa(pedido.negocio);
+    const logoEmpresa = obtenerLogoEmpresa(pedido);
     
     return (
       <View key={pedido.id} style={[styles.pedidoCardModerno, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
@@ -516,7 +512,7 @@ const MisPedidosScreen = () => {
   };
 
   const renderPedido = (pedido) => {
-    const logoEmpresa = obtenerLogoEmpresa(pedido.negocio);
+    const logoEmpresa = obtenerLogoEmpresa(pedido);
     const estadoColor = obtenerEstadoColor(pedido.estado);
     
     return (

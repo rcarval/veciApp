@@ -386,8 +386,8 @@ const HomeScreen = ({ navigation }) => {
         nombre: emp.nombre,
         descripcion: emp.descripcion_corta || emp.descripcion,
         descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
-        imagen: emp.background_url || require('../assets/icon.png'),
-        logo: emp.logo_url || require('../assets/icon.png'),
+        imagen: emp.background_url || require('../assets/icon2.png'),
+        logo: emp.logo_url || require('../assets/icon2.png'),
         estado: mapearEstado(emp),
         telefono: emp.telefono,
         direccion: emp.direccion,
@@ -450,8 +450,8 @@ const HomeScreen = ({ navigation }) => {
             nombre: emp.nombre,
             descripcion: emp.descripcion_corta || emp.descripcion,
             descripcionLarga: emp.descripcion_larga || emp.descripcion_corta || '',
-            imagen: emp.background_url || require('../assets/icon.png'),
-            logo: emp.logo_url || require('../assets/icon.png'),
+            imagen: emp.background_url || require('../assets/icon2.png'),
+            logo: emp.logo_url || require('../assets/icon2.png'),
             estado: mapearEstado(emp),
             telefono: emp.telefono,
             direccion: emp.direccion,
@@ -542,8 +542,8 @@ const HomeScreen = ({ navigation }) => {
           nombre: emprendimiento.nombre,
           descripcion: emprendimiento.descripcion_corta || emprendimiento.descripcion,
           descripcionLarga: emprendimiento.descripcion_larga || emprendimiento.descripcion_corta || '',
-          imagen: emprendimiento.background_url || require('../assets/icon.png'),
-          logo: emprendimiento.logo_url || require('../assets/icon.png'),
+          imagen: emprendimiento.background_url || require('../assets/icon2.png'),
+          logo: emprendimiento.logo_url || require('../assets/icon2.png'),
           estado: mapearEstado(emprendimiento),
           telefono: emprendimiento.telefono,
           direccion: emprendimiento.direccion,
@@ -553,7 +553,7 @@ const HomeScreen = ({ navigation }) => {
           horarios: emprendimiento.horarios,
           galeria: productos.map(prod => ({
             id: prod.id,
-            imagen: prod.imagen_url ? { uri: prod.imagen_url } : require('../assets/icon.png'),
+            imagen: prod.imagen_url ? { uri: prod.imagen_url } : require('../assets/icon2.png'),
             nombre: prod.nombre,
             descripcion: prod.descripcion || prod.nombre,
             precio: prod.precio,
@@ -577,7 +577,7 @@ const HomeScreen = ({ navigation }) => {
             // Sobrescribir solo lo específico del producto
             productoSeleccionado: {
               id: producto.id,
-              imagen: producto.imagen_url ? { uri: producto.imagen_url } : require('../assets/icon.png'),
+              imagen: producto.imagen_url ? { uri: producto.imagen_url } : require('../assets/icon2.png'),
               nombre: producto.nombre,
               descripcion: producto.descripcion || producto.nombre,
               precio: producto.precio,
@@ -1241,7 +1241,7 @@ const getIconForCategory = (categoria) => {
           {/* Imagen del producto */}
           <View style={styles.imagenContainer}>
             <Image 
-              source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon.png'))} 
+              source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon2.png'))} 
               style={styles.imagenGaleria}
               contentFit="cover"
             />
@@ -1271,7 +1271,7 @@ const getIconForCategory = (categoria) => {
             {/* Recuadro con logo y nombre de empresa */}
             <View style={styles.empresaContainer}>
               <Image 
-                source={producto.logo || require('../assets/icon.png')} 
+                source={producto.logo || require('../assets/icon2.png')} 
                 style={styles.logoEmpresa}
                 contentFit="contain"
               />
@@ -1359,7 +1359,7 @@ const getIconForCategory = (categoria) => {
                 {/* Imagen del producto */}
                 <View style={styles.imagenContainer}>
                   <Image 
-                    source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon.png'))} 
+                    source={producto.productoSeleccionado && producto.productoSeleccionado.imagen ? producto.productoSeleccionado.imagen : (producto.galeria && producto.galeria[0] ? producto.galeria[0].imagen : producto.imagen || require('../assets/icon2.png'))} 
                     style={styles.imagenGaleria}
                     contentFit="cover"
                   />
@@ -1389,7 +1389,7 @@ const getIconForCategory = (categoria) => {
                   {/* Recuadro con logo y nombre de empresa */}
                   <View style={styles.empresaContainer}>
                     <Image 
-                      source={producto.logo || require('../assets/icon.png')} 
+                      source={producto.logo || require('../assets/icon2.png')} 
                       style={styles.logoEmpresa}
                       contentFit="contain"
                     />
@@ -1509,7 +1509,7 @@ const getIconForCategory = (categoria) => {
                             {/* Recuadro con logo y nombre */}
                             <View style={styles.empresaContainer}>
                               <Image 
-                                source={emp.logo || require('../assets/icon.png')} 
+                                source={emp.logo || require('../assets/icon2.png')} 
                                 style={styles.logoEmpresa}
                                 contentFit="contain"
                               />
