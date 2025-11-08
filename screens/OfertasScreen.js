@@ -15,7 +15,8 @@ import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";import { API_ENDPOINTS } from "../config/api";
+import { useToast } from "../hooks/useToast";
+import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 
@@ -23,7 +24,8 @@ const OfertasScreen = () => {
   const navigation = useNavigation();
   const { currentTheme } = useTheme();
   const { usuario, modoVista } = useUser();
-  const toast = useToast();  const [productosOferta, setProductosOferta] = useState([]);
+  const toast = useToast();
+  const [productosOferta, setProductosOferta] = useState([]);
   const [cargando, setCargando] = useState(false);
 
   // Función para mapear estado del backend al frontend

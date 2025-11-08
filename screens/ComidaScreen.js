@@ -15,12 +15,14 @@ import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";import LoadingVeciApp from "../components/LoadingVeciApp";
+import { useToast } from "../hooks/useToast";
+import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const ComidaScreen = ({ navigation, route }) => {
   const { currentTheme } = useTheme();
   const { usuario, modoVista } = useUser();
-  const toast = useToast();  const { categoria = 'comida', titulo = 'Comida Preparada', icono = 'cutlery' } = route.params || {};
+  const toast = useToast();
+  const { categoria = 'comida', titulo = 'Comida Preparada', icono = 'cutlery' } = route.params || {};
   
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [cargando, setCargando] = useState(true);
