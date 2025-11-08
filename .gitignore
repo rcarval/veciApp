@@ -18,6 +18,9 @@ yarn-error.log
 # Firebase configuration (iOS only - Android se necesita en git para EAS Build)
 GoogleService-Info.plist
 
+# Android build artifacts (generados por prebuild)
+android/app/google-services.json
+
 # macOS
 .DS_Store
 
