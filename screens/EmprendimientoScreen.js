@@ -8,7 +8,6 @@ import {
   Image,
   ImageBackground,
   FlatList,
-  Alert,
   Modal,
   TextInput,
   ActivityIndicator,
@@ -27,11 +26,17 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
   const { currentTheme } = useTheme();
+  
+  // Toast para notificaciones
+  const toast = useToast();
+  
   const [usuario, setUsuario] = useState(route.params?.usuario ?? {});
   const [emprendimientos, setEmprendimientos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -170,7 +175,7 @@ const EmprendimientoScreen = () => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permiso de ubicación denegado");
+        toast.error("Permiso de ubicación denegado");
         return;
       }
 
@@ -589,7 +594,7 @@ const EmprendimientoScreen = () => {
       : horariosDia;
 
     if (!validarSolapamiento(horariosParaValidar, { inicio, fin })) {
-      Alert.alert("Error", "Este horario se solapa con otro ya existente");
+      toast.error("Este horario se solapa con otro ya existente");
       return;
     }
 
@@ -623,7 +628,7 @@ const EmprendimientoScreen = () => {
       setIsSearching(true);
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== "granted") {
-        Alert.alert("Permiso denegado", "Necesitamos acceso a tu ubicación");
+        toast.error("Necesitamos acceso a tu ubicación");
         return;
       }
 
@@ -664,7 +669,7 @@ const EmprendimientoScreen = () => {
       }
     } catch (error) {
       console.error(error);
-      Alert.alert("Error", "No se pudo obtener la ubicación");
+      toast.error("No se pudo obtener la ubicación");
     } finally {
       setIsSearching(false);
     }
@@ -869,10 +874,10 @@ const EmprendimientoScreen = () => {
         // Actualizar la dirección mostrada
         setCurrentAddress(data.results[0].formatted_address);
       } else {
-        Alert.alert("Error", "No se encontró la dirección");
+        toast.error("No se encontró la dirección");
       }
     } catch (error) {
-      Alert.alert("Error", "No se pudo completar la búsqueda");
+      toast.error("No se pudo completar la búsqueda");
     } finally {
       setIsSearching(false);
     }
@@ -883,7 +888,7 @@ const EmprendimientoScreen = () => {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Error', 'Se necesitan permisos de ubicación para usar el mapa');
+        toast.error('Se necesitan permisos de ubicación para usar el mapa');
         return;
       }
 
@@ -919,7 +924,7 @@ const EmprendimientoScreen = () => {
       setMapModalVisible(true);
     } catch (error) {
       console.log('Error al obtener ubicación:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación actual');
+      toast.error('No se pudo obtener la ubicación actual');
     }
   };
 
@@ -947,7 +952,7 @@ const EmprendimientoScreen = () => {
   // Función para confirmar la ubicación del mapa (nueva función mejorada)
   const confirmMapLocation = async () => {
     if (!selectedLocation) {
-      Alert.alert("Error", "Por favor selecciona una ubicación en el mapa");
+      toast.warning("Por favor selecciona una ubicación en el mapa");
       return;
     }
 
@@ -960,13 +965,13 @@ const EmprendimientoScreen = () => {
         setDireccionValidada(validationResult);
         setDireccion(validationResult.direccion);
         setMapModalVisible(false);
-        Alert.alert("Éxito", "Dirección validada correctamente");
+        toast.success("Dirección validada correctamente");
       } else {
-        Alert.alert("Error", "La dirección no es lo suficientemente precisa. Por favor selecciona un punto más específico.");
+        toast.error("La dirección no es lo suficientemente precisa. Por favor selecciona un punto más específico", 4000);
       }
     } catch (error) {
       console.log('Error al validar dirección:', error);
-      Alert.alert("Error", "No se pudo validar la dirección");
+      toast.error("No se pudo validar la dirección");
     } finally {
       setValidandoDireccion(false);
     }
@@ -1005,11 +1010,11 @@ const EmprendimientoScreen = () => {
         // Actualizar la dirección mostrada con el formato completo
         setCurrentAddress(resultado.formatted_address);
       } else {
-        Alert.alert("Error", "No se encontró la dirección especificada");
+        toast.error("No se encontró la dirección especificada");
       }
     } catch (error) {
       console.log('Error al buscar dirección:', error);
-      Alert.alert("Error", "No se pudo buscar la dirección");
+      toast.error("No se pudo buscar la dirección");
     } finally {
       setBuscandoDireccion(false);
     }
@@ -1245,7 +1250,7 @@ const EmprendimientoScreen = () => {
       const data = await response.json();
       // 3. Validación de respuesta
       if (data.status !== "OK") {
-        Alert.alert("Error", "No se encontró la dirección");
+        toast.error("No se encontró la dirección");
         return false;
       }
 
@@ -1304,7 +1309,7 @@ const EmprendimientoScreen = () => {
         coordenadas: resultado.geometry.location,
       };
     } catch (error) {
-      Alert.alert("Error", "No se pudo validar la dirección");
+      toast.error("No se pudo validar la dirección");
       return false;
     } finally {
       setValidandoDireccion(false);
@@ -1339,50 +1344,44 @@ const EmprendimientoScreen = () => {
     const direccionFinal = direccion;
 
     if (!direccionFinal) {
-      Alert.alert("Error", "Por favor ingresa una dirección");
+      toast.warning("Por favor ingresa una dirección");
       return;
     }
 
     if (!nombre || !descripcionCorta || !direccion || !telefono) {
-      Alert.alert("Error", "Por favor completa todos los campos obligatorios");
+      toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
 
     if (descripcionCorta.length > 50) {
-      Alert.alert(
-        "Error",
-        "La descripción corta no puede exceder los 50 caracteres"
-      );
+      toast.error("La descripción corta no puede exceder los 50 caracteres");
       return;
     }
 
     if (descripcionLarga.length > 1000) {
-      Alert.alert(
-        "Error",
-        "La descripción larga no puede exceder los 1000 caracteres"
-      );
+      toast.error("La descripción larga no puede exceder los 1000 caracteres");
       return;
     }
 
     if (!validarHorarios()) {
-      Alert.alert("Error", "Debes definir al menos un horario de atención");
+      toast.error("Debes definir al menos un horario de atención");
       return;
     }
 
     if (!categoriaSeleccionada) {
-      Alert.alert("Error", "Por favor selecciona una categoría principal");
+      toast.error("Por favor selecciona una categoría principal");
       return;
     }
 
     if (subcategoriasSeleccionadas.length === 0) {
-      Alert.alert("Error", "Por favor selecciona al menos una subcategoría");
+      toast.error("Por favor selecciona al menos una subcategoría");
       return;
     }
 
     // Obtener el nombre de la comuna basado en el ID seleccionado
     const comunaSeleccionada = comunas.find((c) => c.id === comuna);
     if (!comunaSeleccionada) {
-      Alert.alert("Error", "Comuna no válida");
+      toast.error("Comuna no válida");
       return;
     }
 
@@ -1405,7 +1404,7 @@ const EmprendimientoScreen = () => {
               const token = await AsyncStorage.getItem("token");
               
               if (!token) {
-                Alert.alert("Error", "No hay sesión activa");
+                toast.error("No hay sesión activa");
                 return;
               }
 
@@ -1504,16 +1503,11 @@ const EmprendimientoScreen = () => {
                   await enviarCodigoVerificacion(emprendimientoCreado.id);
                 }, 500);
               } else {
-                Alert.alert(
-                  "Éxito",
-                  `Emprendimiento ${
-                    isEditing ? "actualizado" : "creado"
-                  } correctamente`
-                );
+                toast.success(`Emprendimiento ${isEditing ? "actualizado" : "creado"} correctamente`);
               }
             } catch (error) {
               console.error("Error al guardar emprendimiento:", error);
-              Alert.alert("Error", error.message || "No se pudo guardar el emprendimiento");
+              toast.error(error.message || "No se pudo guardar el emprendimiento");
             } finally {
               setGuardando(false);
             }
@@ -1573,7 +1567,7 @@ const EmprendimientoScreen = () => {
               const token = await AsyncStorage.getItem("token");
               
               if (!token) {
-                Alert.alert("Error", "No hay sesión activa");
+                toast.error("No hay sesión activa");
                 return;
               }
 
@@ -1593,13 +1587,13 @@ const EmprendimientoScreen = () => {
               if (response.ok && data.ok) {
                 // Recargar lista de emprendimientos
                 await cargarEmprendimientos();
-                Alert.alert("Éxito", "Emprendimiento eliminado correctamente");
+                toast.success("Emprendimiento eliminado correctamente");
               } else {
                 throw new Error(data.mensaje || "Error al eliminar emprendimiento");
               }
             } catch (error) {
               console.error("Error al eliminar emprendimiento:", error);
-              Alert.alert("Error", error.message || "No se pudo eliminar el emprendimiento");
+              toast.error(error.message || "No se pudo eliminar el emprendimiento");
             }
           },
         },
@@ -1676,7 +1670,7 @@ const EmprendimientoScreen = () => {
       }
     } catch (error) {
       console.error("Error al actualizar estado:", error);
-      Alert.alert("Error", error.message || "No se pudo actualizar el estado del emprendimiento");
+      toast.error(error.message || "No se pudo actualizar el estado del emprendimiento");
     }
   };
 
@@ -3110,6 +3104,15 @@ const EmprendimientoScreen = () => {
           </View>
         </ScrollView>
       </Modal>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
