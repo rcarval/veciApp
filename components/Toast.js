@@ -27,12 +27,12 @@ const Toast = ({ visible, message, type = 'info', duration = 3000, onHide }) => 
 
       // Auto-ocultar después del duration
       const timer = setTimeout(() => {
-        hideToast();
+        if (onHide) onHide();
       }, duration);
 
       return () => clearTimeout(timer);
     }
-  }, [visible]);
+  }, [visible, duration, onHide]);
 
   const hideToast = () => {
     Animated.parallel([
