@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -17,11 +16,14 @@ import { useUser } from "../context/UserContext";
 import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import useToast from "../hooks/useToast";
 
 const OfertasScreen = () => {
   const navigation = useNavigation();
   const { currentTheme } = useTheme();
   const { usuario, modoVista } = useUser();
+  const toast = useToast();
   const [productosOferta, setProductosOferta] = useState([]);
   const [cargando, setCargando] = useState(false);
 
@@ -130,7 +132,7 @@ const OfertasScreen = () => {
       }
     } catch (error) {
       console.error('❌ Error al cargar ofertas:', error);
-      Alert.alert('Error', 'No se pudieron cargar las ofertas');
+      toast.error('No se pudieron cargar las ofertas');
       setProductosOferta([]);
     } finally {
       setCargando(false);
@@ -258,11 +260,7 @@ const OfertasScreen = () => {
                       style={[styles.itemGaleria, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}
                       onPress={() => {
                         if (mostrarAdvertencia) {
-                          Alert.alert(
-                            "⚠️ Tu Propio Negocio",
-                            "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                            [{ text: "Entendido" }]
-                          );
+                          toast.warning("No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                           return;
                         }
                         // Si está cerrado, abrir en modo preview
@@ -330,6 +328,14 @@ const OfertasScreen = () => {
           </>
         )}
       </ScrollView>
+      
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
