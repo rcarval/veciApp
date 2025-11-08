@@ -7,17 +7,19 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  Alert,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { Image as ExpoImage } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const BusquedaScreen = () => {
   const navigation = useNavigation();
   const { usuario, modoVista } = useUser();
+  const toast = useToast();
   const [searchText, setSearchText] = useState("");
   const [resultados, setResultados] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -108,11 +110,7 @@ const BusquedaScreen = () => {
     const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
     if (mostrarAdvertencia) {
-      Alert.alert(
-        "⚠️ Tu Propio Negocio",
-        "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-        [{ text: "Entendido" }]
-      );
+      toast.warning("No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
       return;
     }
 
@@ -251,6 +249,14 @@ const BusquedaScreen = () => {
           ))
         )}
       </ScrollView>
+      
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };

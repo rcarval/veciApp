@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  Alert,
   ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -19,11 +18,14 @@ import { useUser } from "../context/UserContext";
 import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const FavoritosScreen = () => {
   const navigation = useNavigation();
   const { currentTheme } = useTheme();
   const { usuario, modoVista } = useUser();
+  const toast = useToast();
   const [favoritos, setFavoritos] = useState([]);
   const [cargando, setCargando] = useState(false);
 
@@ -102,7 +104,7 @@ const FavoritosScreen = () => {
       }
     } catch (error) {
       console.error('❌ Error al cargar favoritos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los favoritos');
+      toast.error('No se pudieron cargar los favoritos');
       setFavoritos([]);
     } finally {
       setCargando(false);
@@ -168,11 +170,7 @@ const FavoritosScreen = () => {
                   const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
                   if (mostrarAdvertencia) {
-                    Alert.alert(
-                      "⚠️ Tu Propio Negocio",
-                      "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                      [{ text: "Entendido" }]
-                    );
+                    toast.warning("No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                     return;
                   }
 
@@ -250,6 +248,14 @@ const FavoritosScreen = () => {
           </View>
         )}
       </ScrollView>
+      
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
