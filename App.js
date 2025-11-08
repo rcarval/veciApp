@@ -208,7 +208,7 @@ function AppNavigator({ usuario }) {
     <>
       <PedidoPopup navigation={navigation} />
       <Stack.Navigator 
-        initialRouteName="Login"
+        initialRouteName={usuario ? "MainDrawer" : "Login"}
         screenOptions={{
           // Optimización: Detach previous screen cuando se navega para liberar memoria
           detachPreviousScreen: true,
@@ -596,26 +596,43 @@ function AppNavigator({ usuario }) {
 
 export default function App() {
   const [usuario, setUsuario] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
   console.log('🏗️ App principal - usuario:', usuario ? 'EXISTE' : 'NULL');
 
   useEffect(() => {
-    const cargarUsuario = async () => {
+    const cargarSesion = async () => {
       try {
-        // Limpiar sesión activa al iniciar la app
-        await AsyncStorage.removeItem("sesionActiva");
-        console.log("🧹 Sesión activa limpiada al iniciar app");
+        // Verificar si hay token (indica sesión activa)
+        const token = await AsyncStorage.getItem("token");
         
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          setUsuario(JSON.parse(usuarioGuardado));
+        if (token) {
+          // Si hay token, cargar usuario
+          const usuarioGuardado = await AsyncStorage.getItem("usuario");
+          if (usuarioGuardado) {
+            setUsuario(JSON.parse(usuarioGuardado));
+            console.log("✅ Sesión restaurada desde AsyncStorage");
+          }
+        } else {
+          console.log("ℹ️ No hay sesión activa, mostrando Login");
         }
       } catch (error) {
-        console.log("Error al obtener el usuario:", error);
+        console.log("❌ Error al cargar sesión:", error);
+      } finally {
+        setCargando(false);
       }
     };
-    cargarUsuario();
+    cargarSesion();
   }, []);
+
+  // Mostrar splash mientras carga la sesión
+  if (cargando) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#1a535c', justifyContent: 'center', alignItems: 'center' }}>
+        <LoadingAnimationStatic />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

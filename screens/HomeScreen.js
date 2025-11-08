@@ -77,30 +77,9 @@ const HomeScreen = ({ navigation }) => {
       ? `${direccionCompleta.substring(0, 50)}...` 
       : direccionCompleta;
   };
-  const verificarToken = async (navigation) => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      if (!token) {
-        toast.warning("Tu sesión ha caducado, inicia sesión nuevamente", 3000);
-        setTimeout(() => {
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Login" }],
-          });
-        }, 3000);
-      } else {
-        console.log("token vigente");
-      }
-    } catch (error) {
-      console.log("Error al verificar el token:", error);
-    }
-  };
-
-  useEffect(() => {
-    const interval = setInterval(() => verificarToken(navigation), 60000); // Cada 1 minuto
-
-    return () => clearInterval(interval); // Evita fugas de memoria
-  }, []);
+  // ✅ Ya no verificamos el token periódicamente
+  // La sesión se mantiene hasta que el usuario cierre sesión explícitamente
+  // o el backend retorne 401 Unauthorized
 
   useEffect(() => {
     Animated.loop(
