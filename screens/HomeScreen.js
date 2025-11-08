@@ -11,7 +11,6 @@ import {
   TextInput,
   ActivityIndicator,
   //BackHandler,
-  Alert,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome, MaterialIcons } from "@expo/vector-icons";
@@ -23,11 +22,17 @@ import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const HomeScreen = ({ navigation }) => {
   const userContext = useUser();
   const { usuario, direcciones, direccionSeleccionada, loading, cargarUsuario, cargarDirecciones, establecerDireccionSeleccionada, modoVista, volverAVistaEmprendedor } = userContext;
   const { currentTheme } = useTheme();
+  
+  // Toast para notificaciones
+  const toast = useToast();
+  
   const [cargandoUsuario, setCargandoUsuario] = useState(true);
   const [activeSection, setActiveSection] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -76,14 +81,13 @@ const HomeScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem("token");
       if (!token) {
-        Alert.alert(
-          "Sesión expirada",
-          "Tu sesión ha caducado, inicia sesión nuevamente."
-        );
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "Login" }], // 🔥 Redirige al login sin poder volver atrás
-        });
+        toast.warning("Tu sesión ha caducado, inicia sesión nuevamente", 3000);
+        setTimeout(() => {
+          navigation.reset({
+            index: 0,
+            routes: [{ name: "Login" }],
+          });
+        }, 3000);
       } else {
         console.log("token vigente");
       }
@@ -1039,11 +1043,7 @@ const getIconForCategory = (categoria) => {
                       } else {
                         // Si es propio emprendimiento en modo cliente, advertir
                         if (mostrarAdvertencia) {
-                          Alert.alert(
-                            "⚠️ Tu Propio Negocio",
-                            "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                            [{ text: "Entendido" }]
-                          );
+                          toast.warning("⚠️ No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                           return;
                         }
                         // Si está cerrado, abrir en modo preview
@@ -1224,11 +1224,7 @@ const getIconForCategory = (categoria) => {
               mostrarAdvertencia
             });
             if (mostrarAdvertencia) {
-              Alert.alert(
-                "⚠️ Tu Propio Negocio",
-                "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                [{ text: "Entendido" }]
-              );
+              toast.warning("⚠️ No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
               return;
             }
             const isPreview = producto.estado === 'Cerrado';
@@ -1346,11 +1342,7 @@ const getIconForCategory = (categoria) => {
                     mostrarAdvertencia
                   });
                   if (mostrarAdvertencia) {
-                    Alert.alert(
-                      "⚠️ Tu Propio Negocio",
-                      "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                      [{ text: "Entendido" }]
-                    );
+                    toast.warning("⚠️ No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                     return;
                   }
                   navegarConValidacion("PedidoDetalle", { producto });
@@ -1471,11 +1463,7 @@ const getIconForCategory = (categoria) => {
                               mostrarAdvertencia
                             });
                             if (mostrarAdvertencia) {
-                              Alert.alert(
-                                "⚠️ Tu Propio Negocio",
-                                "No puedes realizar pedidos en tus propios emprendimientos mientras estás en modo cliente.\n\n💡 Vuelve a tu vista de emprendedor para gestionar este negocio.",
-                                [{ text: "Entendido" }]
-                              );
+                              toast.warning("⚠️ No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                               return;
                             }
                             const isPreview = emp.estado === 'Cerrado';
@@ -1570,6 +1558,15 @@ const getIconForCategory = (categoria) => {
           </View>
         </View>
       </Modal>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
 
     </View>
   );
