@@ -15,7 +15,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";
+import useToast from "../hooks/useToast";
 import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";

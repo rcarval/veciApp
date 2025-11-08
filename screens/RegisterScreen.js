@@ -19,7 +19,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";
+import useToast from "../hooks/useToast";
 
 const { width, height } = Dimensions.get('window');
 

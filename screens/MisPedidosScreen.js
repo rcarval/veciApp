@@ -20,7 +20,7 @@ import pedidoService from '../services/pedidoService';
 import io from 'socket.io-client';
 import env from '../config/env';
 import Toast from '../components/Toast';
-import { useToast } from '../hooks/useToast';
+import useToast from '../hooks/useToast';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export const useToast = () => {
+const useToast = () => {
   const [toastConfig, setToastConfig] = useState({
     visible: false,
     message: '',
@@ -38,3 +38,4 @@ export const useToast = () => {
   };
 };
 
+export default useToast;

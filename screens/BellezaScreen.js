@@ -15,7 +15,7 @@ import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";
+import useToast from "../hooks/useToast";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 
 const BellezaScreen = ({ navigation, route }) => {
