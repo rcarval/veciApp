@@ -204,11 +204,22 @@ function AppNavigator({ usuario }) {
   
   console.log('🏗️ AppNavigator renderizando - usuario:', usuario ? 'EXISTE' : 'NULL');
   
+  // Determinar pantalla inicial según tipo de usuario
+  const getPantallaInicial = () => {
+    if (!usuario) return "Login";
+    
+    const tipoUsuario = usuario.tipo_usuario;
+    if (tipoUsuario === 'vendedor' || tipoUsuario === 'emprendedor') {
+      return "PedidosRecibidos";
+    }
+    return "Home";
+  };
+  
   return (
     <>
       <PedidoPopup navigation={navigation} />
       <Stack.Navigator 
-        initialRouteName={usuario ? "MainDrawer" : "Login"}
+        initialRouteName={getPantallaInicial()}
         screenOptions={{
           // Optimización: Detach previous screen cuando se navega para liberar memoria
           detachPreviousScreen: true,
