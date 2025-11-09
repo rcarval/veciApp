@@ -296,6 +296,24 @@ const EmprendimientoScreen = () => {
     delivery: false,
   });
   const [costoDelivery, setCostoDelivery] = useState("");
+  
+  // Nuevos estados para delivery avanzado
+  const [comunasCobertura, setComunasCobertura] = useState([]); // IDs de comunas donde hace delivery
+  const [modalidadDelivery, setModalidadDelivery] = useState('gratis'); // 'gratis', 'gratis_desde', 'por_distancia', 'fijo'
+  const [configDelivery, setConfigDelivery] = useState({
+    // Para modalidad 'gratis_desde'
+    montoMinimo: '',
+    // Para modalidad 'por_distancia'
+    rango1_km: '1',
+    rango1_costo: '',
+    rango2_km_min: '1',
+    rango2_km_max: '3',
+    rango2_costo: '',
+    rango3_km: '3',
+    rango3_costo: '',
+    // Para modalidad 'fijo'
+    costoFijo: '',
+  });
 
   // Comunas disponibles
   const comunas = [
@@ -1250,6 +1268,20 @@ const EmprendimientoScreen = () => {
             ...(emp.tipos_entrega || {}),
             deliveryCosto: emp.costo_delivery || "Consultar"
           },
+          // Nueva configuración avanzada de delivery
+          comunasCobertura: emp.comunas_cobertura || [],
+          modalidadDelivery: emp.modalidad_delivery || 'gratis',
+          configDelivery: emp.config_delivery || {
+            montoMinimo: '',
+            rango1_km: '1',
+            rango1_costo: '',
+            rango2_km_min: '1',
+            rango2_km_max: '3',
+            rango2_costo: '',
+            rango3_km: '3',
+            rango3_costo: '',
+            costoFijo: '',
+          },
           ubicacion: emp.latitud && emp.longitud ? {
             latitude: parseFloat(emp.latitud),
             longitude: parseFloat(emp.longitud)
@@ -1511,6 +1543,40 @@ const EmprendimientoScreen = () => {
       return;
     }
 
+    // Validaciones de delivery
+    if (tiposEntrega.delivery) {
+      if (comunasCobertura.length === 0) {
+        toast.error("Debes seleccionar al menos una comuna de cobertura para delivery");
+        return;
+      }
+      
+      // Validar configuración según modalidad
+      if (modalidadDelivery === 'gratis_desde' && !configDelivery.montoMinimo) {
+        toast.error("Debes ingresar el monto mínimo para delivery gratis");
+        return;
+      }
+      
+      if (modalidadDelivery === 'por_distancia') {
+        if (!configDelivery.rango1_km || !configDelivery.rango1_costo) {
+          toast.error("Debes completar la configuración del Rango 1");
+          return;
+        }
+        if (!configDelivery.rango2_km_min || !configDelivery.rango2_km_max || !configDelivery.rango2_costo) {
+          toast.error("Debes completar la configuración del Rango 2");
+          return;
+        }
+        if (!configDelivery.rango3_km || !configDelivery.rango3_costo) {
+          toast.error("Debes completar la configuración del Rango 3");
+          return;
+        }
+      }
+      
+      if (modalidadDelivery === 'fijo' && !configDelivery.costoFijo) {
+        toast.error("Debes ingresar el costo fijo del delivery");
+        return;
+      }
+    }
+
     // Obtener el nombre de la comuna basado en el ID seleccionado
     const comunaSeleccionada = comunas.find((c) => c.id === comuna);
     if (!comunaSeleccionada) {
@@ -1552,7 +1618,11 @@ const EmprendimientoScreen = () => {
                 horarios: horarios,
                 medios_pago: mediosPago,
                 tipos_entrega: tiposEntrega,
-                costo_delivery: tiposEntrega.delivery ? costoDelivery : null,
+                costo_delivery: tiposEntrega.delivery ? costoDelivery : null, // Legacy field
+                // Nueva configuración avanzada de delivery
+                comunas_cobertura: tiposEntrega.delivery ? comunasCobertura : [],
+                modalidad_delivery: tiposEntrega.delivery ? modalidadDelivery : null,
+                config_delivery: tiposEntrega.delivery ? configDelivery : null,
                 latitud: selectedLocation?.latitude || null,
                 longitud: selectedLocation?.longitude || null,
               };
@@ -1677,6 +1747,20 @@ const EmprendimientoScreen = () => {
       }
     );
     setCostoDelivery(emprendimiento.metodosEntrega?.deliveryCosto || "");
+    // Cargar configuración avanzada de delivery
+    setComunasCobertura(emprendimiento.comunasCobertura || []);
+    setModalidadDelivery(emprendimiento.modalidadDelivery || 'gratis');
+    setConfigDelivery(emprendimiento.configDelivery || {
+      montoMinimo: '',
+      rango1_km: '1',
+      rango1_costo: '',
+      rango2_km_min: '1',
+      rango2_km_max: '3',
+      rango2_costo: '',
+      rango3_km: '3',
+      rango3_costo: '',
+      costoFijo: '',
+    });
     setCategoriaSeleccionada(emprendimiento.categoria || null);
     setSubcategoriasSeleccionadas(emprendimiento.subcategorias || []);
   };
@@ -1751,6 +1835,20 @@ const EmprendimientoScreen = () => {
       delivery: false,
     });
     setCostoDelivery("");
+    // Limpiar configuración avanzada de delivery
+    setComunasCobertura([]);
+    setModalidadDelivery('gratis');
+    setConfigDelivery({
+      montoMinimo: '',
+      rango1_km: '1',
+      rango1_costo: '',
+      rango2_km_min: '1',
+      rango2_km_max: '3',
+      rango2_costo: '',
+      rango3_km: '3',
+      rango3_costo: '',
+      costoFijo: '',
+    });
     // Limpiar estados del mapa
     setDireccionValidada(null);
     setCurrentAddress("");
@@ -2775,23 +2873,291 @@ const EmprendimientoScreen = () => {
             </View>
             </View>
 
-            {/* Campo para costo de delivery (solo visible si delivery está seleccionado) */}
+            {/* Configuración avanzada de delivery (solo visible si delivery está seleccionado) */}
             {tiposEntrega.delivery && (
-              <View style={[styles.inputGroup, { marginTop: 0 }]}>
-                <View style={styles.labelConIcono}>
-                  <Ionicons name="pricetag" size={14} color={currentTheme.primary} />
-                  <Text style={[styles.inputLabel, { color: currentTheme.text }]}>
-                    Costo de Delivery (opcional)
+              <View style={[styles.deliveryConfigContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                {/* Selector de Comunas de Cobertura */}
+                <View style={styles.configSection}>
+                  <View style={styles.labelConIcono}>
+                    <Ionicons name="map" size={16} color={currentTheme.primary} />
+                    <Text style={[styles.configLabel, { color: currentTheme.text }]}>
+                      Comunas de Cobertura*
+                    </Text>
+                  </View>
+                  <Text style={[styles.configSubtitle, { color: currentTheme.textSecondary }]}>
+                    Selecciona las comunas donde realizas delivery
                   </Text>
+                  <View style={styles.comunasGrid}>
+                    {comunas.map((comuna) => {
+                      const isSelected = comunasCobertura.includes(comuna.id);
+                      return (
+                        <TouchableOpacity
+                          key={comuna.id}
+                          style={[
+                            styles.comunaChip,
+                            { borderColor: isSelected ? currentTheme.primary : currentTheme.border },
+                            isSelected && { backgroundColor: currentTheme.primary + '15' },
+                          ]}
+                          onPress={() => {
+                            if (isSelected) {
+                              setComunasCobertura(comunasCobertura.filter(id => id !== comuna.id));
+                            } else {
+                              setComunasCobertura([...comunasCobertura, comuna.id]);
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons 
+                            name={isSelected ? "checkmark-circle" : "ellipse-outline"} 
+                            size={20} 
+                            color={isSelected ? currentTheme.primary : currentTheme.textSecondary} 
+                          />
+                          <Text style={[
+                            styles.comunaChipText,
+                            { color: isSelected ? currentTheme.primary : currentTheme.text }
+                          ]}>
+                            {comuna.nombre}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-                <TextInput
-                  style={[styles.inputField, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                  value={costoDelivery}
-                  onChangeText={setCostoDelivery}
-                  placeholder="Ej: $1.500 o Gratis para compras sobre $10.000"
-                  placeholderTextColor={currentTheme.textSecondary}
-                  keyboardType="default"
-                />
+
+                {/* Selector de Modalidad de Delivery */}
+                <View style={styles.configSection}>
+                  <View style={styles.labelConIcono}>
+                    <Ionicons name="pricetag" size={16} color={currentTheme.primary} />
+                    <Text style={[styles.configLabel, { color: currentTheme.text }]}>
+                      Modalidad de Cobro*
+                    </Text>
+                  </View>
+                  
+                  {/* Opción 1: Delivery Gratis */}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalidadOption,
+                      { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                      modalidadDelivery === 'gratis' && { borderColor: currentTheme.primary, borderWidth: 2 }
+                    ]}
+                    onPress={() => setModalidadDelivery('gratis')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.modalidadRadio, modalidadDelivery === 'gratis' && { borderColor: currentTheme.primary }]}>
+                      {modalidadDelivery === 'gratis' && <View style={[styles.modalidadRadioInner, { backgroundColor: currentTheme.primary }]} />}
+                    </View>
+                    <View style={styles.modalidadTextos}>
+                      <Text style={[styles.modalidadTitulo, { color: currentTheme.text }]}>
+                        🎁 Delivery Gratis
+                      </Text>
+                      <Text style={[styles.modalidadDescripcion, { color: currentTheme.textSecondary }]}>
+                        Sin costo para tus clientes
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {/* Opción 2: Gratis desde monto mínimo */}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalidadOption,
+                      { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                      modalidadDelivery === 'gratis_desde' && { borderColor: currentTheme.primary, borderWidth: 2 }
+                    ]}
+                    onPress={() => setModalidadDelivery('gratis_desde')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.modalidadRadio, modalidadDelivery === 'gratis_desde' && { borderColor: currentTheme.primary }]}>
+                      {modalidadDelivery === 'gratis_desde' && <View style={[styles.modalidadRadioInner, { backgroundColor: currentTheme.primary }]} />}
+                    </View>
+                    <View style={styles.modalidadTextos}>
+                      <Text style={[styles.modalidadTitulo, { color: currentTheme.text }]}>
+                        💰 Gratis desde Monto Mínimo
+                      </Text>
+                      <Text style={[styles.modalidadDescripcion, { color: currentTheme.textSecondary }]}>
+                        Gratis si supera cierto monto
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {modalidadDelivery === 'gratis_desde' && (
+                    <View style={[styles.modalidadConfig, { backgroundColor: currentTheme.background }]}>
+                      <Text style={[styles.configFieldLabel, { color: currentTheme.text }]}>
+                        Monto mínimo para delivery gratis:
+                      </Text>
+                      <TextInput
+                        style={[styles.configInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                        value={configDelivery.montoMinimo}
+                        onChangeText={(text) => setConfigDelivery({...configDelivery, montoMinimo: text})}
+                        placeholder="Ej: 10000"
+                        placeholderTextColor={currentTheme.textSecondary}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  )}
+
+                  {/* Opción 3: Por distancia */}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalidadOption,
+                      { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                      modalidadDelivery === 'por_distancia' && { borderColor: currentTheme.primary, borderWidth: 2 }
+                    ]}
+                    onPress={() => setModalidadDelivery('por_distancia')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.modalidadRadio, modalidadDelivery === 'por_distancia' && { borderColor: currentTheme.primary }]}>
+                      {modalidadDelivery === 'por_distancia' && <View style={[styles.modalidadRadioInner, { backgroundColor: currentTheme.primary }]} />}
+                    </View>
+                    <View style={styles.modalidadTextos}>
+                      <Text style={[styles.modalidadTitulo, { color: currentTheme.text }]}>
+                        📍 Por Distancia
+                      </Text>
+                      <Text style={[styles.modalidadDescripcion, { color: currentTheme.textSecondary }]}>
+                        Costo según kilómetros (3 rangos)
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {modalidadDelivery === 'por_distancia' && (
+                    <View style={[styles.modalidadConfig, { backgroundColor: currentTheme.background }]}>
+                      {/* Rango 1 */}
+                      <View style={styles.rangoConfig}>
+                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
+                          📏 Rango 1: Hasta {configDelivery.rango1_km} km
+                        </Text>
+                        <View style={styles.rangoInputs}>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Hasta (km):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango1_km}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango1_km: text})}
+                              keyboardType="numeric"
+                              placeholder="1"
+                            />
+                          </View>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango1_costo}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango1_costo: text})}
+                              keyboardType="numeric"
+                              placeholder="1000"
+                            />
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Rango 2 */}
+                      <View style={styles.rangoConfig}>
+                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
+                          📏 Rango 2: Entre {configDelivery.rango2_km_min} y {configDelivery.rango2_km_max} km
+                        </Text>
+                        <View style={styles.rangoInputs}>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Desde (km):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango2_km_min}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_km_min: text})}
+                              keyboardType="numeric"
+                              placeholder="1"
+                            />
+                          </View>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Hasta (km):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango2_km_max}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_km_max: text})}
+                              keyboardType="numeric"
+                              placeholder="3"
+                            />
+                          </View>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango2_costo}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_costo: text})}
+                              keyboardType="numeric"
+                              placeholder="2000"
+                            />
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Rango 3 */}
+                      <View style={styles.rangoConfig}>
+                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
+                          📏 Rango 3: Más de {configDelivery.rango3_km} km
+                        </Text>
+                        <View style={styles.rangoInputs}>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Desde (km):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango3_km}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango3_km: text})}
+                              keyboardType="numeric"
+                              placeholder="3"
+                            />
+                          </View>
+                          <View style={styles.rangoInputGroup}>
+                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
+                            <TextInput
+                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                              value={configDelivery.rango3_costo}
+                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango3_costo: text})}
+                              keyboardType="numeric"
+                              placeholder="3000"
+                            />
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* Opción 4: Costo fijo */}
+                  <TouchableOpacity
+                    style={[
+                      styles.modalidadOption,
+                      { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                      modalidadDelivery === 'fijo' && { borderColor: currentTheme.primary, borderWidth: 2 }
+                    ]}
+                    onPress={() => setModalidadDelivery('fijo')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.modalidadRadio, modalidadDelivery === 'fijo' && { borderColor: currentTheme.primary }]}>
+                      {modalidadDelivery === 'fijo' && <View style={[styles.modalidadRadioInner, { backgroundColor: currentTheme.primary }]} />}
+                    </View>
+                    <View style={styles.modalidadTextos}>
+                      <Text style={[styles.modalidadTitulo, { color: currentTheme.text }]}>
+                        💵 Costo Fijo
+                      </Text>
+                      <Text style={[styles.modalidadDescripcion, { color: currentTheme.textSecondary }]}>
+                        Mismo precio para todas las distancias
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+
+                  {modalidadDelivery === 'fijo' && (
+                    <View style={[styles.modalidadConfig, { backgroundColor: currentTheme.background }]}>
+                      <Text style={[styles.configFieldLabel, { color: currentTheme.text }]}>
+                        Costo fijo del delivery:
+                      </Text>
+                      <TextInput
+                        style={[styles.configInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
+                        value={configDelivery.costoFijo}
+                        onChangeText={(text) => setConfigDelivery({...configDelivery, costoFijo: text})}
+                        placeholder="Ej: 1500"
+                        placeholderTextColor={currentTheme.textSecondary}
+                        keyboardType="numeric"
+                      />
+                    </View>
+                  )}
+                </View>
               </View>
             )}
           </View>
@@ -6528,6 +6894,150 @@ const styles = StyleSheet.create({
   radioButtonText: {
     fontSize: 14,
     color: '#555',
+  },
+  // Estilos para configuración avanzada de delivery
+  deliveryConfigContainer: {
+    borderRadius: 16,
+    borderWidth: 2,
+    padding: 18,
+    marginTop: 16,
+    gap: 20,
+  },
+  configSection: {
+    gap: 12,
+  },
+  configLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  configSubtitle: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: -4,
+    letterSpacing: 0.2,
+  },
+  comunasGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 8,
+  },
+  comunaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 22,
+    borderWidth: 2,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  comunaChipText: {
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  modalidadOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  modalidadRadio: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#d1d5db',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalidadRadioInner: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  modalidadTextos: {
+    flex: 1,
+    gap: 2,
+  },
+  modalidadTitulo: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  modalidadDescripcion: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  modalidadConfig: {
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 8,
+    marginLeft: 36,
+    borderLeftWidth: 3,
+    borderLeftColor: '#e9ecef',
+  },
+  configFieldLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8,
+    letterSpacing: 0.2,
+  },
+  configInput: {
+    borderWidth: 2,
+    borderRadius: 12,
+    padding: 14,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  rangoConfig: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  rangoTitulo: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 10,
+    letterSpacing: 0.3,
+  },
+  rangoInputs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  rangoInputGroup: {
+    flex: 1,
+    minWidth: 100,
+    gap: 6,
+  },
+  rangoLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  rangoInput: {
+    borderWidth: 2,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 15,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   // Estilos para el nuevo mapa mejorado
   direccionButton: {

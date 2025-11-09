@@ -475,7 +475,71 @@ const enviarReporte = async () => {
   const obtenerCostoDelivery = useCallback(() => {
     if (modoEntrega !== 'delivery') return 0;
     
-    // Si el emprendimiento tiene un costo fijo de delivery
+    // Si el emprendimiento tiene configuración avanzada de delivery
+    if (producto.modalidadDelivery && producto.configDelivery) {
+      const modalidad = producto.modalidadDelivery;
+      const config = producto.configDelivery;
+      const subtotal = obtenerTotalCarrito();
+      
+      // Extraer distancia en kilómetros del string (ej: "2.5 km" -> 2.5)
+      let distanciaKm = 0;
+      if (distancia && typeof distancia === 'string') {
+        const match = distancia.match(/([\d.]+)\s*km/i);
+        if (match) {
+          distanciaKm = parseFloat(match[1]);
+        }
+      }
+      
+      console.log('💰 Calculando costo de delivery:');
+      console.log('  - Modalidad:', modalidad);
+      console.log('  - Distancia:', distanciaKm, 'km');
+      console.log('  - Subtotal:', subtotal);
+      
+      switch (modalidad) {
+        case 'gratis':
+          return 0;
+          
+        case 'gratis_desde':
+          const montoMinimo = parseInt(config.montoMinimo) || 0;
+          if (subtotal >= montoMinimo) {
+            console.log('  ✅ Delivery gratis (supera monto mínimo)');
+            return 0;
+          }
+          // Si no supera el mínimo, cobrar según el costo fijo o por defecto
+          return parseInt(config.costoFijo) || 0;
+          
+        case 'por_distancia':
+          const rango1_km = parseFloat(config.rango1_km) || 1;
+          const rango1_costo = parseInt(config.rango1_costo) || 0;
+          const rango2_km_min = parseFloat(config.rango2_km_min) || 1;
+          const rango2_km_max = parseFloat(config.rango2_km_max) || 3;
+          const rango2_costo = parseInt(config.rango2_costo) || 0;
+          const rango3_km = parseFloat(config.rango3_km) || 3;
+          const rango3_costo = parseInt(config.rango3_costo) || 0;
+          
+          if (distanciaKm <= rango1_km) {
+            console.log(`  📍 Rango 1: ${distanciaKm} km ≤ ${rango1_km} km = $${rango1_costo}`);
+            return rango1_costo;
+          } else if (distanciaKm > rango2_km_min && distanciaKm <= rango2_km_max) {
+            console.log(`  📍 Rango 2: ${rango2_km_min} km < ${distanciaKm} km ≤ ${rango2_km_max} km = $${rango2_costo}`);
+            return rango2_costo;
+          } else if (distanciaKm > rango3_km) {
+            console.log(`  📍 Rango 3: ${distanciaKm} km > ${rango3_km} km = $${rango3_costo}`);
+            return rango3_costo;
+          }
+          return 0;
+          
+        case 'fijo':
+          const costoFijo = parseInt(config.costoFijo) || 0;
+          console.log('  💵 Costo fijo:', costoFijo);
+          return costoFijo;
+          
+        default:
+          return 0;
+      }
+    }
+    
+    // FALLBACK: Si no tiene configuración avanzada, usar el método legacy
     if (producto.metodosEntrega.deliveryCosto && producto.metodosEntrega.deliveryCosto !== "Costo variable") {
       // Extraer el número del string (ej: "$2.000" -> 2000)
       const costoStr = producto.metodosEntrega.deliveryCosto.replace(/[$.]/g, '');
@@ -483,7 +547,7 @@ const enviarReporte = async () => {
     }
     
     return 0; // Si no hay costo definido o es variable
-  }, [modoEntrega, producto.metodosEntrega.deliveryCosto]);
+  }, [modoEntrega, producto.modalidadDelivery, producto.configDelivery, producto.metodosEntrega.deliveryCosto, distancia, obtenerTotalCarrito]);
 
   const obtenerTotalConDelivery = useCallback(() => {
     const subtotal = obtenerTotalCarrito();
@@ -1975,14 +2039,22 @@ const enviarReporte = async () => {
                   </Text>
                 </View>
 
-                {modoEntrega === "delivery" && obtenerCostoDelivery() > 0 && (
-                  <View style={styles.resumenLinea}>
-                    <Text style={[styles.resumenLabel, { color: currentTheme.textSecondary }]}>
-                      Costo de Delivery
-                    </Text>
-                    <Text style={[styles.resumenValor, { color: currentTheme.text }]}>
-                      ${obtenerCostoDelivery().toLocaleString("es-CL")}
-                    </Text>
+                {modoEntrega === "delivery" && (
+                  <View>
+                    <View style={styles.resumenLinea}>
+                      <Text style={[styles.resumenLabel, { color: currentTheme.textSecondary }]}>
+                        Costo de Delivery
+                        {distancia && ` (${distancia})`}
+                      </Text>
+                      <Text style={[styles.resumenValor, { color: obtenerCostoDelivery() === 0 ? '#27ae60' : currentTheme.text }]}>
+                        {obtenerCostoDelivery() === 0 ? '¡Gratis!' : `$${obtenerCostoDelivery().toLocaleString("es-CL")}`}
+                      </Text>
+                    </View>
+                    {producto.modalidadDelivery && obtenerCostoDelivery() === 0 && producto.modalidadDelivery === 'gratis_desde' && (
+                      <Text style={[styles.deliveryInfo, { color: '#27ae60' }]}>
+                        ✨ Delivery gratis alcanzado
+                      </Text>
+                    )}
                   </View>
                 )}
 
@@ -4500,6 +4572,13 @@ confirmacionEnviarTexto: {
     fontSize: 22,
     fontWeight: '900',
     letterSpacing: 0.5,
+  },
+  deliveryInfo: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    marginLeft: 4,
+    fontStyle: 'italic',
   },
   carritoBotonConfirmarModerno: {
     borderRadius: 16,
