@@ -13,6 +13,7 @@ import {
   ActivityIndicator,
   Switch,
   Platform,
+  Alert,
 } from "react-native";
 import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -23,11 +24,13 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import Slider from '@react-native-community/slider';
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
 import useToast from "../hooks/useToast";
+import SelectorComunas from "../components/SelectorComunas";
 
 // Componente de diálogo de confirmación elegante
 const ConfirmDialog = ({ visible, title, message, onCancel, onConfirm, confirmText = "Confirmar", cancelText = "Cancelar", confirmColor = "#2A9D8F", isDangerous = false }) => {
@@ -194,7 +197,6 @@ const EmprendimientoScreen = () => {
   const limitEmprendimientos = esPlanPremium ? 3 : 1;
   const puedeAgregarMas = emprendimientos.length < limitEmprendimientos;
   
-  console.log('Plan ID:', usuario?.plan_id, '| Tipo:', typeof usuario?.plan_id, '| Vigencia:', usuario?.vigencia_hasta, '| Es Premium:', esPlanPremium);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentEmprendimiento, setCurrentEmprendimiento] = useState(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -299,27 +301,42 @@ const EmprendimientoScreen = () => {
   
   // Nuevos estados para delivery avanzado
   const [comunasCobertura, setComunasCobertura] = useState([]); // IDs de comunas donde hace delivery
-  const [modalidadDelivery, setModalidadDelivery] = useState('gratis'); // 'gratis', 'gratis_desde', 'por_distancia', 'fijo'
+  const [modalidadDelivery, setModalidadDelivery] = useState('fijo'); // 'gratis', 'por_distancia', 'fijo'
   const [configDelivery, setConfigDelivery] = useState({
-    // Para modalidad 'gratis_desde'
-    montoMinimo: '',
-    // Para modalidad 'por_distancia'
-    rango1_km: '1',
-    rango1_costo: '',
-    rango2_km_min: '1',
-    rango2_km_max: '3',
-    rango2_costo: '',
-    rango3_km: '3',
-    rango3_costo: '',
-    // Para modalidad 'fijo'
     costoFijo: '',
   });
+  
+  // Estado dinámico para rangos de distancia (2-4 rangos)
+  const [rangosDelivery, setRangosDelivery] = useState([
+    { hastaKm: '3', costo: '' },
+    { hastaKm: '8', costo: '' },
+  ]);
+  
+  // Regla adicional: Delivery gratis desde cierto monto
+  const [deliveryGratisDesde, setDeliveryGratisDesde] = useState(false);
+  const [montoMinimoGratis, setMontoMinimoGratis] = useState('');
 
-  // Comunas disponibles
-  const comunas = [
-    { id: "1", nombre: "Isla de Maipo" },
-    { id: "2", nombre: "Talagante" },
-  ];
+  // Modal de selección de comunas
+  const [modalComunasVisible, setModalComunasVisible] = useState(false);
+  const [modalComunasCobertura, setModalComunasCobertura] = useState(false);
+
+  // Comunas disponibles (se cargan desde la API)
+  const [comunas, setComunas] = useState([]);
+
+  const cargarComunas = async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.COMUNAS);
+      const data = await response.json();
+      
+      if (data.comunas && Array.isArray(data.comunas)) {
+        setComunas(data.comunas);
+        console.log('✅ Comunas cargadas:', data.comunas.length);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar comunas:', error);
+      setComunas([]);
+    }
+  };
 
   // Función de notificaciones eliminada
   async function registerForPushNotificationsAsync() {
@@ -855,9 +872,14 @@ const EmprendimientoScreen = () => {
   };
 
   useEffect(() => {
-    cargarUsuario();
-    cargarEmprendimientos();
-    cargarCategorias();
+    const inicializar = async () => {
+      await cargarComunas(); // Cargar comunas primero
+      await cargarUsuario();
+      await cargarEmprendimientos(); // Luego cargar emprendimientos
+      await cargarCategorias();
+    };
+    
+    inicializar();
   }, []);
 
   // Recargar usuario cuando la pantalla gana el foco
@@ -1224,6 +1246,71 @@ const EmprendimientoScreen = () => {
     }
   };
 
+  // Funciones para manejar rangos de delivery dinámicos
+  const agregarRango = () => {
+    if (rangosDelivery.length >= 4) {
+      toast.warning('Máximo 4 rangos permitidos');
+      return;
+    }
+    
+    const ultimoRango = rangosDelivery[rangosDelivery.length - 1];
+    const nuevoDesdeKm = ultimoRango.hastaKm || '0';
+    const nuevoHastaKm = (parseFloat(nuevoDesdeKm) + 5).toString();
+    
+    // Validar que no exceda 30 km
+    if (parseFloat(nuevoHastaKm) > 30) {
+      toast.warning('El rango máximo es de 30 km');
+      return;
+    }
+    
+    setRangosDelivery([...rangosDelivery, { hastaKm: nuevoHastaKm, costo: '' }]);
+  };
+  
+  const eliminarRango = (index) => {
+    if (rangosDelivery.length <= 2) {
+      toast.warning('Mínimo 2 rangos requeridos');
+      return;
+    }
+    
+    const nuevosRangos = rangosDelivery.filter((_, i) => i !== index);
+    setRangosDelivery(nuevosRangos);
+  };
+  
+  const actualizarRango = (index, campo, valor) => {
+    const nuevosRangos = [...rangosDelivery];
+    
+    if (campo === 'hastaKm') {
+      // El slider ya maneja las validaciones, solo actualizamos
+      nuevosRangos[index] = { ...nuevosRangos[index], [campo]: valor.toString() };
+    }
+    
+    if (campo === 'costo') {
+      // Remover separadores de miles y permitir solo números
+      const valorLimpio = valor.replace(/\./g, '');
+      
+      // Validar que sea un número
+      if (valorLimpio && isNaN(valorLimpio)) {
+        return;
+      }
+      
+      // Validar que no exceda 9999
+      if (parseInt(valorLimpio) > 9999) {
+        toast.warning('El costo máximo es de $9.999');
+        return;
+      }
+      
+      nuevosRangos[index] = { ...nuevosRangos[index], [campo]: valorLimpio };
+    }
+    
+    setRangosDelivery(nuevosRangos);
+  };
+  
+  // Función para formatear números con separador de miles
+  const formatearMiles = (valor) => {
+    if (!valor) return '';
+    return valor.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  };
+
   const cargarEmprendimientos = async () => {
     try {
       setLoading(true);
@@ -1249,47 +1336,58 @@ const EmprendimientoScreen = () => {
       if (response.ok && data.ok) {
         // Mapear los datos del backend al formato esperado por el frontend
         // INCLUIR emprendimientos en verificación para poder completar el proceso
-        const emprendimientosMapeados = data.emprendimientos.map(emp => ({
-          id: emp.id.toString(),
-          nombre: emp.nombre,
-          descripcionCorta: emp.descripcion_corta || "",
-          descripcionLarga: emp.descripcion_larga || "",
-          comuna: emp.comuna_id?.toString() || "1",
-          direccion: emp.direccion,
-          telefono: emp.telefono || "",
-          logo: emp.logo_url,
-          background: emp.background_url,
-          status: emp.estado || "pendiente",
-          categoria: emp.categoria_principal,
-          subcategorias: emp.subcategorias || [],
-          horarios: emp.horarios || {},
-          metodosPago: emp.medios_pago || {},
-          metodosEntrega: {
-            ...(emp.tipos_entrega || {}),
-            deliveryCosto: emp.costo_delivery || "Consultar"
-          },
-          // Nueva configuración avanzada de delivery
-          comunasCobertura: emp.comunas_cobertura || [],
-          modalidadDelivery: emp.modalidad_delivery || 'gratis',
-          configDelivery: emp.config_delivery || {
-            montoMinimo: '',
-            rango1_km: '1',
-            rango1_costo: '',
-            rango2_km_min: '1',
-            rango2_km_max: '3',
-            rango2_costo: '',
-            rango3_km: '3',
-            rango3_costo: '',
-            costoFijo: '',
-          },
-          ubicacion: emp.latitud && emp.longitud ? {
-            latitude: parseFloat(emp.latitud),
-            longitude: parseFloat(emp.longitud)
-          } : null,
-          fechaCreacion: emp.fecha_creacion,
-          esBorrador: emp.es_borrador || false,
-          emprendimientoOriginalId: emp.emprendimiento_original_id || null,
-        }));
+        const emprendimientosMapeados = data.emprendimientos.map(emp => {
+          // Normalizar comunas de cobertura: asegurar que siempre sean nombres (strings)
+          let comunasCoberturaArray = emp.comunas_cobertura || [];
+          
+          // Si contiene números (IDs antiguos) y tenemos comunas cargadas, convertir a nombres
+          if (comunasCoberturaArray.length > 0 && comunas.length > 0 && typeof comunasCoberturaArray[0] === 'number') {
+            comunasCoberturaArray = comunasCoberturaArray.map(id => {
+              const comunaEncontrada = comunas.find(c => c.id === id || c.id === id.toString());
+              return comunaEncontrada ? comunaEncontrada.nombre : `Comuna ${id}`;
+            });
+          }
+          
+          return {
+            id: emp.id.toString(),
+            nombre: emp.nombre,
+            descripcionCorta: emp.descripcion_corta || "",
+            descripcionLarga: emp.descripcion_larga || "",
+            comuna: emp.comuna_id?.toString() || "1",
+            direccion: emp.direccion,
+            telefono: emp.telefono || "",
+            logo: emp.logo_url,
+            background: emp.background_url,
+            status: emp.estado || "pendiente",
+            categoria: emp.categoria_principal,
+            subcategorias: emp.subcategorias || [],
+            horarios: emp.horarios || {},
+            metodosPago: emp.medios_pago || {},
+            metodosEntrega: {
+              ...(emp.tipos_entrega || {}),
+              deliveryCosto: emp.costo_delivery || "Consultar"
+            },
+            // Nueva configuración avanzada de delivery
+            comunasCobertura: comunasCoberturaArray,
+            modalidadDelivery: emp.modalidad_delivery || 'fijo',
+            configDelivery: {
+              costoFijo: emp.config_delivery?.costoFijo || '',
+              gratisDesde: emp.config_delivery?.gratisDesde || false,
+              montoMinimoGratis: emp.config_delivery?.montoMinimoGratis || '',
+            },
+            rangosDelivery: emp.config_delivery?.rangos || [
+              { hastaKm: '3', costo: '' },
+              { hastaKm: '8', costo: '' },
+            ],
+            ubicacion: emp.latitud && emp.longitud ? {
+              latitude: parseFloat(emp.latitud),
+              longitude: parseFloat(emp.longitud)
+            } : null,
+            fechaCreacion: emp.fecha_creacion,
+            esBorrador: emp.es_borrador || false,
+            emprendimientoOriginalId: emp.emprendimiento_original_id || null,
+          };
+        });
         
         setEmprendimientos(emprendimientosMapeados);
       } else {
@@ -1506,85 +1604,126 @@ const EmprendimientoScreen = () => {
 
   // Guardar emprendimiento
   const guardarEmprendimiento = async () => {
+    console.log('💾 GUARDAR EMPRENDIMIENTO LLAMADO');
+    console.log('💾 isEditing:', isEditing);
+    console.log('💾 guardando:', guardando);
+    console.log('💾 validandoDireccion:', validandoDireccion);
+    
     const direccionFinal = direccion;
 
     if (!direccionFinal) {
+      console.log('❌ Validación: No hay dirección');
       toast.warning("Por favor ingresa una dirección");
       return;
     }
 
+    console.log('✅ Validación 1: Dirección OK');
+    
     if (!nombre || !descripcionCorta || !direccion || !telefono) {
+      console.log('❌ Validación 2 FALLÓ: Campos obligatorios', { nombre, descripcionCorta, direccion, telefono });
       toast.error("Por favor completa todos los campos obligatorios");
       return;
     }
+    console.log('✅ Validación 2: Campos obligatorios OK');
 
     if (descripcionCorta.length > 50) {
+      console.log('❌ Validación 3 FALLÓ: Descripción corta muy larga');
       toast.error("La descripción corta no puede exceder los 50 caracteres");
       return;
     }
+    console.log('✅ Validación 3: Descripción corta OK');
 
     if (descripcionLarga.length > 1000) {
+      console.log('❌ Validación 4 FALLÓ: Descripción larga muy larga');
       toast.error("La descripción larga no puede exceder los 1000 caracteres");
       return;
     }
+    console.log('✅ Validación 4: Descripción larga OK');
 
     if (!validarHorarios()) {
+      console.log('❌ Validación 5 FALLÓ: Sin horarios');
       toast.error("Debes definir al menos un horario de atención");
       return;
     }
+    console.log('✅ Validación 5: Horarios OK');
 
     if (!categoriaSeleccionada) {
+      console.log('❌ Validación 6 FALLÓ: Sin categoría');
       toast.error("Por favor selecciona una categoría principal");
       return;
     }
+    console.log('✅ Validación 6: Categoría OK');
 
     if (subcategoriasSeleccionadas.length === 0) {
+      console.log('❌ Validación 7 FALLÓ: Sin subcategorías');
       toast.error("Por favor selecciona al menos una subcategoría");
       return;
     }
+    console.log('✅ Validación 7: Subcategorías OK');
 
     // Validaciones de delivery
     if (tiposEntrega.delivery) {
+      console.log('🚚 Validando delivery...');
       if (comunasCobertura.length === 0) {
+        console.log('❌ Validación 8 FALLÓ: Sin comunas de cobertura');
         toast.error("Debes seleccionar al menos una comuna de cobertura para delivery");
         return;
       }
+      console.log('✅ Validación 8: Comunas de cobertura OK');
       
       // Validar configuración según modalidad
-      if (modalidadDelivery === 'gratis_desde' && !configDelivery.montoMinimo) {
-        toast.error("Debes ingresar el monto mínimo para delivery gratis");
-        return;
-      }
-      
       if (modalidadDelivery === 'por_distancia') {
-        if (!configDelivery.rango1_km || !configDelivery.rango1_costo) {
-          toast.error("Debes completar la configuración del Rango 1");
+        console.log('📏 Validando rangos por distancia...');
+        // Validar que todos los rangos estén completos
+        for (let i = 0; i < rangosDelivery.length; i++) {
+          if (!rangosDelivery[i].hastaKm || !rangosDelivery[i].costo) {
+            console.log(`❌ Validación 9 FALLÓ: Rango ${i + 1} incompleto`, rangosDelivery[i]);
+            toast.error(`Debes completar el Rango ${i + 1} (hasta km y costo)`);
+            return;
+          }
+        }
+        console.log('✅ Validación 9: Rangos completos OK');
+        
+        // Validar que el último rango no exceda 30 km
+        const ultimoRango = rangosDelivery[rangosDelivery.length - 1];
+        if (parseFloat(ultimoRango.hastaKm) > 30) {
+          console.log('❌ Validación 10 FALLÓ: Rango excede 30 km');
+          toast.error("El rango máximo es de 30 km");
           return;
         }
-        if (!configDelivery.rango2_km_min || !configDelivery.rango2_km_max || !configDelivery.rango2_costo) {
-          toast.error("Debes completar la configuración del Rango 2");
-          return;
-        }
-        if (!configDelivery.rango3_km || !configDelivery.rango3_costo) {
-          toast.error("Debes completar la configuración del Rango 3");
-          return;
-        }
+        console.log('✅ Validación 10: Rango máximo OK');
       }
       
       if (modalidadDelivery === 'fijo' && !configDelivery.costoFijo) {
+        console.log('❌ Validación 11 FALLÓ: Sin costo fijo');
         toast.error("Debes ingresar el costo fijo del delivery");
         return;
       }
+      console.log('✅ Validación 11: Costo fijo OK');
+      
+      // Validar regla adicional de "gratis desde"
+      if (deliveryGratisDesde && !montoMinimoGratis) {
+        console.log('❌ Validación 12 FALLÓ: Sin monto mínimo para gratis');
+        toast.error("Debes ingresar el monto mínimo para delivery gratis");
+        return;
+      }
+      console.log('✅ Validación 12: Regla gratis desde OK');
     }
+    console.log('✅ Todas las validaciones de delivery pasaron');
 
     // Obtener el nombre de la comuna basado en el ID seleccionado
-    const comunaSeleccionada = comunas.find((c) => c.id === comuna);
+    console.log('🏘️ Buscando comuna con ID:', comuna, '(tipo:', typeof comuna, ')');
+    console.log('🏘️ Comunas disponibles:', comunas.length);
+    const comunaSeleccionada = comunas.find((c) => c.id == comuna || c.id === parseInt(comuna));
     if (!comunaSeleccionada) {
+      console.log('❌ Validación 13 FALLÓ: Comuna no válida', { comuna, comunasDisponibles: comunas });
       toast.error("Comuna no válida");
       return;
     }
+    console.log('✅ Validación 13: Comuna válida:', comunaSeleccionada.nombre);
 
     // Mostramos diálogo de confirmación
+    console.log('📋 Abriendo modal de confirmación...');
     setConfirmDialog({
       visible: true,
       title: "Confirmar envío",
@@ -1595,6 +1734,7 @@ const EmprendimientoScreen = () => {
       cancelText: "Cancelar",
       isDangerous: false,
       onConfirm: async () => {
+        console.log('✅ Usuario confirmó, guardando en backend...');
         setConfirmDialog({ ...confirmDialog, visible: false });
             try {
               setGuardando(true);
@@ -1620,9 +1760,16 @@ const EmprendimientoScreen = () => {
                 tipos_entrega: tiposEntrega,
                 costo_delivery: tiposEntrega.delivery ? costoDelivery : null, // Legacy field
                 // Nueva configuración avanzada de delivery
-                comunas_cobertura: tiposEntrega.delivery ? comunasCobertura : [],
-                modalidad_delivery: tiposEntrega.delivery ? modalidadDelivery : null,
-                config_delivery: tiposEntrega.delivery ? configDelivery : null,
+                comunasCobertura: tiposEntrega.delivery ? comunasCobertura : [],
+                modalidadDelivery: tiposEntrega.delivery ? modalidadDelivery : null,
+                configDelivery: tiposEntrega.delivery ? {
+                  ...(modalidadDelivery === 'por_distancia' 
+                    ? { rangos: rangosDelivery } 
+                    : configDelivery),
+                  // Regla adicional opcional
+                  gratisDesde: deliveryGratisDesde,
+                  montoMinimoGratis: deliveryGratisDesde ? montoMinimoGratis : null,
+                } : null,
                 latitud: selectedLocation?.latitude || null,
                 longitud: selectedLocation?.longitude || null,
               };
@@ -1716,54 +1863,74 @@ const EmprendimientoScreen = () => {
     });
   };
 
-  // Editar emprendimiento
-  const editarEmprendimiento = async (emprendimiento) => {
-    // Recargar categorías para obtener los últimos cambios
-    await cargarCategorias();
-    
-    setCurrentEmprendimiento(emprendimiento);
-    setNombre(emprendimiento.nombre);
-    setDescripcionCorta(emprendimiento.descripcionCorta);
-    setDescripcionLarga(emprendimiento.descripcionLarga);
-    setComuna(emprendimiento.comuna);
-    setDireccion(emprendimiento.direccion);
-    setTelefono(emprendimiento.telefono);
-    setLogo(emprendimiento.logo);
-    setBackground(emprendimiento.background);
-    setHorarios(emprendimiento.horarios || { ...horariosIniciales });
-    setIsEditing(true);
-    setModalVisible(true);
-    setMediosPago(
-      emprendimiento.metodosPago || {
-        efectivo: false,
-        tarjeta: false,
-        transferencia: false,
+  // Editar emprendimiento - Memorizado para evitar re-renders
+  const editarEmprendimiento = React.useCallback(async (emprendimiento) => {
+    try {
+      // Recargar categorías para obtener los últimos cambios
+      await cargarCategorias();
+      
+      setCurrentEmprendimiento(emprendimiento);
+      setNombre(emprendimiento.nombre);
+      setDescripcionCorta(emprendimiento.descripcionCorta);
+      setDescripcionLarga(emprendimiento.descripcionLarga);
+      setComuna(emprendimiento.comuna);
+      setDireccion(emprendimiento.direccion);
+      setTelefono(emprendimiento.telefono);
+      setLogo(emprendimiento.logo);
+      setBackground(emprendimiento.background);
+      setHorarios(emprendimiento.horarios || { ...horariosIniciales });
+      setMediosPago(
+        emprendimiento.metodosPago || {
+          efectivo: false,
+          tarjeta: false,
+          transferencia: false,
+        }
+      );
+      setTiposEntrega(
+        emprendimiento.metodosEntrega || {
+          retiro: false,
+          delivery: false,
+        }
+      );
+      setCostoDelivery(emprendimiento.metodosEntrega?.deliveryCosto || "");
+      
+      // Cargar configuración avanzada de delivery
+      setComunasCobertura(emprendimiento.comunasCobertura || []);
+      setModalidadDelivery(emprendimiento.modalidadDelivery || 'fijo');
+      
+      const configDeliv = emprendimiento.configDelivery || {};
+      setConfigDelivery({
+        costoFijo: configDeliv.costoFijo || '',
+      });
+      setRangosDelivery(emprendimiento.rangosDelivery || [
+        { hastaKm: '3', costo: '' },
+        { hastaKm: '8', costo: '' },
+      ]);
+      setDeliveryGratisDesde(configDeliv.gratisDesde || false);
+      setMontoMinimoGratis(configDeliv.montoMinimoGratis || '');
+      setCategoriaSeleccionada(emprendimiento.categoria || null);
+      setSubcategoriasSeleccionadas(emprendimiento.subcategorias || []);
+      
+      // Cargar ubicación si existe
+      if (emprendimiento.ubicacion) {
+        setSelectedLocation(emprendimiento.ubicacion);
+        setCurrentAddress(emprendimiento.direccion);
+        setDireccionValidada({
+          direccion: emprendimiento.direccion,
+          coordenadas: emprendimiento.ubicacion
+        });
       }
-    );
-    setTiposEntrega(
-      emprendimiento.metodosEntrega || {
-        retiro: false,
-        delivery: false,
-      }
-    );
-    setCostoDelivery(emprendimiento.metodosEntrega?.deliveryCosto || "");
-    // Cargar configuración avanzada de delivery
-    setComunasCobertura(emprendimiento.comunasCobertura || []);
-    setModalidadDelivery(emprendimiento.modalidadDelivery || 'gratis');
-    setConfigDelivery(emprendimiento.configDelivery || {
-      montoMinimo: '',
-      rango1_km: '1',
-      rango1_costo: '',
-      rango2_km_min: '1',
-      rango2_km_max: '3',
-      rango2_costo: '',
-      rango3_km: '3',
-      rango3_costo: '',
-      costoFijo: '',
-    });
-    setCategoriaSeleccionada(emprendimiento.categoria || null);
-    setSubcategoriasSeleccionadas(emprendimiento.subcategorias || []);
-  };
+      
+      console.log('✅ Estado cargado correctamente, abriendo modal...');
+      
+      // IMPORTANTE: Abrir modal AL FINAL, después de cargar todo el estado
+      setIsEditing(true);
+      setModalVisible(true);
+    } catch (error) {
+      console.error('❌ ERROR AL EDITAR EMPRENDIMIENTO:', error);
+      toast.error('No se pudo cargar el emprendimiento para editar');
+    }
+  }, [horariosIniciales]); // Memorizar la función para evitar re-renders
 
   // Eliminar emprendimiento
   const eliminarEmprendimiento = (id) => {
@@ -1837,18 +2004,16 @@ const EmprendimientoScreen = () => {
     setCostoDelivery("");
     // Limpiar configuración avanzada de delivery
     setComunasCobertura([]);
-    setModalidadDelivery('gratis');
+    setModalidadDelivery('fijo');
     setConfigDelivery({
-      montoMinimo: '',
-      rango1_km: '1',
-      rango1_costo: '',
-      rango2_km_min: '1',
-      rango2_km_max: '3',
-      rango2_costo: '',
-      rango3_km: '3',
-      rango3_costo: '',
       costoFijo: '',
     });
+    setRangosDelivery([
+      { hastaKm: '3', costo: '' },
+      { hastaKm: '8', costo: '' },
+    ]);
+    setDeliveryGratisDesde(false);
+    setMontoMinimoGratis('');
     // Limpiar estados del mapa
     setDireccionValidada(null);
     setCurrentAddress("");
@@ -1899,7 +2064,7 @@ const EmprendimientoScreen = () => {
     }
   };
 
-  const EmprendimientoItem = ({ item, navigation, comunas, editarEmprendimiento, eliminarEmprendimiento, actualizarEstadoEmprendimiento, previsualizarEmprendimiento, esPlanPremium, setConfirmDialog, confirmDialog }) => {
+  const EmprendimientoItem = React.memo(({ item, navigation, comunas, editarEmprendimiento, eliminarEmprendimiento, actualizarEstadoEmprendimiento, previsualizarEmprendimiento, esPlanPremium, setConfirmDialog, confirmDialog }) => {
     const [isActive, setIsActive] = useState(item.status === 'activo');
   
     const toggleActive = async () => {
@@ -2221,11 +2386,12 @@ const EmprendimientoScreen = () => {
         </View>
       </View>
     );
-  };
+  }); // Cierre de React.memo
 
-  // Renderizar item de emprendimiento
+  // Renderizar item de emprendimiento - NO memorizar para evitar problemas con props
   const renderEmprendimiento = ({ item }) => (
     <EmprendimientoItem 
+      key={item.id}
       item={item}
       navigation={navigation}
       comunas={comunas}
@@ -2887,41 +3053,44 @@ const EmprendimientoScreen = () => {
                   <Text style={[styles.configSubtitle, { color: currentTheme.textSecondary }]}>
                     Selecciona las comunas donde realizas delivery
                   </Text>
-                  <View style={styles.comunasGrid}>
-                    {comunas.map((comuna) => {
-                      const isSelected = comunasCobertura.includes(comuna.id);
-                      return (
-                        <TouchableOpacity
-                          key={comuna.id}
-                          style={[
-                            styles.comunaChip,
-                            { borderColor: isSelected ? currentTheme.primary : currentTheme.border },
-                            isSelected && { backgroundColor: currentTheme.primary + '15' },
-                          ]}
-                          onPress={() => {
-                            if (isSelected) {
-                              setComunasCobertura(comunasCobertura.filter(id => id !== comuna.id));
-                            } else {
-                              setComunasCobertura([...comunasCobertura, comuna.id]);
-                            }
-                          }}
-                          activeOpacity={0.7}
+                  
+                  {/* Botón para abrir modal de selección */}
+                  <TouchableOpacity
+                    style={[styles.selectorComunasButton, { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}
+                    onPress={() => setModalComunasCobertura(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="location" size={22} color={currentTheme.primary} />
+                    <Text style={[styles.selectorComunasTexto, { color: currentTheme.text }]}>
+                      {comunasCobertura.length === 0 
+                        ? 'Seleccionar comunas...'
+                        : `${comunasCobertura.length} ${comunasCobertura.length === 1 ? 'comuna seleccionada' : 'comunas seleccionadas'}`
+                      }
+                    </Text>
+                    <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
+                  </TouchableOpacity>
+                  
+                  {/* Chips de comunas seleccionadas */}
+                  {comunasCobertura.length > 0 && (
+                    <View style={styles.comunasSeleccionadasContainer}>
+                      {comunasCobertura.map((comunaNombre, index) => (
+                        <View 
+                          key={index} 
+                          style={[styles.comunaChipSeleccionado, { backgroundColor: currentTheme.primary + '15', borderColor: currentTheme.primary }]}
                         >
-                          <Ionicons 
-                            name={isSelected ? "checkmark-circle" : "ellipse-outline"} 
-                            size={20} 
-                            color={isSelected ? currentTheme.primary : currentTheme.textSecondary} 
-                          />
-                          <Text style={[
-                            styles.comunaChipText,
-                            { color: isSelected ? currentTheme.primary : currentTheme.text }
-                          ]}>
-                            {comuna.nombre}
+                          <Text style={[styles.comunaChipTextoSeleccionado, { color: currentTheme.primary }]}>
+                            {comunaNombre}
                           </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                          <TouchableOpacity
+                            onPress={() => setComunasCobertura(comunasCobertura.filter(c => c !== comunaNombre))}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          >
+                            <Ionicons name="close-circle" size={18} color={currentTheme.primary} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  )}
                 </View>
 
                 {/* Selector de Modalidad de Delivery */}
@@ -2956,46 +3125,7 @@ const EmprendimientoScreen = () => {
                     </View>
                   </TouchableOpacity>
 
-                  {/* Opción 2: Gratis desde monto mínimo */}
-                  <TouchableOpacity
-                    style={[
-                      styles.modalidadOption,
-                      { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
-                      modalidadDelivery === 'gratis_desde' && { borderColor: currentTheme.primary, borderWidth: 2 }
-                    ]}
-                    onPress={() => setModalidadDelivery('gratis_desde')}
-                    activeOpacity={0.7}
-                  >
-                    <View style={[styles.modalidadRadio, modalidadDelivery === 'gratis_desde' && { borderColor: currentTheme.primary }]}>
-                      {modalidadDelivery === 'gratis_desde' && <View style={[styles.modalidadRadioInner, { backgroundColor: currentTheme.primary }]} />}
-                    </View>
-                    <View style={styles.modalidadTextos}>
-                      <Text style={[styles.modalidadTitulo, { color: currentTheme.text }]}>
-                        💰 Gratis desde Monto Mínimo
-                      </Text>
-                      <Text style={[styles.modalidadDescripcion, { color: currentTheme.textSecondary }]}>
-                        Gratis si supera cierto monto
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
-
-                  {modalidadDelivery === 'gratis_desde' && (
-                    <View style={[styles.modalidadConfig, { backgroundColor: currentTheme.background }]}>
-                      <Text style={[styles.configFieldLabel, { color: currentTheme.text }]}>
-                        Monto mínimo para delivery gratis:
-                      </Text>
-                      <TextInput
-                        style={[styles.configInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                        value={configDelivery.montoMinimo}
-                        onChangeText={(text) => setConfigDelivery({...configDelivery, montoMinimo: text})}
-                        placeholder="Ej: 10000"
-                        placeholderTextColor={currentTheme.textSecondary}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  )}
-
-                  {/* Opción 3: Por distancia */}
+                  {/* Opción 2: Por distancia */}
                   <TouchableOpacity
                     style={[
                       styles.modalidadOption,
@@ -3020,106 +3150,139 @@ const EmprendimientoScreen = () => {
 
                   {modalidadDelivery === 'por_distancia' && (
                     <View style={[styles.modalidadConfig, { backgroundColor: currentTheme.background }]}>
-                      {/* Rango 1 */}
-                      <View style={styles.rangoConfig}>
-                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
-                          📏 Rango 1: Hasta {configDelivery.rango1_km} km
-                        </Text>
-                        <View style={styles.rangoInputs}>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Hasta (km):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango1_km}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango1_km: text})}
-                              keyboardType="numeric"
-                              placeholder="1"
-                            />
-                          </View>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango1_costo}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango1_costo: text})}
-                              keyboardType="numeric"
-                              placeholder="1000"
-                            />
-                          </View>
-                        </View>
-                      </View>
+                      {rangosDelivery.map((rango, index) => {
+                        const rangoAnterior = index > 0 ? rangosDelivery[index - 1] : null;
+                        const desdeKm = rangoAnterior ? rangoAnterior.hastaKm : '0';
+                        const esUltimoRango = index === rangosDelivery.length - 1;
+                        
+                        return (
+                          <View key={index} style={[styles.rangoCardModerno, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+                            {/* Header del rango */}
+                            <View style={styles.rangoHeader}>
+                              <View style={[styles.rangoNumero, { backgroundColor: currentTheme.primary }]}>
+                                <Text style={styles.rangoNumeroTexto}>{index + 1}</Text>
+                              </View>
+                              <Text style={[styles.rangoTituloModerno, { color: currentTheme.text }]}>
+                                {index === 0 
+                                  ? `Hasta ${rango.hastaKm || '0'} km`
+                                  : esUltimoRango
+                                    ? `Más de ${desdeKm} km`
+                                    : `De ${desdeKm} a ${rango.hastaKm || '0'} km`
+                                }
+                              </Text>
+                              {rangosDelivery.length > 2 && (
+                                <TouchableOpacity 
+                                  onPress={() => eliminarRango(index)}
+                                  style={styles.rangoEliminar}
+                                  activeOpacity={0.7}
+                                >
+                                  <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+                                </TouchableOpacity>
+                              )}
+                            </View>
 
-                      {/* Rango 2 */}
-                      <View style={styles.rangoConfig}>
-                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
-                          📏 Rango 2: Entre {configDelivery.rango2_km_min} y {configDelivery.rango2_km_max} km
-                        </Text>
-                        <View style={styles.rangoInputs}>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Desde (km):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango2_km_min}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_km_min: text})}
-                              keyboardType="numeric"
-                              placeholder="1"
-                            />
-                          </View>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Hasta (km):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango2_km_max}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_km_max: text})}
-                              keyboardType="numeric"
-                              placeholder="3"
-                            />
-                          </View>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango2_costo}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango2_costo: text})}
-                              keyboardType="numeric"
-                              placeholder="2000"
-                            />
-                          </View>
-                        </View>
-                      </View>
+                            {/* Layout vertical: Slider arriba (full width), Costo abajo */}
+                            <View style={styles.rangoContentVertical}>
+                              {/* Slider de km - Full width arriba */}
+                              <View style={styles.sliderSection}>
+                                <Text style={[styles.rangoLabelModerno, { color: currentTheme.textSecondary }]}>
+                                  {esUltimoRango ? 'Desde (km)' : 'Hasta (km)'}
+                                </Text>
+                                
+                                {!esUltimoRango ? (
+                                  <>
+                                    {/* Slider para seleccionar km */}
+                                    <View style={[styles.sliderContainer, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+                                      <Text style={[styles.sliderValor, { color: currentTheme.primary }]}>
+                                        {rango.hastaKm || '0'} km
+                                      </Text>
+                                      <Slider
+                                        style={styles.slider}
+                                        minimumValue={index === 0 ? 1 : parseFloat(desdeKm) + 1}
+                                        maximumValue={30}
+                                        step={0.5}
+                                        value={parseFloat(rango.hastaKm) || (index === 0 ? 1 : parseFloat(desdeKm) + 1)}
+                                        onValueChange={(value) => actualizarRango(index, 'hastaKm', value)}
+                                        minimumTrackTintColor={currentTheme.primary}
+                                        maximumTrackTintColor="#ddd"
+                                        thumbTintColor={currentTheme.primary}
+                                      />
+                                    </View>
+                                    {/* Helper text con rango permitido */}
+                                    <Text style={[styles.rangoHelperText, { color: currentTheme.textSecondary }]}>
+                                      {index === 0 
+                                        ? 'Arrastra: 1 - 30 km'
+                                        : `Arrastra: ${parseFloat(desdeKm) + 1} - 30 km`
+                                      }
+                                    </Text>
+                                  </>
+                                ) : (
+                                  <>
+                                    {/* Último rango - solo lectura */}
+                                    <View style={[styles.rangoInputContainer, { borderColor: currentTheme.border, backgroundColor: currentTheme.background }]}>
+                                      <Text style={[styles.rangoInputModerno, { color: currentTheme.textSecondary }]}>
+                                        {desdeKm}
+                                      </Text>
+                                      <Text style={[styles.rangoInputSufijo, { color: currentTheme.textSecondary }]}>km</Text>
+                                    </View>
+                                    <Text style={[styles.rangoHelperText, { color: currentTheme.textSecondary }]}>
+                                      Automático (desde {desdeKm} en adelante)
+                                    </Text>
+                                  </>
+                                )}
+                              </View>
 
-                      {/* Rango 3 */}
-                      <View style={styles.rangoConfig}>
-                        <Text style={[styles.rangoTitulo, { color: currentTheme.text }]}>
-                          📏 Rango 3: Más de {configDelivery.rango3_km} km
+                              {/* Input de costo - Full width abajo */}
+                              <View style={styles.costoSection}>
+                                <Text style={[styles.rangoLabelModerno, { color: currentTheme.textSecondary }]}>
+                                  Costo
+                                </Text>
+                                <View style={[styles.rangoInputContainer, { borderColor: currentTheme.border }]}>
+                                  <Text style={[styles.rangoInputPrefijo, { color: currentTheme.textSecondary }]}>$</Text>
+                                  <TextInput
+                                    style={[styles.rangoInputModerno, { color: currentTheme.text }]}
+                                    value={formatearMiles(rango.costo)}
+                                    onChangeText={(text) => actualizarRango(index, 'costo', text)}
+                                    keyboardType="numeric"
+                                    placeholder="1.000"
+                                    placeholderTextColor="#bdc3c7"
+                                  />
+                                </View>
+                                {/* Helper text para costo */}
+                                <Text style={[styles.rangoHelperText, { color: currentTheme.textSecondary }]}>
+                                  Máx: $9.999
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+                        );
+                      })}
+
+                      {/* Botón para agregar rango */}
+                      {rangosDelivery.length < 4 && (
+                        <TouchableOpacity 
+                          style={[styles.agregarRangoButton, { borderColor: currentTheme.primary }]}
+                          onPress={agregarRango}
+                          activeOpacity={0.7}
+                        >
+                          <Ionicons name="add-circle-outline" size={24} color={currentTheme.primary} />
+                          <Text style={[styles.agregarRangoTexto, { color: currentTheme.primary }]}>
+                            Agregar rango (máx. 4)
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {/* Info helper */}
+                      <View style={[styles.infoHelper, { backgroundColor: currentTheme.primary + '10' }]}>
+                        <Ionicons name="information-circle" size={18} color={currentTheme.primary} />
+                        <Text style={[styles.infoHelperTexto, { color: currentTheme.text }]}>
+                          Los rangos se calculan automáticamente. Máximo 30 km.
                         </Text>
-                        <View style={styles.rangoInputs}>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Desde (km):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango3_km}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango3_km: text})}
-                              keyboardType="numeric"
-                              placeholder="3"
-                            />
-                          </View>
-                          <View style={styles.rangoInputGroup}>
-                            <Text style={[styles.rangoLabel, { color: currentTheme.textSecondary }]}>Costo ($):</Text>
-                            <TextInput
-                              style={[styles.rangoInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                              value={configDelivery.rango3_costo}
-                              onChangeText={(text) => setConfigDelivery({...configDelivery, rango3_costo: text})}
-                              keyboardType="numeric"
-                              placeholder="3000"
-                            />
-                          </View>
-                        </View>
                       </View>
                     </View>
                   )}
 
-                  {/* Opción 4: Costo fijo */}
+                  {/* Opción 3: Costo fijo */}
                   <TouchableOpacity
                     style={[
                       styles.modalidadOption,
@@ -3147,17 +3310,86 @@ const EmprendimientoScreen = () => {
                       <Text style={[styles.configFieldLabel, { color: currentTheme.text }]}>
                         Costo fijo del delivery:
                       </Text>
-                      <TextInput
-                        style={[styles.configInput, { color: currentTheme.text, borderColor: currentTheme.border }]}
-                        value={configDelivery.costoFijo}
-                        onChangeText={(text) => setConfigDelivery({...configDelivery, costoFijo: text})}
-                        placeholder="Ej: 1500"
-                        placeholderTextColor={currentTheme.textSecondary}
-                        keyboardType="numeric"
-                      />
+                      <View style={[styles.rangoInputContainer, { borderColor: currentTheme.border }]}>
+                        <Text style={[styles.rangoInputPrefijo, { color: currentTheme.textSecondary }]}>$</Text>
+                        <TextInput
+                          style={[styles.rangoInputModerno, { color: currentTheme.text }]}
+                          value={formatearMiles(configDelivery.costoFijo)}
+                          onChangeText={(text) => {
+                            const valorLimpio = text.replace(/\./g, '');
+                            if (valorLimpio && isNaN(valorLimpio)) return;
+                            if (parseInt(valorLimpio) > 9999) {
+                              toast.warning('El costo máximo es de $9.999');
+                              return;
+                            }
+                            setConfigDelivery({...configDelivery, costoFijo: valorLimpio});
+                          }}
+                          placeholder="1.500"
+                          placeholderTextColor="#bdc3c7"
+                          keyboardType="numeric"
+                        />
+                      </View>
+                      <Text style={[styles.rangoHelperText, { color: currentTheme.textSecondary }]}>
+                        Máx: $9.999 - Mismo costo para todas las distancias
+                      </Text>
                     </View>
                   )}
                 </View>
+
+                {/* Regla adicional: Delivery gratis desde monto mínimo (se puede combinar con cualquier modalidad) */}
+                {modalidadDelivery !== 'gratis' && (
+                  <View style={[styles.reglaAdicionalContainer, { backgroundColor: currentTheme.background, borderColor: currentTheme.border }]}>
+                    <View style={styles.reglaAdicionalHeader}>
+                      <View style={styles.reglaAdicionalIcono}>
+                        <Ionicons name="gift" size={22} color={currentTheme.primary} />
+                      </View>
+                      <View style={styles.reglaAdicionalTextos}>
+                        <Text style={[styles.reglaAdicionalTitulo, { color: currentTheme.text }]}>
+                          Delivery Gratis desde Monto Mínimo
+                        </Text>
+                        <Text style={[styles.reglaAdicionalDescripcion, { color: currentTheme.textSecondary }]}>
+                          Regla adicional: gratis si el pedido supera cierto monto
+                        </Text>
+                      </View>
+                      <Switch
+                        value={deliveryGratisDesde}
+                        onValueChange={setDeliveryGratisDesde}
+                        trackColor={{ false: '#ddd', true: currentTheme.primary + '50' }}
+                        thumbColor={deliveryGratisDesde ? currentTheme.primary : '#f4f3f4'}
+                      />
+                    </View>
+
+                    {deliveryGratisDesde && (
+                      <View style={styles.reglaAdicionalConfig}>
+                        <Text style={[styles.rangoLabelModerno, { color: currentTheme.textSecondary }]}>
+                          Monto mínimo del pedido:
+                        </Text>
+                        <View style={[styles.rangoInputContainer, { borderColor: currentTheme.border }]}>
+                          <Text style={[styles.rangoInputPrefijo, { color: currentTheme.textSecondary }]}>$</Text>
+                          <TextInput
+                            style={[styles.rangoInputModerno, { color: currentTheme.text }]}
+                            value={formatearMiles(montoMinimoGratis)}
+                            onChangeText={(text) => {
+                              const valorLimpio = text.replace(/\./g, '');
+                              if (valorLimpio && isNaN(valorLimpio)) return;
+                              if (parseInt(valorLimpio) > 99999) {
+                                toast.warning('El monto máximo es de $99.999');
+                                return;
+                              }
+                              setMontoMinimoGratis(valorLimpio);
+                            }}
+                            placeholder="20.000"
+                            placeholderTextColor="#bdc3c7"
+                            keyboardType="numeric"
+                          />
+                        </View>
+                        <Text style={[styles.rangoHelperText, { color: currentTheme.textSecondary }]}>
+                          Si el pedido es igual o mayor a este monto, el delivery será gratis
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
             )}
           </View>
@@ -3379,7 +3611,10 @@ const EmprendimientoScreen = () => {
                 styles.saveButton,
                 (guardando || validandoDireccion) && styles.saveButtonDisabled
               ]}
-              onPress={guardarEmprendimiento}
+              onPress={() => {
+                console.log('🔘 BOTÓN GUARDAR/ACTUALIZAR PRESIONADO');
+                guardarEmprendimiento();
+              }}
               disabled={guardando || validandoDireccion}
               activeOpacity={0.9}
             >
@@ -3613,6 +3848,27 @@ const EmprendimientoScreen = () => {
         type={toast.toastConfig.type}
         duration={toast.toastConfig.duration}
         onHide={toast.hideToast}
+      />
+
+      {/* Selector de Comunas para Cobertura de Delivery */}
+      <SelectorComunas
+        visible={modalComunasCobertura}
+        onClose={() => setModalComunasCobertura(false)}
+        onSelect={(comunasSeleccionadas) => setComunasCobertura(comunasSeleccionadas)}
+        title="Comunas de Cobertura"
+        multiSelect={true}
+        selectedIds={comunasCobertura}
+        theme={currentTheme}
+      />
+
+      {/* Selector de Comuna para el Emprendimiento */}
+      <SelectorComunas
+        visible={modalComunasVisible}
+        onClose={() => setModalComunasVisible(false)}
+        onSelect={(comuna) => setComuna(comuna.id)}
+        title="Seleccionar Comuna"
+        multiSelect={false}
+        theme={currentTheme}
       />
     </View>
   );
@@ -7021,6 +7277,194 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 10,
   },
+  // Nuevos estilos modernos para rangos dinámicos
+  rangoCardModerno: {
+    borderRadius: 12,
+    borderWidth: 2,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  rangoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 10,
+  },
+  rangoNumero: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rangoNumeroTexto: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  rangoTituloModerno: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  rangoEliminar: {
+    padding: 4,
+  },
+  rangoInputsModerno: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  rangoContentVertical: {
+    gap: 16,
+  },
+  sliderSection: {
+    width: '100%',
+  },
+  costoSection: {
+    width: '100%',
+  },
+  rangoInputWrapper: {
+    flex: 1,
+  },
+  rangoLabelModerno: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 6,
+    letterSpacing: 0.2,
+  },
+  rangoHelperText: {
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 4,
+    fontStyle: 'italic',
+    opacity: 0.8,
+  },
+  sliderContainer: {
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 4,
+  },
+  sliderValor: {
+    fontSize: 18,
+    fontWeight: '800',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  rangoInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 48,
+  },
+  rangoInputPrefijo: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginRight: 4,
+  },
+  rangoInputSufijo: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+  rangoInputModerno: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    padding: 0,
+    textAlign: 'center',
+  },
+  agregarRangoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    marginTop: 8,
+    marginBottom: 12,
+    gap: 8,
+  },
+  agregarRangoTexto: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  infoHelper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 10,
+    gap: 8,
+  },
+  infoHelperTexto: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  // Estilos para regla adicional "Gratis desde"
+  reglaAdicionalContainer: {
+    marginTop: 20,
+    borderRadius: 16,
+    borderWidth: 2,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  reglaAdicionalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reglaAdicionalIcono: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  reglaAdicionalTextos: {
+    flex: 1,
+  },
+  reglaAdicionalTitulo: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 3,
+    letterSpacing: 0.2,
+  },
+  reglaAdicionalDescripcion: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  reglaAdicionalConfig: {
+    marginTop: 16,
+    gap: 8,
+  },
   rangoInputGroup: {
     flex: 1,
     minWidth: 100,
@@ -7250,6 +7694,47 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     fontStyle: 'italic',
+  },
+  // Estilos para el selector de comunas
+  selectorComunasButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginTop: 12,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  selectorComunasTexto: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  comunasSeleccionadasContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  comunaChipSeleccionado: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    gap: 6,
+  },
+  comunaChipTextoSeleccionado: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 });
 

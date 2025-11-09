@@ -381,6 +381,8 @@ const enviarReporte = async () => {
   const [modoEntrega, setModoEntrega] = useState(
     producto.metodosEntrega.delivery ? "delivery" : "retiro"
   );
+  const [comunaCliente, setComunaCliente] = useState(null);
+  const [tieneCobertura, setTieneCobertura] = useState(true);
 
   const imagenesPorCategoria = useMemo(() => {
     // Si hay productos de la API, usarlos; si no, usar los mock del producto
@@ -495,48 +497,68 @@ const enviarReporte = async () => {
       console.log('  - Distancia:', distanciaKm, 'km');
       console.log('  - Subtotal:', subtotal);
       
+      // Calcular costo base según modalidad
+      let costoBase = 0;
+      
       switch (modalidad) {
         case 'gratis':
-          return 0;
-          
-        case 'gratis_desde':
-          const montoMinimo = parseInt(config.montoMinimo) || 0;
-          if (subtotal >= montoMinimo) {
-            console.log('  ✅ Delivery gratis (supera monto mínimo)');
-            return 0;
-          }
-          // Si no supera el mínimo, cobrar según el costo fijo o por defecto
-          return parseInt(config.costoFijo) || 0;
+          costoBase = 0;
+          break;
           
         case 'por_distancia':
-          const rango1_km = parseFloat(config.rango1_km) || 1;
-          const rango1_costo = parseInt(config.rango1_costo) || 0;
-          const rango2_km_min = parseFloat(config.rango2_km_min) || 1;
-          const rango2_km_max = parseFloat(config.rango2_km_max) || 3;
-          const rango2_costo = parseInt(config.rango2_costo) || 0;
-          const rango3_km = parseFloat(config.rango3_km) || 3;
-          const rango3_costo = parseInt(config.rango3_costo) || 0;
-          
-          if (distanciaKm <= rango1_km) {
-            console.log(`  📍 Rango 1: ${distanciaKm} km ≤ ${rango1_km} km = $${rango1_costo}`);
-            return rango1_costo;
-          } else if (distanciaKm > rango2_km_min && distanciaKm <= rango2_km_max) {
-            console.log(`  📍 Rango 2: ${rango2_km_min} km < ${distanciaKm} km ≤ ${rango2_km_max} km = $${rango2_costo}`);
-            return rango2_costo;
-          } else if (distanciaKm > rango3_km) {
-            console.log(`  📍 Rango 3: ${distanciaKm} km > ${rango3_km} km = $${rango3_costo}`);
-            return rango3_costo;
+          // Interpretar rangos dinámicos
+          if (config.rangos && Array.isArray(config.rangos)) {
+            const rangos = config.rangos;
+            
+            // Ordenar rangos por distancia (de menor a mayor)
+            const rangosOrdenados = rangos.sort((a, b) => parseFloat(a.hastaKm) - parseFloat(b.hastaKm));
+            
+            // Buscar en qué rango cae la distancia
+            let costoEncontrado = false;
+            
+            for (let i = 0; i < rangosOrdenados.length; i++) {
+              const rango = rangosOrdenados[i];
+              const hastaKm = parseFloat(rango.hastaKm) || 0;
+              const costo = parseInt(rango.costo) || 0;
+              const desdeKm = i > 0 ? parseFloat(rangosOrdenados[i - 1].hastaKm) : 0;
+              
+              // Si es el último rango o la distancia es menor o igual
+              if (i === rangosOrdenados.length - 1 || distanciaKm <= hastaKm) {
+                console.log(`  📍 Rango ${i + 1}: ${desdeKm} - ${i === rangosOrdenados.length - 1 ? '∞' : hastaKm} km = $${costo}`);
+                costoBase = costo;
+                costoEncontrado = true;
+                break;
+              }
+            }
+            
+            if (!costoEncontrado) {
+              costoBase = 0;
+            }
+          } else {
+            // Fallback a estructura antigua (por compatibilidad)
+            costoBase = 0;
           }
-          return 0;
+          break;
           
         case 'fijo':
-          const costoFijo = parseInt(config.costoFijo) || 0;
-          console.log('  💵 Costo fijo:', costoFijo);
-          return costoFijo;
+          costoBase = parseInt(config.costoFijo) || 0;
+          console.log('  💵 Costo fijo:', costoBase);
+          break;
           
         default:
-          return 0;
+          costoBase = 0;
       }
+      
+      // Aplicar regla adicional: "Gratis desde monto mínimo" (override si se cumple)
+      if (config.gratisDesde && config.montoMinimoGratis) {
+        const montoMinimo = parseInt(config.montoMinimoGratis) || 0;
+        if (subtotal >= montoMinimo) {
+          console.log(`  🎁 Regla adicional aplicada: Delivery gratis (pedido ≥ $${montoMinimo})`);
+          return 0;
+        }
+      }
+      
+      return costoBase;
     }
     
     // FALLBACK: Si no tiene configuración avanzada, usar el método legacy
@@ -919,8 +941,55 @@ const enviarReporte = async () => {
     if (direccionUsuario) {
       console.log("Calculando distancia con:", direccionUsuario);
       obtenerDistancia();
+      
+      // Extraer comuna de la dirección para validar cobertura
+      extraerComunaDireccion(direccionUsuario);
     }
   }, [direccionUsuario]);
+
+  // Validar cobertura cuando cambia la comuna del cliente
+  useEffect(() => {
+    if (!comunaCliente || !producto.comunasCobertura || !Array.isArray(producto.comunasCobertura)) {
+      return;
+    }
+    
+    const coberturaActual = producto.comunasCobertura.includes(comunaCliente);
+    
+    console.log('🗺️ Validando cobertura de delivery:');
+    console.log('  - Comuna del cliente:', comunaCliente);
+    console.log('  - Comunas de cobertura:', producto.comunasCobertura);
+    console.log('  - ¿Tiene cobertura?:', coberturaActual ? 'SÍ' : 'NO');
+    
+    setTieneCobertura(coberturaActual);
+  }, [comunaCliente, producto.comunasCobertura]);
+  
+  // Cambiar a retiro si no hay cobertura (efecto separado para evitar loops)
+  useEffect(() => {
+    if (!tieneCobertura && modoEntrega === 'delivery' && comunaCliente) {
+      console.log('⚠️ Sin cobertura, cambiando automáticamente a retiro en local');
+      setModoEntrega('retiro');
+    }
+  }, [tieneCobertura]);
+
+  // Función para extraer comuna de la dirección
+  const extraerComunaDireccion = (direccion) => {
+    if (!direccion) return;
+    
+    // Formato esperado: "Calle 123, Comuna, Región" o "Calle 123, Comuna"
+    const partes = direccion.split(',');
+    
+    if (partes.length >= 2) {
+      const comunaExtraida = partes[1].trim(); // Segunda parte es la comuna
+      setComunaCliente(comunaExtraida);
+      console.log('📍 Comuna extraída de la dirección:', comunaExtraida);
+    } else {
+      // Si no tiene formato estándar, intentar extraer última palabra
+      const palabras = direccion.split(' ');
+      if (palabras.length > 0) {
+        setComunaCliente(palabras[palabras.length - 1]);
+      }
+    }
+  };
 
   const obtenerDistancia = async () => {
     if (!direccionUsuario) {
@@ -1848,12 +1917,25 @@ const enviarReporte = async () => {
                 <Text style={[styles.modalSeccionTitulo, { color: currentTheme.text }]}>
                   🚚 Opciones de Entrega
                 </Text>
+                
+                {/* Mensaje de advertencia si no hay cobertura */}
+                {producto.metodosEntrega.delivery && !tieneCobertura && comunaCliente && (
+                  <View style={[styles.advertenciaCobertura, { backgroundColor: '#fff3cd', borderLeftColor: '#f39c12' }]}>
+                    <Ionicons name="alert-circle" size={20} color="#f39c12" />
+                    <Text style={styles.advertenciaCoberturaTexto}>
+                      No hay cobertura de delivery para <Text style={{ fontWeight: '700' }}>{comunaCliente}</Text>. 
+                      Solo puedes hacer retiro en local.
+                    </Text>
+                  </View>
+                )}
+                
                 <View style={styles.selectorContainerModal}>
                   {producto.metodosEntrega.delivery && (
                     <TouchableOpacity
                       style={styles.selectorBotonModal}
-                      onPress={() => cambiarModoEntrega("delivery")}
-                      activeOpacity={0.8}
+                      onPress={() => tieneCobertura && cambiarModoEntrega("delivery")}
+                      activeOpacity={tieneCobertura ? 0.8 : 1}
+                      disabled={!tieneCobertura}
                     >
                       {modoEntrega === "delivery" ? (
                         <LinearGradient
@@ -1872,14 +1954,23 @@ const enviarReporte = async () => {
                           <Ionicons name="checkmark-circle" size={20} color="white" />
                         </LinearGradient>
                       ) : (
-                        <View style={[styles.selectorNoSeleccionadoModal, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
-                          <Ionicons name="bicycle-outline" size={22} color={currentTheme.textSecondary} />
+                        <View style={[
+                          styles.selectorNoSeleccionadoModal, 
+                          { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border },
+                          !tieneCobertura && styles.selectorDeshabilitado
+                        ]}>
+                          <Ionicons name="bicycle-outline" size={22} color={tieneCobertura ? currentTheme.textSecondary : '#bdc3c7'} />
                           <View style={styles.selectorTextoContainerModal}>
-                            <Text style={[styles.selectorTextoNoSeleccionadoModal, { color: currentTheme.text }]}>Delivery</Text>
-                            <Text style={[styles.selectorSubtextoNoSeleccionadoModal, { color: currentTheme.textSecondary }]}>
-                              {producto.metodosEntrega.deliveryCosto || "Costo variable"}
+                            <Text style={[styles.selectorTextoNoSeleccionadoModal, { color: tieneCobertura ? currentTheme.text : '#bdc3c7' }]}>
+                              Delivery {!tieneCobertura && '(Sin cobertura)'}
+                            </Text>
+                            <Text style={[styles.selectorSubtextoNoSeleccionadoModal, { color: tieneCobertura ? currentTheme.textSecondary : '#bdc3c7' }]}>
+                              {!tieneCobertura ? 'No disponible en tu comuna' : (producto.metodosEntrega.deliveryCosto || "Costo variable")}
                             </Text>
                           </View>
+                          {!tieneCobertura && (
+                            <Ionicons name="close-circle" size={20} color="#e74c3c" />
+                          )}
                         </View>
                       )}
                     </TouchableOpacity>
@@ -4579,6 +4670,25 @@ confirmacionEnviarTexto: {
     marginTop: 4,
     marginLeft: 4,
     fontStyle: 'italic',
+  },
+  advertenciaCobertura: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    marginBottom: 14,
+    gap: 10,
+    borderLeftWidth: 3,
+  },
+  advertenciaCoberturaTexto: {
+    flex: 1,
+    fontSize: 13,
+    color: '#856404',
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  selectorDeshabilitado: {
+    opacity: 0.5,
   },
   carritoBotonConfirmarModerno: {
     borderRadius: 16,

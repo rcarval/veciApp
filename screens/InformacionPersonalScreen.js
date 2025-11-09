@@ -97,19 +97,12 @@ const InformacionPersonalScreen = () => {
         if (response.ok && data.comunas) {
           setComunas(data.comunas);
         } else {
-          // Fallback a comunas hardcodeadas
-          setComunas([
-            { id: 1, nombre: "Isla de Maipo" },
-            { id: 2, nombre: "Talagante" },
-          ]);
+          console.error('No se pudieron cargar comunas desde la API');
+          setComunas([]);
         }
       } catch (error) {
         console.error("Error al cargar comunas:", error);
-        // Fallback a comunas hardcodeadas
-        setComunas([
-          { id: 1, nombre: "Isla de Maipo" },
-          { id: 2, nombre: "Talagante" },
-        ]);
+        setComunas([]);
       } finally {
         setCargandoComunas(false);
       }

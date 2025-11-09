@@ -115,19 +115,12 @@ const RegisterScreen = ({ navigation }) => {
             setComuna(data.comunas[0].id.toString());
           }
         } else {
-          setComunas([
-            { id: 1, nombre: 'Isla de Maipo' },
-            { id: 2, nombre: 'Talagante' }
-          ]);
-          setComuna('1');
+          console.error('No se pudieron cargar comunas desde la API');
+          setComunas([]);
         }
       } catch (error) {
         console.error('Error al cargar comunas:', error);
-        setComunas([
-          { id: 1, nombre: 'Isla de Maipo' },
-          { id: 2, nombre: 'Talagante' }
-        ]);
-        setComuna('1');
+        setComunas([]);
       } finally {
         setCargandoComunas(false);
       }

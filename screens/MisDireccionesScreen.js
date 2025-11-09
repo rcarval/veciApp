@@ -20,10 +20,13 @@ import MapView, { Marker } from "react-native-maps";
 import * as Location from "expo-location";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
+import { useTheme } from "../context/ThemeContext";
+import SelectorComunas from "../components/SelectorComunas";
 
 const MisDireccionesScreen = () => {
   const navigation = useNavigation();
   const { direcciones, cargarDirecciones, invalidarDirecciones } = useUser();
+  const { currentTheme } = useTheme();
   const [mostrarFormulario, setMostrarFormulario] = useState(false);
   const [direccionEditando, setDireccionEditando] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -31,12 +34,14 @@ const MisDireccionesScreen = () => {
   
   // Estados del formulario
   const [nombre, setNombre] = useState("");
-  const [direccionCompleta, setDireccionCompleta] = useState("");
+  const [calle, setCalle] = useState(""); // Separado: calle y número
+  const [comunaSeleccionada, setComunaSeleccionada] = useState(null); // Objeto completo {id, nombre, region}
   const [referencia, setReferencia] = useState("");
   const [esPrincipal, setEsPrincipal] = useState(false);
   
   // Estados para validación con mapa
   const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [modalComunasVisible, setModalComunasVisible] = useState(false);
   const [validandoDireccion, setValidandoDireccion] = useState(false);
   const [currentAddress, setCurrentAddress] = useState("");
   const [region, setRegion] = useState({
@@ -49,13 +54,64 @@ const MisDireccionesScreen = () => {
   const [direccionValidada, setDireccionValidada] = useState(null);
   const [buscandoDireccion, setBuscandoDireccion] = useState(false);
 
-  const comunas = [
-    { id: "1", nombre: "Isla de Maipo" },
-    { id: "2", nombre: "Talagante" },
-    { id: "3", nombre: "El Monte" },
-    { id: "4", nombre: "Peñaflor" },
-    { id: "5", nombre: "Melipilla" },
-  ];
+  // Comunas cargadas desde la API
+  const [comunas, setComunas] = useState([]);
+  
+  // Cargar comunas desde la API
+  useEffect(() => {
+    cargarComunas();
+  }, []);
+
+  const cargarComunas = async () => {
+    try {
+      const response = await fetch(API_ENDPOINTS.COMUNAS);
+      const data = await response.json();
+      
+      if (data.comunas && Array.isArray(data.comunas)) {
+        setComunas(data.comunas);
+        console.log('✅ Comunas cargadas en MisDirecciones:', data.comunas.length);
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar comunas:', error);
+      setComunas([]);
+    }
+  };
+
+  // Función para normalizar dirección desde geocoding a formato estandarizado
+  const normalizarDireccionDesdeGeocode = (addressComponents) => {
+    try {
+      // Extraer componentes específicos
+      const numero = addressComponents.find((c) =>
+        c.types.includes("street_number")
+      )?.long_name || '';
+
+      const calle = addressComponents.find((c) =>
+        c.types.includes("route")
+      )?.long_name || '';
+
+      const comuna = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_3") || 
+        c.types.includes("locality")
+      )?.long_name || '';
+
+      const region = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_1")
+      )?.long_name || '';
+
+      // Construir dirección limpia: "Calle 123, Comuna, Región"
+      const calleCompleta = `${calle} ${numero}`.trim();
+      
+      return {
+        calle: calleCompleta,
+        comuna: comuna,
+        region: region,
+        direccionCompleta: `${calleCompleta}, ${comuna}, ${region}`
+      };
+    } catch (error) {
+      console.error('Error al normalizar dirección:', error);
+      return null;
+    }
+  };
 
   // Cargar direcciones al iniciar (usando contexto con cache)
   useEffect(() => {
@@ -89,8 +145,8 @@ const MisDireccionesScreen = () => {
   }, [navigation]);
 
   const guardarDireccion = async () => {
-    if (!nombre.trim() || !direccionCompleta.trim()) {
-      Alert.alert("Error", "Por favor completa todos los campos obligatorios");
+    if (!nombre.trim() || !calle.trim() || !comunaSeleccionada) {
+      Alert.alert("Error", "Por favor completa todos los campos obligatorios (nombre, dirección y comuna)");
       return;
     }
 
@@ -104,10 +160,16 @@ const MisDireccionesScreen = () => {
         return;
       }
 
+      // Construir dirección en formato estandarizado: "Calle 123, Comuna, Región"
+      const direccionEstandarizada = `${calle.trim()}, ${comunaSeleccionada.nombre}, ${comunaSeleccionada.region || 'Metropolitana'}`;
+      
+      console.log('📍 Dirección estandarizada:', direccionEstandarizada);
+
       // Preparar datos para el backend
       const datosDireccion = {
         nombre: nombre.trim(),
-        direccion: direccionCompleta.trim(),
+        direccion: direccionEstandarizada,
+        comuna: comunaSeleccionada.nombre, // Guardar nombre de comuna
         referencia: referencia.trim() || null,
         es_principal: esPrincipal,
         latitud: direccionValidada?.coordenadas?.lat || selectedLocation?.latitude || null,
@@ -171,9 +233,39 @@ const MisDireccionesScreen = () => {
   const editarDireccion = (direccion) => {
     setDireccionEditando(direccion);
     setNombre(direccion.nombre);
-    setDireccionCompleta(direccion.direccion);
     setReferencia(direccion.referencia || "");
     setEsPrincipal(direccion.esPrincipal || false);
+    
+    // Parsear dirección en formato "Calle 123, Comuna, Región"
+    if (direccion.direccion) {
+      const partes = direccion.direccion.split(',').map(p => p.trim());
+      
+      if (partes.length >= 2) {
+        // Primera parte: calle
+        setCalle(partes[0]);
+        
+        // Segunda parte: comuna
+        const comunaNombre = partes[1];
+        const comunaEncontrada = comunas.find(c => 
+          c.nombre.toLowerCase() === comunaNombre.toLowerCase()
+        );
+        
+        if (comunaEncontrada) {
+          setComunaSeleccionada(comunaEncontrada);
+        } else {
+          // Si no se encuentra, intentar buscar parcialmente
+          const comunaParcial = comunas.find(c => 
+            c.nombre.toLowerCase().includes(comunaNombre.toLowerCase()) ||
+            comunaNombre.toLowerCase().includes(c.nombre.toLowerCase())
+          );
+          setComunaSeleccionada(comunaParcial || null);
+        }
+      } else {
+        // Formato antiguo: poner todo en calle
+        setCalle(direccion.direccion);
+        setComunaSeleccionada(null);
+      }
+    }
     
     // Restaurar coordenadas si existen
     if (direccion.coordenadas) {
@@ -246,11 +338,14 @@ const MisDireccionesScreen = () => {
   const limpiarFormulario = () => {
     setDireccionEditando(null);
     setNombre("");
-    setDireccionCompleta("");
+    setCalle("");
+    setComunaSeleccionada(null);
     setReferencia("");
     setEsPrincipal(false);
     setMostrarFormulario(false);
     setDireccionValidada(null);
+    setCurrentAddress("");
+    setSelectedLocation(null);
   };
 
   // Función para abrir el mapa
@@ -329,15 +424,47 @@ const MisDireccionesScreen = () => {
     setValidandoDireccion(true);
     try {
       // Validar dirección con Google Maps
-      const validationResult = await validarDireccionConGoogle(currentAddress, selectedLocation);
+      const API_KEY = "AIzaSyC7UNb-61Xv8cAd_020VrzG7ccvXpTrJg4";
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${selectedLocation.latitude},${selectedLocation.longitude}&key=${API_KEY}&language=es&region=cl`;
       
-      if (validationResult.exacta) {
-        setDireccionValidada(validationResult);
-        setDireccionCompleta(validationResult.direccion);
-        setMapModalVisible(false);
-        Alert.alert("Éxito", "Dirección validada correctamente");
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.status === "OK" && data.results.length > 0) {
+        const resultado = data.results[0];
+        
+        // Normalizar dirección a formato estandarizado
+        const direccionNormalizada = normalizarDireccionDesdeGeocode(resultado.address_components);
+        
+        if (direccionNormalizada && direccionNormalizada.calle && direccionNormalizada.comuna) {
+          // Buscar la comuna en nuestra base de datos
+          const comunaEncontrada = comunas.find(c => 
+            c.nombre.toLowerCase() === direccionNormalizada.comuna.toLowerCase()
+          );
+          
+          if (comunaEncontrada) {
+            setCalle(direccionNormalizada.calle);
+            setComunaSeleccionada(comunaEncontrada);
+            setCurrentAddress(direccionNormalizada.direccionCompleta);
+            setDireccionValidada({
+              exacta: true,
+              direccion: direccionNormalizada.direccionCompleta,
+              coordenadas: resultado.geometry.location,
+            });
+            setMapModalVisible(false);
+            Alert.alert("Éxito", `Dirección validada: ${direccionNormalizada.direccionCompleta}`);
+          } else {
+            Alert.alert("Atención", `La comuna "${direccionNormalizada.comuna}" no está en nuestra base de datos. Por favor selecciónala manualmente.`);
+            setCalle(direccionNormalizada.calle);
+            setCurrentAddress(direccionNormalizada.calle);
+            setMapModalVisible(false);
+            setModalComunasVisible(true); // Abrir selector de comunas
+          }
+        } else {
+          Alert.alert("Error", "No se pudo extraer la dirección completa. Por favor ingresa los datos manualmente.");
+        }
       } else {
-        Alert.alert("Error", "La dirección no es lo suficientemente precisa. Por favor selecciona un punto más específico.");
+        Alert.alert("Error", "No se pudo validar la ubicación seleccionada.");
       }
     } catch (error) {
       console.log('Error al validar dirección:', error);
@@ -556,26 +683,60 @@ const MisDireccionesScreen = () => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Dirección completa *</Text>
+                <Text style={styles.inputLabel}>Calle y Número *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={calle}
+                  onChangeText={setCalle}
+                  placeholder="Ej: Av. Los Héroes 1234"
+                  autoCapitalize="words"
+                />
                 <TouchableOpacity
-                  style={styles.direccionButton}
+                  style={[styles.ayudaMapaButton, { borderColor: currentTheme.border }]}
                   onPress={openMapPicker}
+                  activeOpacity={0.7}
                 >
-                  <View style={styles.direccionButtonContent}>
-                    <Ionicons name="map" size={20} color="#2A9D8F" />
-                    <Text style={[styles.direccionButtonText, direccionCompleta && styles.direccionButtonTextFilled]}>
-                      {direccionCompleta || "Selecciona en el mapa"}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={16} color="#bdc3c7" />
-                  </View>
+                  <Ionicons name="map" size={18} color={currentTheme.primary} />
+                  <Text style={[styles.ayudaMapaTexto, { color: currentTheme.primary }]}>
+                    Ayúdame con el mapa
+                  </Text>
                 </TouchableOpacity>
-                {direccionValidada && (
-                  <View style={styles.validacionContainer}>
-                    <Ionicons name="checkmark-circle" size={16} color="#27ae60" />
-                    <Text style={styles.validacionText}>Dirección validada</Text>
-                  </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Comuna *</Text>
+                <TouchableOpacity
+                  style={[styles.selectorComunaButton, { borderColor: currentTheme.border, backgroundColor: currentTheme.cardBackground }]}
+                  onPress={() => setModalComunasVisible(true)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="location" size={22} color={currentTheme.primary} />
+                  <Text style={[styles.selectorComunaTexto, { color: comunaSeleccionada ? currentTheme.text : currentTheme.textSecondary }]}>
+                    {comunaSeleccionada ? comunaSeleccionada.nombre : 'Seleccionar comuna...'}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={20} color={currentTheme.textSecondary} />
+                </TouchableOpacity>
+                {comunaSeleccionada && (
+                  <Text style={[styles.regionTexto, { color: currentTheme.textSecondary }]}>
+                    {comunaSeleccionada.region}
+                  </Text>
                 )}
               </View>
+
+              {/* Vista previa de dirección completa */}
+              {calle && comunaSeleccionada && (
+                <View style={[styles.vistaPrevia, { backgroundColor: currentTheme.primary + '10', borderLeftColor: currentTheme.primary }]}>
+                  <Ionicons name="information-circle" size={18} color={currentTheme.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.vistaPreviaLabel, { color: currentTheme.textSecondary }]}>
+                      Dirección completa:
+                    </Text>
+                    <Text style={[styles.vistaPreviaTexto, { color: currentTheme.text }]}>
+                      {`${calle}, ${comunaSeleccionada.nombre}, ${comunaSeleccionada.region || 'Metropolitana'}`}
+                    </Text>
+                  </View>
+                </View>
+              )}
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Referencia (opcional)</Text>
@@ -717,6 +878,19 @@ const MisDireccionesScreen = () => {
             </View>
           </View>
         </Modal>
+
+        {/* Selector de Comunas */}
+        <SelectorComunas
+          visible={modalComunasVisible}
+          onClose={() => setModalComunasVisible(false)}
+          onSelect={(comuna) => {
+            setComunaSeleccionada(comuna);
+            console.log('✅ Comuna seleccionada:', comuna);
+          }}
+          title="Seleccionar Comuna"
+          multiSelect={false}
+          theme={currentTheme}
+        />
       </ScrollView>
     </View>
   );
@@ -1121,6 +1295,71 @@ const styles = StyleSheet.create({
   confirmMapButtonText: {
     color: "white",
     fontWeight: "bold",
+  },
+  // Estilos para nuevos campos
+  ayudaMapaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    marginTop: 8,
+    gap: 6,
+  },
+  ayudaMapaTexto: {
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  selectorComunaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  selectorComunaTexto: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  regionTexto: {
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 6,
+    marginLeft: 4,
+    fontStyle: 'italic',
+  },
+  vistaPrevia: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 16,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    gap: 10,
+  },
+  vistaPreviaLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+    letterSpacing: 0.3,
+  },
+  vistaPreviaTexto: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 21,
+    letterSpacing: 0.2,
   },
 });
 
