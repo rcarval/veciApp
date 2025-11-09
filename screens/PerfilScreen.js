@@ -39,7 +39,7 @@ const ConfirmDialog = ({ visible, title, message, onCancel, onConfirm, confirmTe
           <View style={confirmDialogStyles.iconContainer}>
             <View style={[confirmDialogStyles.iconCircle, { backgroundColor: isDangerous ? '#e74c3c20' : '#2A9D8F20' }]}>
               <Ionicons 
-                name={isDangerous ? "alert-circle" : "help-circle"} 
+                name={isDangerous ? "alert-circle" : "checkmark-circle"} 
                 size={40} 
                 color={isDangerous ? "#e74c3c" : "#2A9D8F"} 
               />
