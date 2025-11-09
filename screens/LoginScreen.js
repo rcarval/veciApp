@@ -20,7 +20,7 @@ import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useUser } from "../context/UserContext";
 import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
+import { useToast } from "../hooks/useToast";
 
 const { width, height } = Dimensions.get('window');
 

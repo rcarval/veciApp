@@ -27,7 +27,7 @@ import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
+import { useToast } from "../hooks/useToast";
 
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();

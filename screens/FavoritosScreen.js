@@ -19,7 +19,7 @@ import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
+import { useToast } from "../hooks/useToast";
 
 const FavoritosScreen = () => {
   const navigation = useNavigation();

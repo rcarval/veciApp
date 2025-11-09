@@ -23,7 +23,7 @@ import { useTheme } from "../context/ThemeContext";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
+import { useToast } from "../hooks/useToast";
 
 const HomeScreen = ({ navigation }) => {
   const userContext = useUser();
