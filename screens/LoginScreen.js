@@ -203,7 +203,8 @@ const LoginScreen = ({ navigation }) => {
   const [correo, setCorreo] = useState("");
   const [verPassword, setVerPassword] = useState(false);
   const [contrasena, setContrasena] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false); // Modal de transición (solo éxito)
+  const [validando, setValidando] = useState(false); // Loading en botón
   
   // Toast para notificaciones
   const toast = useToast();
@@ -277,74 +278,75 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
 
-    setLoading(true);
+    setValidando(true);
 
     try {
       console.log('🔐 Intentando login...');
       
-      // Iniciar timer de 5 segundos
-      const timerPromise = new Promise(resolve => setTimeout(resolve, 5000));
-      
       // Ejecutar login
-      const loginPromise = (async () => {
-        const response = await fetch(API_ENDPOINTS.LOGIN, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-          },
-          body: JSON.stringify({ correo, contrasena }),
-        });
-
-        const data = await response.json();
-
-        if (response.ok) {
-          await AsyncStorage.setItem("token", data.token);
-          await AsyncStorage.setItem("sesionActiva", "true");
-          
-          console.log("✅ Login exitoso");
-          
-          if (limpiarCacheCompleto) {
-            await limpiarCacheCompleto();
-          }
-          
-          try {
-            await cargarUsuario(true);
-            console.log("✅ Usuario cargado");
-          } catch (error) {
-            console.error("❌ Error al cargar usuario:", error);
-          }
-          
-          return data;
-        } else {
-          // Manejar error de email no verificado
-          if (data.requiere_verificacion) {
-            throw new Error("📧 " + (data.error || "Por favor verifica tu correo electrónico antes de iniciar sesión."));
-          }
-          throw new Error(data.mensaje || data.error || "Credenciales incorrectas");
-        }
-      })();
-
-      // Esperar a que ambos completen (login + timer de 5 segundos)
-      const [data] = await Promise.all([loginPromise, timerPromise]);
-      
-      // Guardar el tipo de usuario para navegación
-      const tipoUsuario = data.usuario?.tipo_usuario;
-      const destinoNavegacion = (tipoUsuario === 'vendedor' || tipoUsuario === 'emprendedor') 
-        ? "PedidosRecibidos" 
-        : "Home";
-      
-      // PRIMERO: Guardar flag en AsyncStorage para que el overlay persista
-      await AsyncStorage.setItem('mostrarOverlayTransicion', 'true');
-      
-      // SEGUNDO: Navegar inmediatamente (la siguiente pantalla empieza a cargar)
-      navigation.reset({
-        index: 0,
-        routes: [{ name: destinoNavegacion }],
+      const response = await fetch(API_ENDPOINTS.LOGIN, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ correo, contrasena }),
       });
-      
-      // TERCERO: La animación continuará en la siguiente pantalla
-      // No hacemos nada aquí, el overlay se manejará globalmente
+
+      const data = await response.json();
+
+      if (response.ok) {
+        // ✅ LOGIN EXITOSO - Ahora sí mostramos el modal de transición
+        setValidando(false);
+        setLoading(true);
+        
+        await AsyncStorage.setItem("token", data.token);
+        await AsyncStorage.setItem("sesionActiva", "true");
+        
+        console.log("✅ Login exitoso");
+        
+        if (limpiarCacheCompleto) {
+          await limpiarCacheCompleto();
+        }
+        
+        try {
+          await cargarUsuario(true);
+          console.log("✅ Usuario cargado");
+        } catch (error) {
+          console.error("❌ Error al cargar usuario:", error);
+        }
+        
+        // Timer de 5 segundos para la animación
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        // Guardar el tipo de usuario para navegación
+        const tipoUsuario = data.usuario?.tipo_usuario;
+        const destinoNavegacion = (tipoUsuario === 'vendedor' || tipoUsuario === 'emprendedor') 
+          ? "PedidosRecibidos" 
+          : "Home";
+        
+        // PRIMERO: Guardar flag en AsyncStorage para que el overlay persista
+        await AsyncStorage.setItem('mostrarOverlayTransicion', 'true');
+        
+        // SEGUNDO: Navegar inmediatamente (la siguiente pantalla empieza a cargar)
+        navigation.reset({
+          index: 0,
+          routes: [{ name: destinoNavegacion }],
+        });
+        
+        // TERCERO: La animación continuará en la siguiente pantalla
+        // No hacemos nada aquí, el overlay se manejará globalmente
+      } else {
+        // ❌ LOGIN FALLIDO - Solo ocultar loading del botón
+        setValidando(false);
+        
+        // Manejar error de email no verificado
+        if (data.requiere_verificacion) {
+          toast.error("📧 " + (data.error || "Por favor verifica tu correo electrónico antes de iniciar sesión."), 4000);
+        } else {
+          toast.error(data.mensaje || data.error || "Credenciales incorrectas", 4000);
+        }
+      }
       
     } catch (error) {
       console.error("Error:", error);
@@ -361,7 +363,7 @@ const LoginScreen = ({ navigation }) => {
       }
       
       toast.error(mensajeError, 4000);
-      setLoading(false);
+      setValidando(false);
     }
   };
 
@@ -468,15 +470,25 @@ const LoginScreen = ({ navigation }) => {
                 style={styles.loginButton} 
                 onPress={handleLogin}
                 activeOpacity={0.8}
+                disabled={validando}
               >
                 <LinearGradient
-                  colors={["#2A9D8F", "#1a7a6e"]}
+                  colors={validando ? ["#95a5a6", "#7f8c8d"] : ["#2A9D8F", "#1a7a6e"]}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={styles.loginButtonGradient}
                 >
-                  <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
-                  <Ionicons name="arrow-forward" size={20} color="white" />
+                  {validando ? (
+                    <>
+                      <ActivityIndicator size="small" color="white" />
+                      <Text style={styles.loginButtonText}>Validando...</Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
+                      <Ionicons name="arrow-forward" size={20} color="white" />
+                    </>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
 
