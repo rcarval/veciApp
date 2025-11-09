@@ -7,7 +7,7 @@ import {
   StyleSheet, 
   ScrollView,
   Image,
-  Alert,
+  Modal,
   ActivityIndicator 
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
@@ -20,6 +20,270 @@ import { useUser } from "../context/UserContext";
 import { useTheme } from "../context/ThemeContext";
 import { API_ENDPOINTS } from "../config/api";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import useToast from "../hooks/useToast";
+
+// Componente de diálogo de confirmación elegante
+const ConfirmDialog = ({ visible, title, message, onCancel, onConfirm, confirmText = "Confirmar", cancelText = "Cancelar", confirmColor = "#2A9D8F", isDangerous = false }) => {
+  if (!visible) return null;
+  
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onCancel}
+    >
+      <View style={confirmDialogStyles.overlay}>
+        <View style={confirmDialogStyles.container}>
+          <View style={confirmDialogStyles.iconContainer}>
+            <View style={[confirmDialogStyles.iconCircle, { backgroundColor: isDangerous ? '#e74c3c20' : '#2A9D8F20' }]}>
+              <Ionicons 
+                name={isDangerous ? "alert-circle" : "help-circle"} 
+                size={40} 
+                color={isDangerous ? "#e74c3c" : "#2A9D8F"} 
+              />
+            </View>
+          </View>
+          
+          <Text style={confirmDialogStyles.title}>{title}</Text>
+          <Text style={confirmDialogStyles.message}>{message}</Text>
+          
+          <View style={confirmDialogStyles.buttonContainer}>
+            <TouchableOpacity
+              style={[confirmDialogStyles.button, confirmDialogStyles.cancelButton]}
+              onPress={onCancel}
+              activeOpacity={0.8}
+            >
+              <Text style={confirmDialogStyles.cancelButtonText}>{cancelText}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[confirmDialogStyles.button, confirmDialogStyles.confirmButton, { backgroundColor: isDangerous ? '#e74c3c' : confirmColor }]}
+              onPress={onConfirm}
+              activeOpacity={0.8}
+            >
+              <Text style={confirmDialogStyles.confirmButtonText}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const confirmDialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  container: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2c3e50',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.3,
+  },
+  message: {
+    fontSize: 15,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+  },
+  confirmButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6c757d',
+    letterSpacing: 0.3,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.3,
+  },
+});
+
+// Componente de ActionSheet para seleccionar foto
+const PhotoActionSheet = ({ visible, onClose, onCamera, onGallery }) => {
+  if (!visible) return null;
+  
+  return (
+    <Modal
+      animationType="slide"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onClose}
+    >
+      <TouchableOpacity 
+        style={actionSheetStyles.overlay}
+        activeOpacity={1}
+        onPress={onClose}
+      >
+        <View style={actionSheetStyles.container}>
+          <View style={actionSheetStyles.header}>
+            <View style={actionSheetStyles.handle} />
+            <Text style={actionSheetStyles.title}>Cambiar foto de perfil</Text>
+          </View>
+          
+          <TouchableOpacity
+            style={actionSheetStyles.option}
+            onPress={onCamera}
+            activeOpacity={0.7}
+          >
+            <View style={[actionSheetStyles.optionIcon, { backgroundColor: '#3498db20' }]}>
+              <Ionicons name="camera" size={24} color="#3498db" />
+            </View>
+            <Text style={actionSheetStyles.optionText}>Tomar foto</Text>
+            <Ionicons name="chevron-forward" size={20} color="#bdc3c7" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={actionSheetStyles.option}
+            onPress={onGallery}
+            activeOpacity={0.7}
+          >
+            <View style={[actionSheetStyles.optionIcon, { backgroundColor: '#9b59b620' }]}>
+              <Ionicons name="images" size={24} color="#9b59b6" />
+            </View>
+            <Text style={actionSheetStyles.optionText}>Elegir de galería</Text>
+            <Ionicons name="chevron-forward" size={20} color="#bdc3c7" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={actionSheetStyles.cancelButton}
+            onPress={onClose}
+            activeOpacity={0.7}
+          >
+            <Text style={actionSheetStyles.cancelText}>Cancelar</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
+
+const actionSheetStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  container: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingBottom: 40,
+    paddingTop: 12,
+  },
+  handle: {
+    width: 40,
+    height: 5,
+    backgroundColor: '#dee2e6',
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 20,
+  },
+  header: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2c3e50',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  option: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    gap: 14,
+  },
+  optionIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  optionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c3e50',
+    letterSpacing: 0.2,
+  },
+  cancelButton: {
+    marginHorizontal: 24,
+    marginTop: 12,
+    paddingVertical: 16,
+    borderRadius: 14,
+    backgroundColor: '#f8f9fa',
+    alignItems: 'center',
+  },
+  cancelText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6c757d',
+    letterSpacing: 0.3,
+  },
+});
 
 const PerfilScreen = () => {
   const navigation = useNavigation();
@@ -29,6 +293,22 @@ const PerfilScreen = () => {
   const [imagenError, setImagenError] = useState(false);
   const [subiendoAvatar, setSubiendoAvatar] = useState(false);
   const [perfilCargado, setPerfilCargado] = useState(false);
+  
+  // Toast para notificaciones
+  const toast = useToast();
+  
+  // Estados para diálogos y action sheets
+  const [confirmDialog, setConfirmDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    confirmText: 'Confirmar',
+    cancelText: 'Cancelar',
+    isDangerous: false,
+  });
+  
+  const [photoActionSheet, setPhotoActionSheet] = useState(false);
 
   // Cargar usuario solo una vez al montar (si no hay cache o es antiguo)
   useEffect(() => {
@@ -172,13 +452,13 @@ const PerfilScreen = () => {
         // pero no forzar recarga inmediata (ya actualizamos localmente)
         console.log('✅ Avatar actualizado, cache de imagen actualizado');
         
-        Alert.alert('Éxito', 'Avatar actualizado correctamente');
+        toast.success('Avatar actualizado correctamente');
       } else {
         throw new Error(data.mensaje || 'Error al subir avatar');
       }
     } catch (error) {
       console.error('❌ Error al subir avatar:', error);
-      Alert.alert('Error', `No se pudo subir el avatar: ${error.message}`);
+      toast.error(`No se pudo subir el avatar: ${error.message}`);
     } finally {
       setSubiendoAvatar(false);
     }
@@ -190,36 +470,25 @@ const PerfilScreen = () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert(
-          'Permisos requeridos',
-          'Necesitamos acceso a tus fotos para cambiar la imagen del perfil.',
-          [{ text: 'OK' }]
-        );
+        toast.warning('Necesitamos acceso a tus fotos para cambiar la imagen del perfil', 4000);
         return;
       }
 
-      // Mostrar opciones
-      Alert.alert(
-        'Cambiar foto de perfil',
-        '¿Cómo quieres cambiar tu foto?',
-        [
-          { text: 'Cancelar', style: 'cancel' },
-          { text: 'Tomar foto', onPress: () => abrirCamara() },
-          { text: 'Elegir de galería', onPress: () => abrirGaleria() },
-        ]
-      );
+      // Mostrar ActionSheet elegante
+      setPhotoActionSheet(true);
     } catch (error) {
       console.log('Error al seleccionar imagen:', error);
-      Alert.alert('Error', 'No se pudo acceder a las imágenes');
+      toast.error('No se pudo acceder a las imágenes');
     }
   };
 
   const abrirCamara = async () => {
+    setPhotoActionSheet(false);
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       
       if (status !== 'granted') {
-        Alert.alert('Permisos requeridos', 'Necesitamos acceso a la cámara para tomar una foto.');
+        toast.warning('Necesitamos acceso a la cámara para tomar una foto', 4000);
         return;
       }
 
@@ -235,11 +504,12 @@ const PerfilScreen = () => {
       }
     } catch (error) {
       console.log('Error al tomar foto:', error);
-      Alert.alert('Error', 'No se pudo tomar la foto');
+      toast.error('No se pudo tomar la foto');
     }
   };
 
   const abrirGaleria = async () => {
+    setPhotoActionSheet(false);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -253,7 +523,7 @@ const PerfilScreen = () => {
       }
     } catch (error) {
       console.log('Error al seleccionar imagen:', error);
-      Alert.alert('Error', 'No se pudo seleccionar la imagen');
+      toast.error('No se pudo seleccionar la imagen');
     }
   };
 
@@ -263,47 +533,99 @@ const PerfilScreen = () => {
   };
 
   const cerrarSesion = async () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que deseas cerrar sesión? Se eliminarán todos los datos guardados.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar Sesión', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Limpiar AsyncStorage
-              await AsyncStorage.clear();
-              console.log('✅ Sesión cerrada y datos limpiados');
-              
-              // Navegar al Login
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              console.log('Error al cerrar sesión:', error);
-              Alert.alert('Error', 'No se pudo cerrar la sesión');
-            }
-          }
+    setConfirmDialog({
+      visible: true,
+      title: 'Cerrar Sesión',
+      message: '¿Estás seguro de que deseas cerrar sesión? Se eliminarán todos los datos guardados.',
+      confirmText: 'Cerrar Sesión',
+      cancelText: 'Cancelar',
+      isDangerous: true,
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, visible: false });
+        try {
+          // Limpiar AsyncStorage
+          await AsyncStorage.clear();
+          console.log('✅ Sesión cerrada y datos limpiados');
+          
+          // Navegar al Login
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
+        } catch (error) {
+          console.log('Error al cerrar sesión:', error);
+          toast.error('No se pudo cerrar la sesión');
         }
-      ]
-    );
+      },
+    });
   };
 
   // Determinar tipo de usuario efectivo (considerando modo vista)
   const tipoUsuarioEfectivo = modoVista === 'cliente' ? 'cliente' : usuario?.tipo_usuario;
   
-  const opciones = usuario ? [
-    { nombre: "Información Personal", icono: "user-circle", screen: "InformacionPersonal" },
-    { nombre: "Mis Direcciones", icono: "map-pin", screen: "MisDirecciones", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor" },
-    { nombre: "Mis Pedidos", icono: "shopping-bag", screen: "MisPedidos", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor" },
-    { nombre: "Mis Cupones", icono: "ticket", screen: "Cupones" }, // ✅ Nueva opción de cupones
-    { nombre: "Mi Plan", icono: "star", screen: "PlanScreen", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin" }, // Siempre basado en tipo real
-    { nombre: "Necesito Ayuda", icono: "question-circle", screen: "HelpScreen" },
-    { nombre: "Cerrar Sesión", icono: "sign-out", screen: "cerrarSesion", esAccion: true },
+  // Opciones organizadas por secciones (estilo configuración)
+  const opcionesCuenta = usuario ? [
+    { nombre: "Información Personal", icono: "person-circle", iconoTipo: "ionicon", screen: "InformacionPersonal", descripcion: "Nombre, correo y teléfono" },
+    { nombre: "Mis Direcciones", icono: "location", iconoTipo: "ionicon", screen: "MisDirecciones", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor", descripcion: "Gestiona tus direcciones" },
   ].filter(op => op.mostrar !== false) : [];
+  
+  const opcionesPedidos = usuario ? [
+    { nombre: "Mis Pedidos", icono: "cart", iconoTipo: "ionicon", screen: "MisPedidos", mostrar: tipoUsuarioEfectivo !== "emprendedor" && tipoUsuarioEfectivo !== "vendedor", descripcion: "Historial de compras" },
+    { nombre: "Mis Cupones", icono: "pricetag", iconoTipo: "ionicon", screen: "Cupones", descripcion: "Descuentos y promociones" },
+  ].filter(op => op.mostrar !== false) : [];
+  
+  const opcionesNegocio = usuario ? [
+    { nombre: "Mi Plan", icono: "star", iconoTipo: "ionicon", screen: "PlanScreen", mostrar: usuario.tipo_usuario === "emprendedor" || usuario.tipo_usuario === "admin", descripcion: "Gestiona tu suscripción" },
+  ].filter(op => op.mostrar !== false) : [];
+  
+  const opcionesSoporte = usuario ? [
+    { nombre: "Necesito Ayuda", icono: "help-circle", iconoTipo: "ionicon", screen: "HelpScreen", descripcion: "Centro de ayuda" },
+  ] : [];
+
+  // Función helper para renderizar opciones
+  const renderOpcion = (opcion) => (
+    <TouchableOpacity
+      key={opcion.nombre}
+      style={[styles.opcionRow, { backgroundColor: currentTheme.cardBackground, borderBottomColor: currentTheme.border }]}
+      onPress={() => {
+        // Validar direcciones antes de navegar (excepto a MisDirecciones)
+        const esCliente = usuario?.tipo_usuario === 'cliente';
+        
+        if (esCliente && direcciones.length === 0 && opcion.screen !== 'MisDirecciones') {
+          setConfirmDialog({
+            visible: true,
+            title: "⚠️ Dirección requerida",
+            message: "Debes agregar al menos una dirección antes de continuar. Esto es necesario para poder recibir pedidos y servicios.",
+            confirmText: "Ir a Mis Direcciones",
+            cancelText: "Cancelar",
+            isDangerous: false,
+            onConfirm: () => {
+              setConfirmDialog({ ...confirmDialog, visible: false });
+              navigation.navigate('MisDirecciones');
+            },
+          });
+          return;
+        }
+        navigation.navigate(opcion.screen);
+      }}
+      activeOpacity={0.6}
+    >
+      <View style={[styles.opcionIconContainer, { backgroundColor: currentTheme.primary + '15' }]}>
+        <Ionicons name={opcion.icono} size={24} color={currentTheme.primary} />
+      </View>
+      <View style={styles.opcionTextoContainer}>
+        <Text style={[styles.opcionTitulo, { color: currentTheme.text }]}>
+          {opcion.nombre}
+        </Text>
+        {opcion.descripcion && (
+          <Text style={[styles.opcionDescripcion, { color: currentTheme.textSecondary }]}>
+            {opcion.descripcion}
+          </Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={22} color={currentTheme.textSecondary} />
+    </TouchableOpacity>
+  );
 
   return (
     <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
@@ -433,47 +755,45 @@ const PerfilScreen = () => {
               style={styles.cambioVistaCard}
               onPress={() => {
                 if (modoVista === 'cliente') {
-                  Alert.alert(
-                    "Volver a Vista Emprendedor",
-                    "¿Quieres volver a tu perfil de emprendedor?",
-                    [
-                      { text: "Cancelar", style: "cancel" },
-                      { 
-                        text: "Volver",
-                        onPress: async () => {
-                          await volverAVistaEmprendedor();
-                          // Reiniciar navegación para aplicar cambios
-                          navigation.dispatch(
-                            require('@react-navigation/native').CommonActions.reset({
-                              index: 0,
-                              routes: [{ name: 'Perfil' }],
-                            })
-                          );
-                        }
-                      }
-                    ]
-                  );
+                  setConfirmDialog({
+                    visible: true,
+                    title: "Volver a Vista Emprendedor",
+                    message: "¿Quieres volver a tu perfil de emprendedor?",
+                    confirmText: "Volver",
+                    cancelText: "Cancelar",
+                    isDangerous: false,
+                    onConfirm: async () => {
+                      setConfirmDialog({ ...confirmDialog, visible: false });
+                      await volverAVistaEmprendedor();
+                      // Reiniciar navegación para aplicar cambios
+                      navigation.dispatch(
+                        require('@react-navigation/native').CommonActions.reset({
+                          index: 0,
+                          routes: [{ name: 'Perfil' }],
+                        })
+                      );
+                    },
+                  });
                 } else {
-                  Alert.alert(
-                    "Cambiar a Vista Cliente",
-                    "Podrás ver y usar la app como si fueras un cliente. Esto te permitirá probar tu negocio desde la perspectiva del cliente.",
-                    [
-                      { text: "Cancelar", style: "cancel" },
-                      { 
-                        text: "Cambiar a Cliente",
-                        onPress: async () => {
-                          await cambiarAVistaCliente();
-                          // Reiniciar navegación para aplicar cambios
-                          navigation.dispatch(
-                            require('@react-navigation/native').CommonActions.reset({
-                              index: 0,
-                              routes: [{ name: 'Home' }],
-                            })
-                          );
-                        }
-                      }
-                    ]
-                  );
+                  setConfirmDialog({
+                    visible: true,
+                    title: "Cambiar a Vista Cliente",
+                    message: "Podrás ver y usar la app como si fueras un cliente. Esto te permitirá probar tu negocio desde la perspectiva del cliente.",
+                    confirmText: "Cambiar a Cliente",
+                    cancelText: "Cancelar",
+                    isDangerous: false,
+                    onConfirm: async () => {
+                      setConfirmDialog({ ...confirmDialog, visible: false });
+                      await cambiarAVistaCliente();
+                      // Reiniciar navegación para aplicar cambios
+                      navigation.dispatch(
+                        require('@react-navigation/native').CommonActions.reset({
+                          index: 0,
+                          routes: [{ name: 'Home' }],
+                        })
+                      );
+                    },
+                  });
                 }
               }}
               activeOpacity={0.85}
@@ -507,80 +827,77 @@ const PerfilScreen = () => {
           </View>
         )}
 
-        {/* Accesos rápidos modernos */}
-        <View style={styles.accesosSectionModerna}>
-          <Text style={[styles.seccionTituloModerno, { color: currentTheme.text }]}>
-            Accesos Rápidos
-          </Text>
-          <View style={styles.opcionesGridModerno}>
-            {opciones.map((opcion, index) => (
-              <TouchableOpacity 
-                key={opcion.nombre} 
-                style={[styles.opcionCardModerna, { 
-                  backgroundColor: currentTheme.cardBackground,
-                  shadowColor: currentTheme.shadow
-                }]}
-                onPress={() => {
-                  if (opcion.esAccion && opcion.screen === 'cerrarSesion') {
-                    cerrarSesion();
-                    return;
-                  }
-                  if (opcion.screen) {
-                    // Validar direcciones antes de navegar (excepto a MisDirecciones)
-                    // SOLO para usuarios tipo "cliente"
-                    const esCliente = usuario?.tipo_usuario === 'cliente';
-                    
-                    if (esCliente && direcciones.length === 0 && opcion.screen !== 'MisDirecciones') {
-                      Alert.alert(
-                        "⚠️ Dirección requerida",
-                        "Debes agregar al menos una dirección antes de continuar. Esto es necesario para poder recibir pedidos y servicios.",
-                        [
-                          { text: "Cancelar", style: "cancel" },
-                          { text: "Ir a Mis Direcciones", onPress: () => navigation.navigate('MisDirecciones') }
-                        ]
-                      );
-                      return;
-                    }
-                    navigation.navigate(opcion.screen);
-                  }
-                }}
-                activeOpacity={0.85}
-              >
-                <LinearGradient
-                  colors={opcion.esAccion 
-                    ? ['#e74c3c', '#c0392b'] 
-                    : [currentTheme.primary + '15', currentTheme.secondary + '15']
-                  }
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.opcionCardGradiente}
-                >
-                  <View style={[styles.opcionIconoModerno, { 
-                    backgroundColor: opcion.esAccion ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.3)'
-                  }]}>
-                    <FontAwesome 
-                      name={opcion.icono} 
-                      size={26} 
-                      color={opcion.esAccion ? "#FFF" : currentTheme.primary} 
-                    />
-                  </View>
-                  <Text style={[
-                    styles.opcionTextoModerno,
-                    { color: opcion.esAccion ? '#FFF' : currentTheme.text }
-                  ]}>
-                    {opcion.nombre}
-                  </Text>
-                  <View style={styles.opcionChevron}>
-                    <Ionicons 
-                      name="chevron-forward" 
-                      size={20} 
-                      color={opcion.esAccion ? 'rgba(255,255,255,0.7)' : currentTheme.textSecondary} 
-                    />
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
+        {/* Secciones de configuración */}
+        
+        {/* Cuenta */}
+        {opcionesCuenta.length > 0 && (
+          <View style={styles.seccionContainer}>
+            <Text style={[styles.seccionHeader, { color: currentTheme.textSecondary }]}>
+              CUENTA
+            </Text>
+            <View style={[styles.seccionCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              {opcionesCuenta.map((opcion, index) => (
+                <View key={opcion.nombre}>
+                  {renderOpcion(opcion)}
+                  {index < opcionesCuenta.length - 1 && <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />}
+                </View>
+              ))}
+            </View>
           </View>
+        )}
+
+        {/* Pedidos y Cupones */}
+        {opcionesPedidos.length > 0 && (
+          <View style={styles.seccionContainer}>
+            <Text style={[styles.seccionHeader, { color: currentTheme.textSecondary }]}>
+              PEDIDOS
+            </Text>
+            <View style={[styles.seccionCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              {opcionesPedidos.map((opcion, index) => (
+                <View key={opcion.nombre}>
+                  {renderOpcion(opcion)}
+                  {index < opcionesPedidos.length - 1 && <View style={[styles.divider, { backgroundColor: currentTheme.border }]} />}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Negocio (solo emprendedores) */}
+        {opcionesNegocio.length > 0 && (
+          <View style={styles.seccionContainer}>
+            <Text style={[styles.seccionHeader, { color: currentTheme.textSecondary }]}>
+              NEGOCIO
+            </Text>
+            <View style={[styles.seccionCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+              {opcionesNegocio.map((opcion) => renderOpcion(opcion))}
+            </View>
+          </View>
+        )}
+
+        {/* Soporte */}
+        <View style={styles.seccionContainer}>
+          <Text style={[styles.seccionHeader, { color: currentTheme.textSecondary }]}>
+            SOPORTE
+          </Text>
+          <View style={[styles.seccionCard, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}>
+            {opcionesSoporte.map((opcion) => renderOpcion(opcion))}
+          </View>
+        </View>
+
+        {/* Botón de Cerrar Sesión pequeño y discreto */}
+        <View style={styles.cerrarSesionContainer}>
+          <TouchableOpacity
+            style={[styles.cerrarSesionButton, { borderColor: '#e74c3c30' }]}
+            onPress={cerrarSesion}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="log-out-outline" size={18} color="#e74c3c" />
+            <Text style={styles.cerrarSesionText}>Cerrar Sesión</Text>
+          </TouchableOpacity>
+          <Text style={[styles.versionText, { color: currentTheme.textSecondary }]}>
+            VeciApp v1.0.0
+          </Text>
         </View>
           </>
         ) : (
@@ -590,6 +907,35 @@ const PerfilScreen = () => {
           </View>
         )}
       </ScrollView>
+
+      {/* Diálogo de confirmación elegante */}
+      <ConfirmDialog
+        visible={confirmDialog.visible}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        isDangerous={confirmDialog.isDangerous}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, visible: false })}
+      />
+
+      {/* Action Sheet para seleccionar foto */}
+      <PhotoActionSheet
+        visible={photoActionSheet}
+        onClose={() => setPhotoActionSheet(false)}
+        onCamera={abrirCamara}
+        onGallery={abrirGaleria}
+      />
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
@@ -1065,6 +1411,90 @@ const styles = StyleSheet.create({
     height: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  // Nuevos estilos para diseño de configuración
+  seccionContainer: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
+  seccionHeader: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    marginBottom: 10,
+    paddingHorizontal: 16,
+  },
+  seccionCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  opcionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    gap: 14,
+  },
+  opcionIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  opcionTextoContainer: {
+    flex: 1,
+    gap: 3,
+  },
+  opcionTitulo: {
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  opcionDescripcion: {
+    fontSize: 13,
+    fontWeight: '400',
+    letterSpacing: 0.1,
+  },
+  divider: {
+    height: 1,
+    marginLeft: 78,
+  },
+  cerrarSesionContainer: {
+    alignItems: 'center',
+    paddingVertical: 32,
+    gap: 16,
+  },
+  cerrarSesionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    borderWidth: 1.5,
+    shadowColor: '#e74c3c',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cerrarSesionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#e74c3c',
+    letterSpacing: 0.2,
+  },
+  versionText: {
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.5,
   },
 });
 
