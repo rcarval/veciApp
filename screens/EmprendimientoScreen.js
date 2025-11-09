@@ -13,7 +13,6 @@ import {
   ActivityIndicator,
   Switch,
   Platform,
-  Alert
 } from "react-native";
 import { FontAwesome, Ionicons, MaterialIcons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,6 +29,138 @@ import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
 import useToast from "../hooks/useToast";
 
+// Componente de diálogo de confirmación elegante
+const ConfirmDialog = ({ visible, title, message, onCancel, onConfirm, confirmText = "Confirmar", cancelText = "Cancelar", confirmColor = "#2A9D8F", isDangerous = false }) => {
+  if (!visible) return null;
+  
+  return (
+    <Modal
+      animationType="fade"
+      transparent={true}
+      visible={visible}
+      onRequestClose={onCancel}
+    >
+      <View style={confirmDialogStyles.overlay}>
+        <View style={confirmDialogStyles.container}>
+          <View style={confirmDialogStyles.iconContainer}>
+            <View style={[confirmDialogStyles.iconCircle, { backgroundColor: isDangerous ? '#e74c3c20' : '#2A9D8F20' }]}>
+              <Ionicons 
+                name={isDangerous ? "alert-circle" : "help-circle"} 
+                size={40} 
+                color={isDangerous ? "#e74c3c" : "#2A9D8F"} 
+              />
+            </View>
+          </View>
+          
+          <Text style={confirmDialogStyles.title}>{title}</Text>
+          <Text style={confirmDialogStyles.message}>{message}</Text>
+          
+          <View style={confirmDialogStyles.buttonContainer}>
+            <TouchableOpacity
+              style={[confirmDialogStyles.button, confirmDialogStyles.cancelButton]}
+              onPress={onCancel}
+              activeOpacity={0.8}
+            >
+              <Text style={confirmDialogStyles.cancelButtonText}>{cancelText}</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[confirmDialogStyles.button, confirmDialogStyles.confirmButton, { backgroundColor: isDangerous ? '#e74c3c' : confirmColor }]}
+              onPress={onConfirm}
+              activeOpacity={0.8}
+            >
+              <Text style={confirmDialogStyles.confirmButtonText}>{confirmText}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+const confirmDialogStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  container: {
+    backgroundColor: 'white',
+    borderRadius: 24,
+    padding: 28,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  iconContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  iconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#2c3e50',
+    textAlign: 'center',
+    marginBottom: 12,
+    letterSpacing: 0.3,
+  },
+  message: {
+    fontSize: 15,
+    color: '#7f8c8d',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+  },
+  confirmButton: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#6c757d',
+    letterSpacing: 0.3,
+  },
+  confirmButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.3,
+  },
+});
+
 const EmprendimientoScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
@@ -37,6 +168,17 @@ const EmprendimientoScreen = () => {
   
   // Toast para notificaciones
   const toast = useToast();
+  
+  // Estados para diálogos de confirmación
+  const [confirmDialog, setConfirmDialog] = useState({
+    visible: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    confirmText: 'Confirmar',
+    cancelText: 'Cancelar',
+    isDangerous: false,
+  });
   
   const [usuario, setUsuario] = useState(route.params?.usuario ?? {});
   const [emprendimientos, setEmprendimientos] = useState([]);
@@ -1198,11 +1340,7 @@ const EmprendimientoScreen = () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
   
     if (status !== 'granted') {
-      Alert.alert(
-        'Permisos requeridos',
-        'Necesitamos acceso a tus fotos para seleccionar imágenes.',
-        [{ text: 'OK' }]
-      );
+      toast.warning('Necesitamos acceso a tus fotos para seleccionar imágenes', 4000);
       return;
     }
     
@@ -1227,13 +1365,7 @@ const EmprendimientoScreen = () => {
   const validarDireccion = async (direccion, comunaNombre) => {
     // 1. Validación básica de entrada
     if (!direccion || !comunaNombre) {
-      Alert.alert(
-        "Error",
-        "Debes ingresar una dirección y seleccionar una comuna" +
-          direccion +
-          ", " +
-          comunaNombre
-      );
+      toast.error("Debes ingresar una dirección y seleccionar una comuna");
       return false;
     }
 
@@ -1284,23 +1416,23 @@ const EmprendimientoScreen = () => {
       const direccionInput = direccionCompleta.toLowerCase();
 
       if (!direccionAPI.includes(direccionInput.split(",")[0].toLowerCase())) {
-        Alert.alert(
-          "Sugerencia",
-          `¿Tal véz quisiste decir "${calle} ${numero}"?`,
-          [
-            { text: "No", style: "cancel" },
-            { text: "Sí", onPress: () => setDireccion(`${calle} ${numero}`) },
-          ]
-        );
+        setConfirmDialog({
+          visible: true,
+          title: "Sugerencia",
+          message: `¿Tal vez quisiste decir "${calle} ${numero}"?`,
+          confirmText: "Sí, usar esta",
+          cancelText: "No",
+          isDangerous: false,
+          onConfirm: () => {
+            setConfirmDialog({ ...confirmDialog, visible: false });
+            setDireccion(`${calle} ${numero}`);
+          },
+        });
         return false;
       }
       // 7. Validación de comuna
       if (comunaEncontrada.toLowerCase() !== comunaNombre.toLowerCase()) {
-        Alert.alert(
-          "Comuna incorrecta",
-          `La dirección pertenece a ${comunaEncontrada}`,
-          [{ text: "Entendido" }]
-        );
+        toast.warning(`La dirección pertenece a ${comunaEncontrada}, no a ${comunaNombre}`, 4000);
         return false;
       }
 
@@ -1387,19 +1519,17 @@ const EmprendimientoScreen = () => {
     }
 
     // Mostramos diálogo de confirmación
-    Alert.alert(
-      "Confirmar envío",
-      `¿Estás seguro de que deseas ${
+    setConfirmDialog({
+      visible: true,
+      title: "Confirmar envío",
+      message: `¿Estás seguro de que deseas ${
         isEditing ? "actualizar" : "enviar a evaluación"
       } este emprendimiento?`,
-      [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Sí, confirmar",
-          onPress: async () => {
+      confirmText: "Sí, confirmar",
+      cancelText: "Cancelar",
+      isDangerous: false,
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, visible: false });
             try {
               setGuardando(true);
               const token = await AsyncStorage.getItem("token");
@@ -1512,10 +1642,8 @@ const EmprendimientoScreen = () => {
             } finally {
               setGuardando(false);
             }
-          },
-        },
-      ]
-    );
+      },
+    });
   };
 
   // Editar emprendimiento
@@ -1555,15 +1683,15 @@ const EmprendimientoScreen = () => {
 
   // Eliminar emprendimiento
   const eliminarEmprendimiento = (id) => {
-    Alert.alert(
-      "Confirmar eliminación",
-      "¿Estás seguro de que deseas eliminar este emprendimiento? El emprendimiento y todos sus productos quedarán inactivos.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Eliminar",
-          style: "destructive",
-          onPress: async () => {
+    setConfirmDialog({
+      visible: true,
+      title: "Confirmar eliminación",
+      message: "¿Estás seguro de que deseas eliminar este emprendimiento? El emprendimiento y todos sus productos quedarán inactivos.",
+      confirmText: "Eliminar",
+      cancelText: "Cancelar",
+      isDangerous: true,
+      onConfirm: async () => {
+        setConfirmDialog({ ...confirmDialog, visible: false });
             try {
               const token = await AsyncStorage.getItem("token");
               
@@ -1596,10 +1724,8 @@ const EmprendimientoScreen = () => {
               console.error("Error al eliminar emprendimiento:", error);
               toast.error(error.message || "No se pudo eliminar el emprendimiento");
             }
-          },
-        },
-      ]
-    );
+      },
+    });
   };
 
   // Resetear formulario
@@ -1637,7 +1763,7 @@ const EmprendimientoScreen = () => {
       const token = await AsyncStorage.getItem("token");
       
       if (!token) {
-        Alert.alert("Error", "No hay sesión activa");
+        toast.error("No hay sesión activa");
         return;
       }
 
@@ -1675,25 +1801,24 @@ const EmprendimientoScreen = () => {
     }
   };
 
-  const EmprendimientoItem = ({ item, navigation, comunas, editarEmprendimiento, eliminarEmprendimiento, actualizarEstadoEmprendimiento, previsualizarEmprendimiento, esPlanPremium }) => {
+  const EmprendimientoItem = ({ item, navigation, comunas, editarEmprendimiento, eliminarEmprendimiento, actualizarEstadoEmprendimiento, previsualizarEmprendimiento, esPlanPremium, setConfirmDialog, confirmDialog }) => {
     const [isActive, setIsActive] = useState(item.status === 'activo');
   
     const toggleActive = async () => {
       if (isActive) {
-        Alert.alert(
-          "Confirmar desactivación",
-          "¿Está seguro que quiere desactivar su emprendimiento?",
-          [
-            { text: "Cancelar", style: "cancel" },
-            {
-              text: "Desactivar",
-              onPress: async () => {
-                setIsActive(false);
-                await actualizarEstadoEmprendimiento(item.id, false);
-              },
-            },
-          ]
-        );
+        setConfirmDialog({
+          visible: true,
+          title: "Confirmar desactivación",
+          message: "¿Está seguro que quiere desactivar su emprendimiento?",
+          confirmText: "Desactivar",
+          cancelText: "Cancelar",
+          isDangerous: true,
+          onConfirm: async () => {
+            setConfirmDialog({ ...confirmDialog, visible: false });
+            setIsActive(false);
+            await actualizarEstadoEmprendimiento(item.id, false);
+          },
+        });
       } else {
         setIsActive(true);
         await actualizarEstadoEmprendimiento(item.id, true);
@@ -2011,6 +2136,8 @@ const EmprendimientoScreen = () => {
       actualizarEstadoEmprendimiento={actualizarEstadoEmprendimiento}
       previsualizarEmprendimiento={previsualizarEmprendimiento}
       esPlanPremium={esPlanPremium}
+      setConfirmDialog={setConfirmDialog}
+      confirmDialog={confirmDialog}
     />
   );
 
@@ -2021,7 +2148,7 @@ const EmprendimientoScreen = () => {
       const token = await AsyncStorage.getItem("token");
       
       if (!token) {
-        Alert.alert("Error", "No hay sesión activa");
+        toast.error("No hay sesión activa");
         return;
       }
 
@@ -2046,19 +2173,19 @@ const EmprendimientoScreen = () => {
           codigoInputRefs.current[0]?.focus();
         }, 300);
         
-        Alert.alert("Código Enviado", data.mensaje);
+        toast.success(data.mensaje || "Código enviado exitosamente");
         
         // En desarrollo, mostrar el código
         if (data.codigo_dev) {
           console.log("🔐 Código de verificación (DEV):", data.codigo_dev);
-          Alert.alert("DESARROLLO", `Código: ${data.codigo_dev}`);
+          toast.info(`DESARROLLO - Código: ${data.codigo_dev}`, 5000);
         }
       } else {
         throw new Error(data.error || "Error al enviar código");
       }
     } catch (error) {
       console.error("Error al enviar código:", error);
-      Alert.alert("Error", error.message || "No se pudo enviar el código de verificación");
+      toast.error(error.message || "No se pudo enviar el código de verificación");
     } finally {
       setEnviandoCodigo(false);
     }
@@ -2070,7 +2197,7 @@ const EmprendimientoScreen = () => {
       const codigoCompleto = codigoVerificacion.join('');
       
       if (codigoCompleto.length !== 6) {
-        Alert.alert("Error", "Por favor ingresa los 6 dígitos del código");
+        toast.error("Por favor ingresa los 6 dígitos del código");
         return;
       }
 
@@ -2078,7 +2205,7 @@ const EmprendimientoScreen = () => {
       const token = await AsyncStorage.getItem("token");
       
       if (!token) {
-        Alert.alert("Error", "No hay sesión activa");
+        toast.error("No hay sesión activa");
         return;
       }
 
@@ -2104,31 +2231,28 @@ const EmprendimientoScreen = () => {
         // Recargar emprendimientos
         await cargarEmprendimientos();
         
-        Alert.alert(
-          "¡Verificación Exitosa!",
-          data.mensaje,
-          [{ text: "Entendido", style: "default" }]
-        );
+        toast.success(data.mensaje || "¡Verificación exitosa!", 4000);
       } else {
         if (data.codigo_expirado) {
-          Alert.alert(
-            "Código Expirado",
-            data.error,
-            [
-              { text: "Cancelar", style: "cancel" },
-              { 
-                text: "Enviar Nuevo Código", 
-                onPress: () => enviarCodigoVerificacion(emprendimientoParaVerificar.id) 
-              }
-            ]
-          );
+          setConfirmDialog({
+            visible: true,
+            title: "Código Expirado",
+            message: data.error || "El código ha expirado. ¿Deseas recibir un nuevo código?",
+            confirmText: "Enviar Nuevo Código",
+            cancelText: "Cancelar",
+            isDangerous: false,
+            onConfirm: async () => {
+              setConfirmDialog({ ...confirmDialog, visible: false });
+              await enviarCodigoVerificacion(emprendimientoParaVerificar.id);
+            },
+          });
         } else {
-          Alert.alert("Error", data.error || "Código incorrecto");
+          toast.error(data.error || "Código incorrecto");
         }
       }
     } catch (error) {
       console.error("Error al verificar código:", error);
-      Alert.alert("Error", error.message || "No se pudo verificar el código");
+      toast.error(error.message || "No se pudo verificar el código");
     } finally {
       setVerificandoCodigo(false);
     }
@@ -2212,7 +2336,7 @@ const EmprendimientoScreen = () => {
         navigation.navigate("PedidoDetalle", { producto: emprendimientoPreview, isPreview: true });
     } catch (error) {
       console.error("Error al preparar previsualización:", error);
-      Alert.alert("Error", "No se pudo cargar la previsualización");
+      toast.error("No se pudo cargar la previsualización");
     }
   };
 
@@ -2943,22 +3067,20 @@ const EmprendimientoScreen = () => {
             <TouchableOpacity 
               style={styles.modalBackButton}
               onPress={() => {
-                Alert.alert(
-                  "Cancelar Verificación",
-                  "¿Estás seguro de que deseas cancelar? Puedes completar la verificación más tarde desde tu perfil.",
-                  [
-                    { text: "Continuar Verificando", style: "cancel" },
-                    {
-                      text: "Salir",
-                      style: "destructive",
-                      onPress: () => {
-                        setModalVerificacionVisible(false);
-                        setCodigoVerificacion(['', '', '', '', '', '']);
-                        setCodigoEnviado(false);
-                      }
-                    }
-                  ]
-                );
+                setConfirmDialog({
+                  visible: true,
+                  title: "Cancelar Verificación",
+                  message: "¿Estás seguro de que deseas cancelar? Puedes completar la verificación más tarde desde tu perfil.",
+                  confirmText: "Salir",
+                  cancelText: "Continuar Verificando",
+                  isDangerous: true,
+                  onConfirm: () => {
+                    setConfirmDialog({ ...confirmDialog, visible: false });
+                    setModalVerificacionVisible(false);
+                    setCodigoVerificacion(['', '', '', '', '', '']);
+                    setCodigoEnviado(false);
+                  },
+                });
               }}
               activeOpacity={0.8}
             >
@@ -3105,6 +3227,18 @@ const EmprendimientoScreen = () => {
           </View>
         </ScrollView>
       </Modal>
+
+      {/* Diálogo de confirmación elegante */}
+      <ConfirmDialog
+        visible={confirmDialog.visible}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmText={confirmDialog.confirmText}
+        cancelText={confirmDialog.cancelText}
+        isDangerous={confirmDialog.isDangerous}
+        onConfirm={confirmDialog.onConfirm}
+        onCancel={() => setConfirmDialog({ ...confirmDialog, visible: false })}
+      />
 
       {/* Toast para notificaciones */}
       <Toast
