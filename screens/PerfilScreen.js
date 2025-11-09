@@ -779,7 +779,7 @@ const PerfilScreen = () => {
                     visible: true,
                     title: "Cambiar a Modo Comprador",
                     message: "Podrás comprar productos y servicios de otros emprendimientos. Cambia entre tus roles cuando quieras.",
-                    confirmText: "Cambiar a Comprador",
+                    confirmText: "Cambiar",
                     cancelText: "Cancelar",
                     isDangerous: false,
                     onConfirm: async () => {
