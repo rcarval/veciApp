@@ -737,9 +737,9 @@ const PerfilScreen = () => {
                     {/* Badge de Modo Vista si está activo */}
                     {modoVista === 'cliente' && (
                       <View style={[styles.perfilBadge, { backgroundColor: '#f39c12' + '15' }]}>
-                        <Ionicons name="eye" size={14} color="#f39c12" />
+                        <Ionicons name="cart" size={14} color="#f39c12" />
                         <Text style={[styles.perfilBadgeTexto, { color: '#f39c12' }]}>
-                          Modo Cliente
+                          Modo Comprador
                         </Text>
                       </View>
                     )}
@@ -777,9 +777,9 @@ const PerfilScreen = () => {
                 } else {
                   setConfirmDialog({
                     visible: true,
-                    title: "Cambiar a Vista Cliente",
-                    message: "Podrás ver y usar la app como si fueras un cliente. Esto te permitirá probar tu negocio desde la perspectiva del cliente.",
-                    confirmText: "Cambiar a Cliente",
+                    title: "Cambiar a Modo Comprador",
+                    message: "Podrás comprar productos y servicios de otros emprendimientos. Cambia entre tus roles cuando quieras.",
+                    confirmText: "Cambiar a Comprador",
                     cancelText: "Cancelar",
                     isDangerous: false,
                     onConfirm: async () => {
@@ -806,19 +806,19 @@ const PerfilScreen = () => {
               >
                 <View style={styles.cambioVistaIcono}>
                   <Ionicons 
-                    name={modoVista === 'cliente' ? "arrow-back-circle" : "eye"} 
+                    name={modoVista === 'cliente' ? "arrow-back-circle" : "cart"} 
                     size={32} 
                     color="white" 
                   />
                 </View>
                 <View style={styles.cambioVistaTextos}>
                   <Text style={styles.cambioVistaTitulo}>
-                    {modoVista === 'cliente' ? "Volver a Vista Emprendedor" : "Ver como Cliente"}
+                    {modoVista === 'cliente' ? "Volver a Modo Emprendedor" : "Cambiar a Modo Comprador"}
                   </Text>
                   <Text style={styles.cambioVistaDescripcion}>
                     {modoVista === 'cliente' 
                       ? "Regresa a tu perfil de emprendedor" 
-                      : "Prueba tu negocio como cliente"}
+                      : "Compra de otros emprendimientos"}
                   </Text>
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="rgba(255,255,255,0.8)" />

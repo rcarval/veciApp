@@ -694,7 +694,7 @@ const getIconForCategory = (categoria) => {
   // ✅ **Menú lateral con el menú colapsable dentro**
   return (
     <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>
-      {/* Banner de Modo Vista Cliente - Solo si el emprendedor está viendo como cliente */}
+      {/* Banner de Modo Comprador - Solo si el emprendedor está en modo comprador */}
       {modoVista === 'cliente' && usuario?.tipo_usuario === 'emprendedor' && (
         <TouchableOpacity
           style={styles.modoVistaBanner}
@@ -715,9 +715,9 @@ const getIconForCategory = (categoria) => {
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
           >
-            <Ionicons name="eye" size={14} color="white" />
+            <Ionicons name="cart" size={14} color="white" />
             <Text style={styles.modoVistaBannerTexto}>
-              Vista Cliente
+              Modo Comprador
             </Text>
             <Ionicons name="chevron-forward" size={14} color="white" />
           </LinearGradient>
