@@ -11,11 +11,12 @@ const AppWithBottomBar = ({ children }) => {
   useEffect(() => {
     const cargarUsuario = async () => {
       try {
+        const token = await AsyncStorage.getItem('token');
         const usuarioGuardado = await AsyncStorage.getItem('usuario');
-        const sesionActiva = await AsyncStorage.getItem('sesionActiva');
         const modoVista = await AsyncStorage.getItem('modoVista');
         
-        if (usuarioGuardado && sesionActiva === 'true') {
+        // Si hay token, hay sesión activa
+        if (token && usuarioGuardado) {
           const usuarioData = JSON.parse(usuarioGuardado);
           setUsuario(usuarioData);
           

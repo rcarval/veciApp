@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,9 +13,9 @@ import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
-import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const ComidaScreen = ({ navigation, route }) => {
   const { currentTheme } = useTheme();
@@ -149,8 +148,7 @@ const ComidaScreen = ({ navigation, route }) => {
     const mostrarAdvertencia = esPropioEmprendimiento && tipoEfectivo === 'cliente';
 
     if (mostrarAdvertencia) {
-      toast.warning(
-        "No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
+      toast.warning("No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
       return;
     }
 
@@ -324,10 +322,6 @@ const ComidaScreen = ({ navigation, route }) => {
           )}
         </ScrollView>
       )}
-    </View>
-  );
-};
-
       
       <Toast
         visible={toast.toastConfig.visible}
@@ -336,6 +330,10 @@ const ComidaScreen = ({ navigation, route }) => {
         duration={toast.toastConfig.duration}
         onHide={toast.hideToast}
       />
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   containerMaster: {
     flex: 1,

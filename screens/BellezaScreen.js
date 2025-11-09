@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,9 +13,9 @@ import { Image } from "expo-image";
 import { API_ENDPOINTS } from "../config/api";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
-import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const BellezaScreen = ({ navigation, route }) => {
   const { currentTheme } = useTheme();

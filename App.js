@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createDrawerNavigator } from "@react-navigation/drawer";
-import { Animated, View, StyleSheet } from "react-native";
+import { Animated, View, StyleSheet, StatusBar } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { LinearGradient } from "expo-linear-gradient";
@@ -204,11 +204,22 @@ function AppNavigator({ usuario }) {
   
   console.log('🏗️ AppNavigator renderizando - usuario:', usuario ? 'EXISTE' : 'NULL');
   
+  // Determinar pantalla inicial según tipo de usuario
+  const getPantallaInicial = () => {
+    if (!usuario) return "Login";
+    
+    const tipoUsuario = usuario.tipo_usuario;
+    if (tipoUsuario === 'vendedor' || tipoUsuario === 'emprendedor') {
+      return "PedidosRecibidos";
+    }
+    return "Home";
+  };
+  
   return (
     <>
       <PedidoPopup navigation={navigation} />
       <Stack.Navigator 
-        initialRouteName="Login"
+        initialRouteName={getPantallaInicial()}
         screenOptions={{
           // Optimización: Detach previous screen cuando se navega para liberar memoria
           detachPreviousScreen: true,
@@ -596,29 +607,49 @@ function AppNavigator({ usuario }) {
 
 export default function App() {
   const [usuario, setUsuario] = useState(null);
+  const [cargando, setCargando] = useState(true);
 
   console.log('🏗️ App principal - usuario:', usuario ? 'EXISTE' : 'NULL');
 
   useEffect(() => {
-    const cargarUsuario = async () => {
+    const cargarSesion = async () => {
       try {
-        // Limpiar sesión activa al iniciar la app
-        await AsyncStorage.removeItem("sesionActiva");
-        console.log("🧹 Sesión activa limpiada al iniciar app");
+        // Verificar si hay token (indica sesión activa)
+        const token = await AsyncStorage.getItem("token");
         
-        const usuarioGuardado = await AsyncStorage.getItem("usuario");
-        if (usuarioGuardado) {
-          setUsuario(JSON.parse(usuarioGuardado));
+        if (token) {
+          // Si hay token, cargar usuario y marcar sesión activa
+          const usuarioGuardado = await AsyncStorage.getItem("usuario");
+          if (usuarioGuardado) {
+            setUsuario(JSON.parse(usuarioGuardado));
+            // Asegurar que sesionActiva esté marcada para que AppWithBottomBar funcione
+            await AsyncStorage.setItem("sesionActiva", "true");
+            console.log("✅ Sesión restaurada desde AsyncStorage");
+          }
+        } else {
+          console.log("ℹ️ No hay sesión activa, mostrando Login");
         }
       } catch (error) {
-        console.log("Error al obtener el usuario:", error);
+        console.log("❌ Error al cargar sesión:", error);
+      } finally {
+        setCargando(false);
       }
     };
-    cargarUsuario();
+    cargarSesion();
   }, []);
+
+  // Mostrar splash mientras carga la sesión
+  if (cargando) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#1a535c', justifyContent: 'center', alignItems: 'center' }}>
+        <LoadingAnimationStatic />
+      </View>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <StatusBar barStyle="light-content" backgroundColor="#1a535c" translucent={false} />
       <ThemeProvider>
         <UserProvider>
           <CarritoProvider>

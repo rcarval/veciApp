@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   ActivityIndicator,
-  
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
@@ -14,11 +13,11 @@ import { Image } from "expo-image";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
-import Toast from "../components/Toast";
-import useToast from "../hooks/useToast";
 import { API_ENDPOINTS } from "../config/api";
 import pedidoService from "../services/pedidoService";
 import LoadingVeciApp from "../components/LoadingVeciApp";
+import Toast from "../components/Toast";
+import { useToast } from "../hooks/useToast";
 
 const OfertasScreen = () => {
   const navigation = useNavigation();
@@ -261,8 +260,7 @@ const OfertasScreen = () => {
                       style={[styles.itemGaleria, { backgroundColor: currentTheme.cardBackground, shadowColor: currentTheme.shadow }]}
                       onPress={() => {
                         if (mostrarAdvertencia) {
-                          toast.warning(
-                            "No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
+                          toast.warning("No puedes realizar pedidos en tus propios emprendimientos. Vuelve a tu vista de emprendedor", 4000);
                           return;
                         }
                         // Si está cerrado, abrir en modo preview
