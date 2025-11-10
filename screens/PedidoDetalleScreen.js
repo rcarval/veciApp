@@ -1452,9 +1452,12 @@ const enviarReporte = async () => {
     // Si ya es un array (formato antiguo), devolverlo tal cual
     if (Array.isArray(horarios)) return horarios;
     
-    // Si es objeto (nuevo formato), convertirlo a array de strings
+    // Si es objeto (nuevo formato), convertirlo a array de strings ordenado por día
+    const ordenDias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     const formatted = [];
-    Object.entries(horarios).forEach(([dia, horariosDia]) => {
+    
+    ordenDias.forEach(dia => {
+      const horariosDia = horarios[dia];
       if (horariosDia && horariosDia.length > 0) {
         const horariosStr = horariosDia.map(h => `${h.inicio} - ${h.fin}`).join(', ');
         formatted.push(`${dia}: ${horariosStr}`);
