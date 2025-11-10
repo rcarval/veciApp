@@ -1722,126 +1722,109 @@ const EmprendimientoScreen = () => {
 
   // Guardar emprendimiento
   const guardarEmprendimiento = async () => {
-    console.log('💾 GUARDAR EMPRENDIMIENTO LLAMADO');
-    console.log('💾 isEditing:', isEditing);
-    console.log('💾 guardando:', guardando);
-    console.log('💾 validandoDireccion:', validandoDireccion);
-    
     const direccionFinal = direccion;
 
+    // 1. Validar dirección
     if (!direccionFinal) {
-      console.log('❌ Validación: No hay dirección');
-      toast.warning("Por favor ingresa una dirección");
+      toast.error("⚠️ Falta la dirección del emprendimiento");
       return;
     }
-
-    console.log('✅ Validación 1: Dirección OK');
     
+    // 2. Validar campos obligatorios
     if (!nombre || !descripcionCorta || !direccion || !telefono) {
-      console.log('❌ Validación 2 FALLÓ: Campos obligatorios', { nombre, descripcionCorta, direccion, telefono });
-      toast.error("Por favor completa todos los campos obligatorios");
+      toast.error("⚠️ Completa todos los campos obligatorios (nombre, descripción, dirección y teléfono)");
       return;
     }
-    console.log('✅ Validación 2: Campos obligatorios OK');
 
+    // 3. Validar longitud descripción corta
     if (descripcionCorta.length > 50) {
-      console.log('❌ Validación 3 FALLÓ: Descripción corta muy larga');
-      toast.error("La descripción corta no puede exceder los 50 caracteres");
+      toast.error("⚠️ La descripción corta no puede exceder los 50 caracteres");
       return;
     }
-    console.log('✅ Validación 3: Descripción corta OK');
 
+    // 4. Validar longitud descripción larga
     if (descripcionLarga.length > 1000) {
-      console.log('❌ Validación 4 FALLÓ: Descripción larga muy larga');
-      toast.error("La descripción larga no puede exceder los 1000 caracteres");
+      toast.error("⚠️ La descripción larga no puede exceder los 1000 caracteres");
       return;
     }
-    console.log('✅ Validación 4: Descripción larga OK');
 
+    // 5. Validar horarios
     if (!validarHorarios()) {
-      console.log('❌ Validación 5 FALLÓ: Sin horarios');
-      toast.error("Debes definir al menos un horario de atención");
+      toast.error("⚠️ Debes definir al menos un horario de atención");
       return;
     }
-    console.log('✅ Validación 5: Horarios OK');
 
+    // 6. Validar categoría
     if (!categoriaSeleccionada) {
-      console.log('❌ Validación 6 FALLÓ: Sin categoría');
-      toast.error("Por favor selecciona una categoría principal");
+      toast.error("⚠️ Selecciona una categoría principal");
       return;
     }
-    console.log('✅ Validación 6: Categoría OK');
 
+    // 7. Validar subcategorías
     if (subcategoriasSeleccionadas.length === 0) {
-      console.log('❌ Validación 7 FALLÓ: Sin subcategorías');
-      toast.error("Por favor selecciona al menos una subcategoría");
+      toast.error("⚠️ Selecciona al menos una subcategoría");
       return;
     }
-    console.log('✅ Validación 7: Subcategorías OK');
 
-    // Validaciones de delivery
+    // 8. Validar medios de pago
+    const tieneAlgunMedioPago = mediosPago.efectivo || mediosPago.tarjeta || mediosPago.transferencia;
+    if (!tieneAlgunMedioPago) {
+      toast.error("⚠️ Selecciona al menos un medio de pago");
+      return;
+    }
+
+    // 9. Validar tipos de entrega
+    const tieneAlgunTipoEntrega = tiposEntrega.retiro || tiposEntrega.delivery;
+    if (!tieneAlgunTipoEntrega) {
+      toast.error("⚠️ Selecciona al menos un tipo de entrega (retiro o delivery)");
+      return;
+    }
+
+    // 10-14. Validaciones de delivery
     if (tiposEntrega.delivery) {
-      console.log('🚚 Validando delivery...');
       if (comunasCobertura.length === 0) {
-        console.log('❌ Validación 8 FALLÓ: Sin comunas de cobertura');
-        toast.error("Debes seleccionar al menos una comuna de cobertura para delivery");
+        toast.error("⚠️ Debes seleccionar al menos una comuna de cobertura para delivery", 4000);
         return;
       }
-      console.log('✅ Validación 8: Comunas de cobertura OK');
       
       // Validar configuración según modalidad
       if (modalidadDelivery === 'por_distancia') {
-        console.log('📏 Validando rangos por distancia...');
         // Validar que todos los rangos estén completos
         for (let i = 0; i < rangosDelivery.length; i++) {
           if (!rangosDelivery[i].hastaKm || !rangosDelivery[i].costo) {
-            console.log(`❌ Validación 9 FALLÓ: Rango ${i + 1} incompleto`, rangosDelivery[i]);
-            toast.error(`Debes completar el Rango ${i + 1} (hasta km y costo)`);
+            toast.error(`⚠️ Completa el Rango ${i + 1}: falta ${!rangosDelivery[i].hastaKm ? 'distancia' : 'costo'}`, 4000);
             return;
           }
         }
-        console.log('✅ Validación 9: Rangos completos OK');
         
         // Validar que el último rango no exceda 30 km
         const ultimoRango = rangosDelivery[rangosDelivery.length - 1];
         if (parseFloat(ultimoRango.hastaKm) > 30) {
-          console.log('❌ Validación 10 FALLÓ: Rango excede 30 km');
-          toast.error("El rango máximo es de 30 km");
+          toast.error("⚠️ El rango máximo es de 30 km");
           return;
         }
-        console.log('✅ Validación 10: Rango máximo OK');
       }
       
       if (modalidadDelivery === 'fijo' && !configDelivery.costoFijo) {
-        console.log('❌ Validación 11 FALLÓ: Sin costo fijo');
-        toast.error("Debes ingresar el costo fijo del delivery");
+        toast.error("⚠️ Ingresa el costo fijo del delivery");
         return;
       }
-      console.log('✅ Validación 11: Costo fijo OK');
       
       // Validar regla adicional de "gratis desde"
       if (deliveryGratisDesde && !montoMinimoGratis) {
-        console.log('❌ Validación 12 FALLÓ: Sin monto mínimo para gratis');
-        toast.error("Debes ingresar el monto mínimo para delivery gratis");
+        toast.error("⚠️ Ingresa el monto mínimo para delivery gratis");
         return;
       }
-      console.log('✅ Validación 12: Regla gratis desde OK');
     }
-    console.log('✅ Todas las validaciones de delivery pasaron');
 
-    // Obtener el nombre de la comuna basado en el ID seleccionado
-    console.log('🏘️ Buscando comuna con ID:', comuna, '(tipo:', typeof comuna, ')');
-    console.log('🏘️ Comunas disponibles:', comunas.length);
+    // 15. Validar comuna del emprendimiento
     const comunaSeleccionada = comunas.find((c) => c.id == comuna || c.id === parseInt(comuna));
     if (!comunaSeleccionada) {
-      console.log('❌ Validación 13 FALLÓ: Comuna no válida', { comuna, comunasDisponibles: comunas });
-      toast.error("Comuna no válida");
+      toast.error("⚠️ La comuna del emprendimiento no es válida");
       return;
     }
-    console.log('✅ Validación 13: Comuna válida:', comunaSeleccionada.nombre);
 
-    // Mostramos diálogo de confirmación
-    console.log('📋 Abriendo modal de confirmación...');
+    // ✅ Todas las validaciones pasaron - Mostrar confirmación
     setConfirmDialog({
       visible: true,
       title: "Confirmar envío",
@@ -1852,7 +1835,6 @@ const EmprendimientoScreen = () => {
       cancelText: "Cancelar",
       isDangerous: false,
       onConfirm: async () => {
-        console.log('✅ Usuario confirmó, guardando en backend...');
         setConfirmDialog({ ...confirmDialog, visible: false });
             try {
               setGuardando(true);
