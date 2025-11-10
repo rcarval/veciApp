@@ -483,19 +483,27 @@ const enviarReporte = async () => {
       const config = producto.configDelivery;
       const subtotal = obtenerTotalCarrito();
       
+      console.log('💰 =================================');
+      console.log('💰 CALCULANDO COSTO DE DELIVERY');
+      console.log('💰 =================================');
+      console.log('  📦 Emprendimiento:', producto.nombre);
+      console.log('  🔧 Modalidad:', modalidad);
+      console.log('  📊 Config completa:', JSON.stringify(config, null, 2));
+      
       // Extraer distancia en kilómetros del string (ej: "2.5 km" -> 2.5)
       let distanciaKm = 0;
       if (distancia && typeof distancia === 'string') {
         const match = distancia.match(/([\d.]+)\s*km/i);
         if (match) {
           distanciaKm = parseFloat(match[1]);
+          console.log('  📏 Distancia parseada:', distanciaKm, 'km (desde string:', distancia, ')');
+        } else {
+          console.log('  ⚠️ No se pudo parsear distancia desde:', distancia);
         }
+      } else {
+        console.log('  ⚠️ Distancia no es string válido:', distancia, '(tipo:', typeof distancia, ')');
       }
-      
-      console.log('💰 Calculando costo de delivery:');
-      console.log('  - Modalidad:', modalidad);
-      console.log('  - Distancia:', distanciaKm, 'km');
-      console.log('  - Subtotal:', subtotal);
+      console.log('  💵 Subtotal del pedido:', subtotal);
       
       // Calcular costo base según modalidad
       let costoBase = 0;
@@ -503,15 +511,19 @@ const enviarReporte = async () => {
       switch (modalidad) {
         case 'gratis':
           costoBase = 0;
+          console.log('  ✅ Modalidad GRATIS → Costo = 0');
           break;
           
         case 'por_distancia':
+          console.log('  📍 Modalidad POR DISTANCIA');
           // Interpretar rangos dinámicos
           if (config.rangos && Array.isArray(config.rangos)) {
             const rangos = config.rangos;
+            console.log('  📋 Rangos recibidos:', JSON.stringify(rangos, null, 2));
             
             // Ordenar rangos por distancia (de menor a mayor)
             const rangosOrdenados = rangos.sort((a, b) => parseFloat(a.hastaKm) - parseFloat(b.hastaKm));
+            console.log('  📋 Rangos ordenados:', rangosOrdenados.map(r => `${r.hastaKm}km = $${r.costo}`).join(', '));
             
             // Buscar en qué rango cae la distancia
             let costoEncontrado = false;
@@ -522,9 +534,16 @@ const enviarReporte = async () => {
               const costo = parseInt(rango.costo) || 0;
               const desdeKm = i > 0 ? parseFloat(rangosOrdenados[i - 1].hastaKm) : 0;
               
+              console.log(`  🔍 Evaluando Rango ${i + 1}:`);
+              console.log(`      - Desde: ${desdeKm} km`);
+              console.log(`      - Hasta: ${hastaKm} km`);
+              console.log(`      - Costo: $${costo}`);
+              console.log(`      - ¿Distancia (${distanciaKm}) <= ${hastaKm}?`, distanciaKm <= hastaKm);
+              console.log(`      - ¿Es último rango?`, i === rangosOrdenados.length - 1);
+              
               // Si es el último rango o la distancia es menor o igual
               if (i === rangosOrdenados.length - 1 || distanciaKm <= hastaKm) {
-                console.log(`  📍 Rango ${i + 1}: ${desdeKm} - ${i === rangosOrdenados.length - 1 ? '∞' : hastaKm} km = $${costo}`);
+                console.log(`  ✅ RANGO SELECCIONADO: Rango ${i + 1} (${desdeKm} - ${i === rangosOrdenados.length - 1 ? '∞' : hastaKm} km) = $${costo}`);
                 costoBase = costo;
                 costoEncontrado = true;
                 break;
@@ -532,10 +551,11 @@ const enviarReporte = async () => {
             }
             
             if (!costoEncontrado) {
+              console.log('  ⚠️ No se encontró rango aplicable, costo = 0');
               costoBase = 0;
             }
           } else {
-            // Fallback a estructura antigua (por compatibilidad)
+            console.log('  ⚠️ No hay rangos definidos o no es array');
             costoBase = 0;
           }
           break;
@@ -546,18 +566,35 @@ const enviarReporte = async () => {
           break;
           
         default:
+          console.log('  ⚠️ Modalidad desconocida:', modalidad);
           costoBase = 0;
       }
+      
+      console.log('  📊 Costo base calculado:', costoBase);
       
       // Aplicar regla adicional: "Gratis desde monto mínimo" (override si se cumple)
       if (config.gratisDesde && config.montoMinimoGratis) {
         const montoMinimo = parseInt(config.montoMinimoGratis) || 0;
+        console.log(`  🎁 Verificando regla "Gratis desde":`);
+        console.log(`      - Activada: ${config.gratisDesde}`);
+        console.log(`      - Monto mínimo: $${montoMinimo}`);
+        console.log(`      - Subtotal actual: $${subtotal}`);
+        console.log(`      - ¿Subtotal (${subtotal}) >= Monto mínimo (${montoMinimo})?`, subtotal >= montoMinimo);
+        
         if (subtotal >= montoMinimo) {
-          console.log(`  🎁 Regla adicional aplicada: Delivery gratis (pedido ≥ $${montoMinimo})`);
+          console.log(`  ✅ REGLA APLICADA: Delivery gratis porque el pedido ($${subtotal}) ≥ monto mínimo ($${montoMinimo})`);
+          console.log('💰 RESULTADO FINAL: $0 (GRATIS)');
+          console.log('💰 =================================\n');
           return 0;
+        } else {
+          console.log(`  ❌ Regla NO aplicada: ${subtotal} < ${montoMinimo}`);
         }
+      } else {
+        console.log(`  ℹ️ Regla "Gratis desde" no configurada (gratisDesde: ${config.gratisDesde}, montoMinimo: ${config.montoMinimoGratis})`);
       }
       
+      console.log('💰 RESULTADO FINAL:', costoBase);
+      console.log('💰 =================================\n');
       return costoBase;
     }
     
