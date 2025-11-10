@@ -178,7 +178,8 @@ const ItemGaleria = memo(({ item, index, categoria, onImagenPress, onAgregar, on
 });
 
 const PedidoDetalleScreen = ({ route, navigation }) => {
-  const { producto, isPreview = false } = route.params;
+  const { producto: productoInicial, isPreview = false } = route.params;
+  const [producto, setProducto] = useState(productoInicial);
   const { currentTheme } = useTheme();
   const { usuario, direcciones, direccionSeleccionada, getTipoUsuarioEfectivo } = useUser();
   const { carritoActivo, activarCarrito, limpiarCarrito, navegacionPendiente: navPendienteContexto, ejecutarNavegacionPendiente, cancelarNavegacionPendiente } = useCarrito();
@@ -728,6 +729,70 @@ const enviarReporte = async () => {
     }
   }, [emprendimientoIdReal]);
 
+  // Función para cargar datos completos del emprendimiento (incluye config de delivery)
+  const cargarDatosEmprendimiento = useCallback(async () => {
+    try {
+      console.log('🏢 =====================================');
+      console.log('🏢 CARGANDO DATOS DEL EMPRENDIMIENTO');
+      console.log('🏢 =====================================');
+      console.log('  📌 ID:', emprendimientoIdReal);
+      
+      const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTO_BY_ID(emprendimientoIdReal));
+      
+      if (!response.ok) {
+        throw new Error('Error al cargar datos del emprendimiento');
+      }
+      
+      const data = await response.json();
+      console.log('  📦 Respuesta del backend:', JSON.stringify(data, null, 2));
+      
+      if (data.ok && data.emprendimiento) {
+        const emp = data.emprendimiento;
+        console.log('  ✅ Emprendimiento encontrado:', emp.nombre);
+        console.log('  🚚 DATOS DE DELIVERY:');
+        console.log('     - modalidad_delivery (backend):', emp.modalidad_delivery);
+        console.log('     - config_delivery (backend):', typeof emp.config_delivery === 'string' ? emp.config_delivery : JSON.stringify(emp.config_delivery));
+        console.log('     - comunas_cobertura (backend):', typeof emp.comunas_cobertura === 'string' ? emp.comunas_cobertura : JSON.stringify(emp.comunas_cobertura));
+        
+        // Parsear JSONB si viene como string
+        let configDeliveryParsed = emp.config_delivery;
+        if (typeof emp.config_delivery === 'string') {
+          try {
+            configDeliveryParsed = JSON.parse(emp.config_delivery);
+            console.log('     - config_delivery parseado:', JSON.stringify(configDeliveryParsed));
+          } catch (e) {
+            console.error('     ⚠️ Error al parsear config_delivery:', e);
+            configDeliveryParsed = {};
+          }
+        }
+        
+        let comunasCoberturaParsed = emp.comunas_cobertura;
+        if (typeof emp.comunas_cobertura === 'string') {
+          try {
+            comunasCoberturaParsed = JSON.parse(emp.comunas_cobertura);
+            console.log('     - comunas_cobertura parseado:', JSON.stringify(comunasCoberturaParsed));
+          } catch (e) {
+            console.error('     ⚠️ Error al parsear comunas_cobertura:', e);
+            comunasCoberturaParsed = [];
+          }
+        }
+        
+        // Actualizar producto con la configuración completa de delivery
+        setProducto(prev => ({
+          ...prev,
+          modalidadDelivery: emp.modalidad_delivery,
+          configDelivery: configDeliveryParsed || {},
+          comunasCobertura: comunasCoberturaParsed || [],
+        }));
+        
+        console.log('  ✅ Producto actualizado con config de delivery');
+        console.log('🏢 =====================================\n');
+      }
+    } catch (error) {
+      console.error('❌ Error al cargar datos del emprendimiento:', error);
+    }
+  }, [emprendimientoIdReal]);
+
   // Función para cargar productos del emprendimiento desde la API
   const cargarProductosEmprendimiento = useCallback(async () => {
     try {
@@ -973,11 +1038,12 @@ const enviarReporte = async () => {
       }
     }
     
+    cargarDatosEmprendimiento(); // Cargar configuración completa del emprendimiento (incluye delivery)
     cargarCalificaciones(); // Cargar calificaciones al iniciar
     cargarProductosEmprendimiento(); // Cargar productos del emprendimiento
     registrarVisualizacion(); // Registrar visualización
     verificarFavorito(); // Verificar si está en favoritos
-  }, [direcciones, direccionSeleccionada, cargarCalificaciones, cargarProductosEmprendimiento, registrarVisualizacion, verificarFavorito, usuario, isPreview, getTipoUsuarioEfectivo]);
+  }, [direcciones, direccionSeleccionada, cargarDatosEmprendimiento, cargarCalificaciones, cargarProductosEmprendimiento, registrarVisualizacion, verificarFavorito, usuario, isPreview, getTipoUsuarioEfectivo]);
 
   useEffect(() => {
     if (direccionUsuario) {
