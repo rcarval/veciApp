@@ -622,6 +622,48 @@ const MisPedidosScreen = () => {
               })}
             </View>
           )}
+          
+          {/* ✅ Desglose de Costos en la tarjeta */}
+          <View style={[styles.desgloseContainerModerno, { backgroundColor: currentTheme.background }]}>
+            <View style={styles.desgloseTituloContainer}>
+              <Ionicons name="receipt-outline" size={14} color={currentTheme.primary} />
+              <Text style={[styles.desgloseTitulo, { color: currentTheme.text }]}>Desglose</Text>
+            </View>
+            
+            {pedido.subtotal && (
+              <View style={styles.desgloseLineaModerno}>
+                <Text style={[styles.desgloseLabel, { color: currentTheme.textSecondary }]}>Subtotal:</Text>
+                <Text style={[styles.desgloseValor, { color: currentTheme.text }]}>
+                  ${pedido.subtotal.toLocaleString('es-CL')}
+                </Text>
+              </View>
+            )}
+            
+            {pedido.modoEntrega === 'delivery' && pedido.costo_delivery !== undefined && (
+              <View style={styles.desgloseLineaModerno}>
+                <Text style={[styles.desgloseLabel, { color: currentTheme.textSecondary }]}>Delivery:</Text>
+                <Text style={[styles.desgloseValor, { color: pedido.costo_delivery === 0 ? '#27ae60' : currentTheme.text }]}>
+                  {pedido.costo_delivery === 0 ? '¡Gratis!' : `$${pedido.costo_delivery.toLocaleString('es-CL')}`}
+                </Text>
+              </View>
+            )}
+            
+            {pedido.cupon_codigo && pedido.descuento_cupon > 0 && (
+              <View style={styles.desgloseLineaModerno}>
+                <Text style={[styles.desgloseLabel, { color: '#27ae60' }]}>Cupón ({pedido.cupon_codigo}):</Text>
+                <Text style={[styles.desgloseValor, { color: '#27ae60', fontWeight: '700' }]}>
+                  -${pedido.descuento_cupon.toLocaleString('es-CL')}
+                </Text>
+              </View>
+            )}
+            
+            <View style={[styles.desgloseLineaTotal, { borderTopColor: currentTheme.border }]}>
+              <Text style={[styles.desgloseLabelTotal, { color: currentTheme.text }]}>Total:</Text>
+              <Text style={[styles.desgloseValorTotal, { color: currentTheme.primary }]}>
+                ${pedido.total.toLocaleString('es-CL')}
+              </Text>
+            </View>
+          </View>
 
           {/* Ruta de Estados */}
           {tabActivo === 'pendientes' && renderRutaEstados(pedido)}
@@ -1322,6 +1364,53 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     minWidth: 70,
     textAlign: 'right',
+  },
+  desgloseContainerModerno: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+  },
+  desgloseTituloContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  desgloseTitulo: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  desgloseLineaModerno: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  desgloseLabel: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  desgloseValor: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  desgloseLineaTotal: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 10,
+    marginTop: 8,
+    borderTopWidth: 2,
+  },
+  desgloseLabelTotal: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  desgloseValorTotal: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   motivoRechazoContainer: {
     flexDirection: 'row',

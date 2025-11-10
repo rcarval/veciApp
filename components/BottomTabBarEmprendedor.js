@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
 import { useUser } from '../context/UserContext';
@@ -67,6 +67,16 @@ const BottomTabBarEmprendedor = () => {
     }
   }, [usuario?.id]);
 
+  // ✅ Recargar contador cada vez que la navegación cambie (para detectar cambios manuales)
+  useFocusEffect(
+    React.useCallback(() => {
+      if (usuario) {
+        console.log('🔄 BottomTabBar recibió foco, recargando contador de pedidos');
+        contarPedidosPendientes();
+      }
+    }, [usuario])
+  );
+
   // ✅ Conectar WebSocket y escuchar eventos en tiempo real
   useEffect(() => {
     if (!usuario) {
@@ -96,14 +106,20 @@ const BottomTabBarEmprendedor = () => {
 
     // Escuchar NUEVOS pedidos (para el emprendedor)
     socket.on(`pedido:nuevo:${usuario.id}`, async (data) => {
-      console.log('📡 Nuevo pedido recibido, actualizando contador...');
+      console.log('\n🔔 ===== NUEVO PEDIDO =====');
+      console.log('📡 Evento recibido:', data);
+      console.log('🔔 =========================\n');
       await contarPedidosPendientes();
     });
 
     // Escuchar CAMBIOS DE ESTADO (incluye rechazos, confirmaciones, etc.)
     socket.on(`pedido:estado:${usuario.id}`, async (data) => {
-      console.log('📡 Estado de pedido actualizado, actualizando contador...');
+      console.log('\n🔔 ===== CAMBIO DE ESTADO =====');
+      console.log('📡 Evento recibido:', data);
+      console.log('📊 Estado anterior del contador:', pedidosPendientes);
+      console.log('🔄 Recargando contador...');
       await contarPedidosPendientes();
+      console.log('🔔 ==============================\n');
     });
 
     return () => {
