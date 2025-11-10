@@ -111,20 +111,18 @@ const MisPedidosScreen = () => {
           ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
           (p.estado === 'entregado' && !p.entrega_confirmada)
         );
-        const rechazados = pedidosMapeados.filter(p => p.estado === 'rechazado');
         
-        // Los rechazados/cancelados confirmados van al historial junto con entregados confirmados/cerrados
+        // ✅ RECHAZADOS: Solo pedidos que el EMPRENDEDOR rechazó (y cliente NO ha confirmado)
+        const rechazadosPendientes = pedidosMapeados.filter(p => 
+          p.estado === 'rechazado' && !p.rechazo_confirmado
+        );
+        
+        // ✅ HISTORIAL: Entregados confirmados, cerrados, rechazados confirmados, y TODAS las cancelaciones del cliente
         const completados = pedidosMapeados.filter(p => 
           (p.estado === 'entregado' && p.entrega_confirmada) || 
           p.estado === 'cerrado' || 
           (p.estado === 'rechazado' && p.rechazo_confirmado) ||
-          (p.estado === 'cancelado' && p.cancelacion_confirmada)
-        );
-        
-        // Solo mostrar rechazados/cancelados NO confirmados en la pestaña rechazados
-        const rechazadosPendientes = pedidosMapeados.filter(p => 
-          (p.estado === 'rechazado' && !p.rechazo_confirmado) ||
-          (p.estado === 'cancelado' && !p.cancelacion_confirmada)
+          p.estado === 'cancelado' // ← Cliente cancela = directo a historial
         );
         
         console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
@@ -664,6 +662,17 @@ const MisPedidosScreen = () => {
               </Text>
             </View>
           </View>
+
+          {/* Mostrar motivo de cancelación si el cliente canceló (en historial) */}
+          {tabActivo === 'historial' && pedido.estado === 'cancelado' && pedido.motivoCancelacion && (
+            <View style={styles.motivoRechazoContainer}>
+              <Ionicons name="information-circle" size={16} color="#2A9D8F" />
+              <Text style={[styles.motivoRechazoTexto, { color: currentTheme.text }]}>
+                <Text style={[styles.motivoLabelModerno, { color: '#2A9D8F' }]}>Tú cancelaste este pedido. Motivo: </Text>
+                {pedido.motivoCancelacion}
+              </Text>
+            </View>
+          )}
 
           {/* Ruta de Estados */}
           {tabActivo === 'pendientes' && renderRutaEstados(pedido)}
