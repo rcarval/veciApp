@@ -1934,13 +1934,25 @@ const enviarReporte = async () => {
                 </View>
               ) : (
                 <>
-                  {carritoRef.current.map((item) => (
+                  {carritoRef.current.map((item) => {
+                    // ✅ Usar precio de oferta si existe, si no usar precio normal
+                    const precioMostrar = (item.precioOferta && item.precioOferta > 0) ? item.precioOferta : item.precio;
+                    const tieneOferta = item.precioOferta && item.precioOferta > 0 && item.precioOferta < item.precio;
+                    
+                    return (
                   <View key={item.id} style={[styles.carritoItem, { borderBottomColor: currentTheme.border }]}>
                     <View style={styles.carritoItemInfo}>
                       <Text style={[styles.carritoItemNombre, { color: currentTheme.text }]}>{item.nombre || item.descripcion}</Text>
-                      <Text style={[styles.carritoItemPrecio, { color: currentTheme.textSecondary }]}>
-                          ${item.precio ? Math.round(item.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.') : "Consulte"} c/u
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {tieneOferta && (
+                          <Text style={[styles.carritoItemPrecio, { color: currentTheme.textSecondary, textDecorationLine: 'line-through', fontSize: 12 }]}>
+                            ${Math.round(item.precio).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.')}
+                          </Text>
+                        )}
+                        <Text style={[styles.carritoItemPrecio, { color: tieneOferta ? '#27ae60' : currentTheme.textSecondary }]}>
+                          ${precioMostrar ? Math.round(precioMostrar).toLocaleString("es-CL", { useGrouping: true }).replace(/,/g, '.') : "Consulte"} c/u
+                        </Text>
+                      </View>
                     </View>
                     
                     <View style={styles.carritoItemControls}>
@@ -1965,7 +1977,8 @@ const enviarReporte = async () => {
                       </TouchableOpacity>
                     </View>
                   </View>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </ScrollView>
