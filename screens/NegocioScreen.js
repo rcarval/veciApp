@@ -15,7 +15,7 @@ import { useTheme } from "../context/ThemeContext";
 import { useUser } from "../context/UserContext";
 import LoadingVeciApp from "../components/LoadingVeciApp";
 import Toast from "../components/Toast";
-import { useToast } from "../hooks/useToast";
+import useToast from "../hooks/useToast";
 
 const NegocioScreen = ({ navigation, route }) => {
   const { currentTheme } = useTheme();
