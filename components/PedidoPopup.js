@@ -66,18 +66,25 @@ const PedidoPopup = ({ navigation }) => {
 
   // ✅ Limpiar estado cuando no hay usuario (cerró sesión o cambió de cuenta)
   useEffect(() => {
+    console.log('👁️ PedidoPopup - useEffect de usuario ejecutado, usuario:', usuario ? `ID: ${usuario.id}` : 'NULL');
+    
     if (!usuario) {
-      console.log('🧹 Usuario no existe, limpiando estado del popup');
+      console.log('🧹 LIMPIANDO POPUP: Usuario no existe');
+      console.log('  📊 Estado actual - Pedidos pendientes:', pedidosPendientes.length);
+      console.log('  📊 Estado actual - Visible:', visible);
+      
       setPedidosPendientes([]);
       setPedidosRechazadosPendientes([]);
       setVisible(false);
       
       // Desconectar WebSocket si existe
       if (socketRef.current) {
-        console.log('🔌 Desconectando WebSocket por falta de usuario');
+        console.log('  🔌 Desconectando WebSocket');
         socketRef.current.disconnect();
         socketRef.current = null;
       }
+      
+      console.log('✅ POPUP LIMPIADO COMPLETAMENTE');
     }
   }, [usuario]);
 

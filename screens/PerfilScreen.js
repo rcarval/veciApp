@@ -287,7 +287,7 @@ const actionSheetStyles = StyleSheet.create({
 
 const PerfilScreen = () => {
   const navigation = useNavigation();
-  const { usuario, direcciones, loading, cargarUsuario, actualizarUsuarioLocal, modoVista, cambiarAVistaCliente, volverAVistaEmprendedor } = useUser();
+  const { usuario, direcciones, loading, cargarUsuario, actualizarUsuarioLocal, limpiarCacheCompleto, modoVista, cambiarAVistaCliente, volverAVistaEmprendedor } = useUser();
   const { currentTheme, changeTheme, getNextTheme, isChangingTheme } = useTheme();
   const [imagenPerfil, setImagenPerfil] = useState(null);
   const [imagenError, setImagenError] = useState(false);
@@ -543,17 +543,26 @@ const PerfilScreen = () => {
       onConfirm: async () => {
         setConfirmDialog({ ...confirmDialog, visible: false });
         try {
-          // Limpiar AsyncStorage
+          console.log('🚪 Iniciando cierre de sesión...');
+          
+          // ✅ PRIMERO: Limpiar el contexto de usuario (esto actualiza usuario a null en todos los componentes)
+          console.log('1️⃣ Limpiando UserContext...');
+          await limpiarCacheCompleto();
+          
+          // ✅ SEGUNDO: Limpiar AsyncStorage
+          console.log('2️⃣ Limpiando AsyncStorage...');
           await AsyncStorage.clear();
+          
           console.log('✅ Sesión cerrada y datos limpiados');
           
-          // Navegar al Login
+          // ✅ TERCERO: Navegar al Login
+          console.log('3️⃣ Navegando al Login...');
           navigation.reset({
             index: 0,
             routes: [{ name: 'Login' }],
           });
         } catch (error) {
-          console.log('Error al cerrar sesión:', error);
+          console.log('❌ Error al cerrar sesión:', error);
           toast.error('No se pudo cerrar la sesión');
         }
       },
