@@ -78,7 +78,7 @@ const MisDireccionesScreen = () => {
   };
 
   // Función para normalizar dirección desde geocoding a formato estandarizado
-  const normalizarDireccionDesdeGeocode = (addressComponents) => {
+  const normalizarDireccionDesdeGeocode = (addressComponents, comunasDisponibles = []) => {
     try {
       console.log('🔍 Normalizando dirección desde geocode...');
       console.log('📦 Address components:', JSON.stringify(addressComponents.map(c => ({ types: c.types, name: c.long_name }))));
@@ -93,28 +93,49 @@ const MisDireccionesScreen = () => {
         c.types.includes("route")
       )?.long_name || '';
 
-      // 3. Extraer COMUNA (priorizar administrative_area_level_3 en Chile)
-      // En Chile, la jerarquía es: País > Región > Provincia > Comuna
-      let comuna = addressComponents.find((c) =>
-        c.types.includes("administrative_area_level_3") // Comuna (ej: Santiago, Providencia)
-      )?.long_name;
+      // 3. Extraer COMUNA de manera inteligente
+      // Estrategia: Buscar en TODOS los niveles administrativos y validar contra nuestra BD
+      const candidatosComuna = [];
       
-      // Fallback 1: Si no hay level_3, intentar con locality (a veces es la comuna)
-      if (!comuna) {
-        comuna = addressComponents.find((c) =>
-          c.types.includes("locality") && !c.types.includes("sublocality")
-        )?.long_name;
+      // Nivel 3: Comuna (más común en Chile)
+      const level3 = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_3")
+      );
+      if (level3) candidatosComuna.push({ fuente: 'level_3', nombre: level3.long_name });
+      
+      // Locality: A veces es la comuna, a veces es una localidad dentro de la comuna
+      const locality = addressComponents.find((c) =>
+        c.types.includes("locality") && !c.types.includes("sublocality")
+      );
+      if (locality) candidatosComuna.push({ fuente: 'locality', nombre: locality.long_name });
+      
+      // Nivel 2: Provincia (a veces coincide con la comuna en zonas rurales)
+      const level2 = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_2")
+      );
+      if (level2) candidatosComuna.push({ fuente: 'level_2', nombre: level2.long_name });
+      
+      console.log('🔍 Candidatos para comuna:', candidatosComuna);
+      
+      // VALIDAR contra nuestra base de datos de comunas
+      let comunaFinal = null;
+      
+      for (const candidato of candidatosComuna) {
+        const comunaEncontrada = comunasDisponibles.find(c =>
+          c.nombre && c.nombre.toLowerCase() === candidato.nombre.toLowerCase()
+        );
+        
+        if (comunaEncontrada) {
+          console.log(`✅ Comuna encontrada en BD desde ${candidato.fuente}:`, comunaEncontrada.nombre);
+          comunaFinal = comunaEncontrada.nombre;
+          break;
+        }
       }
       
-      // Fallback 2: Si sigue sin comuna, intentar con political
-      if (!comuna) {
-        const political = addressComponents.filter((c) =>
-          c.types.includes("political") && 
-          !c.types.includes("country") && 
-          !c.types.includes("administrative_area_level_1") &&
-          !c.types.includes("administrative_area_level_2")
-        );
-        comuna = political.length > 0 ? political[0].long_name : '';
+      // Si no se encontró en la BD, usar el primer candidato como fallback
+      if (!comunaFinal && candidatosComuna.length > 0) {
+        comunaFinal = candidatosComuna[0].nombre;
+        console.log('⚠️ Comuna no encontrada en BD, usando fallback:', comunaFinal);
       }
 
       // 4. Extraer REGIÓN (administrative_area_level_1 en Chile)
@@ -129,17 +150,17 @@ const MisDireccionesScreen = () => {
       // Construir dirección limpia: "Calle 123, Comuna, Región"
       const calleCompleta = `${calle} ${numero}`.trim();
       
-      console.log('✅ Dirección normalizada:', {
+      console.log('✅ Dirección normalizada FINAL:', {
         calle: calleCompleta,
-        comuna: comuna,
+        comuna: comunaFinal,
         region: region
       });
       
       return {
         calle: calleCompleta,
-        comuna: comuna,
+        comuna: comunaFinal,
         region: region,
-        direccionCompleta: `${calleCompleta}, ${comuna}, ${region}`
+        direccionCompleta: `${calleCompleta}, ${comunaFinal}, ${region}`
       };
     } catch (error) {
       console.error('❌ Error al normalizar dirección:', error);
@@ -467,13 +488,13 @@ const MisDireccionesScreen = () => {
       if (data.status === "OK" && data.results.length > 0) {
         const resultado = data.results[0];
         
-        // Normalizar dirección a formato estandarizado
-        const direccionNormalizada = normalizarDireccionDesdeGeocode(resultado.address_components);
+        // Normalizar dirección a formato estandarizado (pasando comunas para validación)
+        const direccionNormalizada = normalizarDireccionDesdeGeocode(resultado.address_components, comunas);
         
         if (direccionNormalizada && direccionNormalizada.calle && direccionNormalizada.comuna) {
           // Buscar la comuna en nuestra base de datos
           const comunaEncontrada = comunas.find(c => 
-            c.nombre.toLowerCase() === direccionNormalizada.comuna.toLowerCase()
+            c.nombre && c.nombre.toLowerCase() === direccionNormalizada.comuna.toLowerCase()
           );
           
           if (comunaEncontrada) {
