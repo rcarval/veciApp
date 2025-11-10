@@ -467,7 +467,12 @@ const enviarReporte = async () => {
   }, []);
 
   const obtenerTotalCarrito = useCallback(() => {
-    return carritoRef.current.reduce((total, item) => total + (item.precio * item.cantidad), 0);
+    return carritoRef.current.reduce((total, item) => {
+      // Usar precioOferta si existe y es mayor a 0, si no usar precio normal
+      const precioFinal = (item.precioOferta && item.precioOferta > 0) ? item.precioOferta : item.precio;
+      console.log(`  💵 Item: ${item.nombre} | Precio normal: $${item.precio} | Precio oferta: $${item.precioOferta || 'N/A'} | Usando: $${precioFinal}`);
+      return total + (precioFinal * item.cantidad);
+    }, 0);
   }, []);
 
   const obtenerCantidadTotalItems = useCallback(() => {
