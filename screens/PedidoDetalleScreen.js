@@ -223,6 +223,7 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [mostrarConfirmacionEntrega, setMostrarConfirmacionEntrega] = useState(false);
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
   const [navegacionPendiente, setNavegacionPendiente] = useState(null);
+  const advertenciaEnProceso = useRef(false);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [calificacionesData, setCalificacionesData] = useState(null);
   const [productosApi, setProductosApi] = useState([]);
@@ -1368,8 +1369,17 @@ const enviarReporte = async () => {
   // Interceptar navegación hacia atrás si hay items en el carrito
   useEffect(() => {
     const unsubscribeBeforeRemove = navigation.addListener('beforeRemove', (e) => {
+      console.log('🔙 BeforeRemove detectado - Items en carrito:', carritoRef.current.length);
       if (carritoRef.current.length > 0) {
+        // Prevenir solo si el modal no está ya visible
+        if (advertenciaEnProceso.current) {
+          console.log('⏭️ Modal ya en proceso, ignorando evento duplicado');
+          return;
+        }
+        
+        console.log('🛑 Previniendo navegación atrás - Mostrando advertencia');
         e.preventDefault();
+        advertenciaEnProceso.current = true;
         setNavegacionPendiente({ tipo: 'back', evento: e });
         setAdvertenciaVisible(true);
       }
@@ -1378,22 +1388,48 @@ const enviarReporte = async () => {
     return unsubscribeBeforeRemove;
   }, [navigation]);
 
+  // Ref para evitar múltiples listeners
+  const tabListenerRef = useRef(null);
+
   // Interceptar cambios de tab (menú inferior) si hay items en el carrito
   useEffect(() => {
     const parent = navigation.getParent();
     if (!parent) return;
 
+    // Limpiar listener anterior si existe
+    if (tabListenerRef.current) {
+      console.log('🧹 Limpiando listener anterior de tabPress');
+      tabListenerRef.current();
+      tabListenerRef.current = null;
+    }
+
+    // Agregar nuevo listener
     const unsubscribeTabPress = parent.addListener('tabPress', (e) => {
+      console.log('📱 TabPress detectado - Items en carrito:', carritoRef.current.length);
       if (carritoRef.current.length > 0) {
+        // Prevenir solo si el modal no está ya visible
+        if (advertenciaEnProceso.current) {
+          console.log('⏭️ Modal ya en proceso, ignorando evento duplicado de tab');
+          e.preventDefault(); // Seguir previniendo la navegación
+          return;
+        }
+        
+        console.log('🛑 Previniendo navegación tab - Mostrando advertencia');
         e.preventDefault();
+        advertenciaEnProceso.current = true;
         setNavegacionPendiente({ tipo: 'tab', evento: e });
         setAdvertenciaVisible(true);
       }
     });
 
+    // Guardar referencia para limpieza
+    tabListenerRef.current = unsubscribeTabPress;
+
     return () => {
-      if (unsubscribeTabPress) {
-        unsubscribeTabPress();
+      console.log('🧹 Cleanup: Removiendo listener de tabPress');
+      if (tabListenerRef.current) {
+        tabListenerRef.current();
+        tabListenerRef.current = null;
       }
     };
   }, [navigation]);
@@ -1638,7 +1674,11 @@ const enviarReporte = async () => {
         animationType="slide"
         transparent={true}
         visible={advertenciaVisible}
-        onRequestClose={() => setAdvertenciaVisible(false)}
+        onRequestClose={() => {
+          console.log('🔙 Modal cerrado con botón atrás del sistema');
+          advertenciaEnProceso.current = false;
+          setAdvertenciaVisible(false);
+        }}
       >
         <View style={styles.advertenciaModalContainer}>
           <View style={styles.advertenciaModalContent}>
@@ -1677,6 +1717,8 @@ const enviarReporte = async () => {
               <TouchableOpacity
                   style={styles.advertenciaCancelarModerno}
                   onPress={() => {
+                    console.log('👈 Usuario eligió VOLVER - Cerrando modal');
+                    advertenciaEnProceso.current = false; // Resetear flag
                     setAdvertenciaVisible(false);
                     setNavegacionPendiente(null);
                     cancelarNavegacionPendiente();
@@ -1692,10 +1734,12 @@ const enviarReporte = async () => {
               <TouchableOpacity
                   style={styles.advertenciaSalirModerno}
                 onPress={() => {
+                    console.log('🗑️ Usuario eligió VACIAR - Limpiando carrito');
                     // Limpiar el carrito local y contexto global
                   carritoRef.current = [];
                     limpiarCarrito();
                   forceUpdate({});
+                    advertenciaEnProceso.current = false; // Resetear flag
                   setAdvertenciaVisible(false);
                     
                     // Ejecutar la navegación pendiente del contexto global si existe
