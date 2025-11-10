@@ -224,6 +224,13 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
   const [navegacionPendiente, setNavegacionPendiente] = useState(null);
   const advertenciaEnProceso = useRef(false);
+  
+  // LOG: Detectar cambios en advertenciaVisible
+  useEffect(() => {
+    console.log('🚨 ADVERTENCIA VISIBLE CAMBIÓ A:', advertenciaVisible);
+    console.log('   - advertenciaEnProceso.current:', advertenciaEnProceso.current);
+    console.log('   - Stack trace:', new Error().stack);
+  }, [advertenciaVisible]);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [calificacionesData, setCalificacionesData] = useState(null);
   const [productosApi, setProductosApi] = useState([]);
@@ -1680,6 +1687,10 @@ const enviarReporte = async () => {
           setAdvertenciaVisible(false);
         }}
       >
+        {(() => {
+          console.log('🎨 RENDERIZANDO MODAL DE ADVERTENCIA - visible:', advertenciaVisible);
+          return null;
+        })()}
         <View style={styles.advertenciaModalContainer}>
           <View style={styles.advertenciaModalContent}>
             {/* Header con gradiente */}
