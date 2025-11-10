@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, Alert, Modal, View } from 'react-native';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,8 +13,9 @@ const BottomTabBarCliente = () => {
   const { currentTheme } = useTheme();
   const { direcciones, usuario } = useUser();
   const { carritoActivo, cantidadItems, limpiarCarrito } = useCarrito();
-  const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
-  const [pantallaPendiente, setPantallaPendiente] = useState(null);
+  // Estados del modal deshabilitados (el modal ahora lo maneja PedidoDetalleScreen)
+  // const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
+  // const [pantallaPendiente, setPantallaPendiente] = useState(null);
   const styles = BottomTabBarClienteStyles(currentTheme);
 
   // Función para obtener el color del icono (todos blancos por ahora)
@@ -22,23 +23,16 @@ const BottomTabBarCliente = () => {
     return "white";
   };
 
-  // Función para manejar la navegación con validación de direcciones y carrito
+  // Función para manejar la navegación con validación de direcciones
   const manejarNavegacion = (nombrePantalla) => {
     console.log('🔵 BottomTabBar: manejarNavegacion ->', nombrePantalla);
-    console.log('🔵 carritoActivo:', carritoActivo, 'cantidadItems:', cantidadItems);
     
-    // PRIMERO: Verificar si hay productos en el carrito
-    if (carritoActivo) {
-      // HAY CARRITO: Guardar la pantalla y mostrar modal
-      // NO NAVEGAR todavía
-      console.log('⚠️ CARRITO ACTIVO - Bloqueando navegación y mostrando modal');
-      setPantallaPendiente(nombrePantalla);
-      setAdvertenciaVisible(true);
-      return; // ⛔ DETENER COMPLETAMENTE - No continuar
-    }
+    // NOTA: La protección del carrito la maneja PedidoDetalleScreen directamente
+    // mediante listeners de 'beforeRemove' y 'tabPress'. No interceptamos aquí
+    // para evitar modales duplicados.
     
-    // NO HAY CARRITO: Navegar normalmente con validaciones
-    console.log('✅ Sin carrito - Navegando directamente');
+    // Navegar normalmente con validaciones
+    console.log('✅ Navegando con validaciones');
     ejecutarNavegacionDirecta(nombrePantalla);
   };
 
@@ -69,13 +63,20 @@ const BottomTabBarCliente = () => {
 
   return (
     <>
-      {/* Modal de Advertencia de Carrito */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={advertenciaVisible}
-        onRequestClose={() => setAdvertenciaVisible(false)}
-      >
+      {/* MODAL ELIMINADO: La protección del carrito la maneja PedidoDetalleScreen 
+          mediante listeners de beforeRemove y tabPress. No hay modal duplicado aquí. */}
+      
+      {/* NOTA: Si alguna vez se necesita mostrar el modal desde este componente,
+          descomentar el código del modal más abajo. Por ahora está deshabilitado
+          para evitar conflictos con el modal de PedidoDetalleScreen. */}
+      
+      {false && ( // Modal deshabilitado - cambiar a {advertenciaVisible && ( si se necesita
+        <Modal
+          animationType="slide"
+          transparent={true}
+          visible={false}
+          onRequestClose={() => setAdvertenciaVisible(false)}
+        >
         <View style={styles.advertenciaModalContainer}>
           <View style={styles.advertenciaModalContent}>
             {/* Header con gradiente */}
@@ -151,6 +152,7 @@ const BottomTabBarCliente = () => {
           </View>
         </View>
       </Modal>
+      )} {/* Fin del modal deshabilitado */}
 
       <LinearGradient colors={[currentTheme.primary, currentTheme.secondary]} style={styles.tabBar}>
         {/* Inicio */}
