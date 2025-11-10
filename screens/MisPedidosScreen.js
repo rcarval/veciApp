@@ -85,6 +85,7 @@ const MisPedidosScreen = () => {
           id: pedido.id,
           negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
           negocioId: pedido.emprendimiento_id, // Para guardar calificaciones
+          emprendimiento_logo: pedido.emprendimiento_logo || null, // ✅ Logo del emprendimiento
           fecha: pedido.created_at,
           fechaHoraReserva: pedido.created_at,
           estado: pedido.estado,
@@ -96,7 +97,12 @@ const MisPedidosScreen = () => {
           motivoCancelacion: pedido.motivo_rechazo,
           rechazo_confirmado: pedido.rechazo_confirmado || false,
           entrega_confirmada: pedido.entrega_confirmada || false,
-          cancelacion_confirmada: pedido.cancelacion_confirmada || false, // Nuevo campo
+          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+          // ✅ Nuevos campos para desglose
+          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+          cupon_codigo: pedido.cupon_codigo || null,
+          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
         }));
         
         // Separar pedidos por estado
@@ -589,7 +595,12 @@ const MisPedidosScreen = () => {
                 <Ionicons name="cart-outline" size={16} color={currentTheme.primary} />
                 <Text style={[styles.productosTituloModerno, { color: currentTheme.text }]}>Productos</Text>
               </View>
-              {pedido.productos.map((producto, index) => (
+              {pedido.productos.map((producto, index) => {
+                // ✅ Usar precio_final si existe (precio que realmente se cobró)
+                const precioMostrar = producto.subtotal || (producto.precio_final ? producto.precio_final * producto.cantidad : (producto.precio_unitario * producto.cantidad));
+                const tieneOferta = producto.precio_oferta && producto.precio_oferta > 0 && producto.precio_oferta < producto.precio_unitario;
+                
+                return (
                 <View key={index} style={styles.productoItemContainer}>
                   <View style={styles.productoDot} />
                   <Text style={[styles.productoItemModerno, { color: currentTheme.text }]}>
@@ -598,8 +609,17 @@ const MisPedidosScreen = () => {
                   <Text style={[styles.productoCantidad, { color: currentTheme.primary }]}>
                     x{producto.cantidad}
                   </Text>
+                  {tieneOferta && (
+                    <Text style={[styles.productoPrecioOriginal, { color: currentTheme.textSecondary }]}>
+                      ${(producto.precio_unitario * producto.cantidad).toLocaleString()}
+                    </Text>
+                  )}
+                  <Text style={[styles.productoPrecio, { color: tieneOferta ? '#27ae60' : currentTheme.text }]}>
+                    ${precioMostrar.toLocaleString()}
+                  </Text>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
@@ -1291,6 +1311,17 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     backgroundColor: '#2A9D8F15',
+  },
+  productoPrecioOriginal: {
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'line-through',
+  },
+  productoPrecio: {
+    fontSize: 14,
+    fontWeight: '700',
+    minWidth: 70,
+    textAlign: 'right',
   },
   motivoRechazoContainer: {
     flexDirection: 'row',

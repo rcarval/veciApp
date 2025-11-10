@@ -1162,11 +1162,21 @@ const enviarReporte = async () => {
           producto_id: item.id,
           nombre: item.nombre || item.descripcion,
           cantidad: item.cantidad,
-          precio_unitario: item.precio
+          precio_unitario: item.precio,
+          precio_oferta: item.precioOferta && item.precioOferta > 0 ? item.precioOferta : null, // ✅ Precio de oferta
         })),
         direccion_entrega: modoEntrega === 'delivery' ? direccionUsuario : null,
         telefono_cliente: usuario?.telefono || null,
-        modo_entrega: modoEntrega
+        modo_entrega: modoEntrega,
+        costo_delivery: modoEntrega === 'delivery' ? obtenerCostoDelivery() : 0, // ✅ Costo de delivery
+        cupon_aplicado: cuponAplicado ? {
+          codigo: cuponAplicado.codigo,
+          tipo_beneficio: cuponAplicado.tipo_beneficio,
+          valor: cuponAplicado.valor,
+          descuento_aplicado: descuentoCupon
+        } : null, // ✅ Info del cupón
+        subtotal: obtenerTotalCarrito(), // ✅ Subtotal sin delivery ni descuentos
+        total: obtenerTotalConDelivery() // ✅ Total final con todo incluido
       };
 
       console.log('📤 Datos del pedido completos:', JSON.stringify(pedidoData, null, 2));

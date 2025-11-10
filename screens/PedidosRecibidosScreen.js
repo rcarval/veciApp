@@ -168,7 +168,12 @@ const PedidosRecibidosScreen = () => {
             productos: pedido.detalle || [],
             tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
             motivoCancelacion: pedido.motivo_rechazo,
-            cancelacion_confirmada: pedido.cancelacion_confirmada || false, // Nuevo campo
+            cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+            // ✅ Nuevos campos para desglose
+            subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+            costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+            cupon_codigo: pedido.cupon_codigo || null,
+            descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
           };
         });
         
@@ -863,7 +868,12 @@ const PedidosRecibidosScreen = () => {
               <Ionicons name="cart-outline" size={16} color={currentTheme.primary} />
               <Text style={[styles.productosTituloModerno, { color: currentTheme.text }]}>Productos</Text>
             </View>
-        {pedido.productos.map((producto, index) => (
+        {pedido.productos.map((producto, index) => {
+          // ✅ Usar precio_final si existe (precio que realmente se cobró), si no usar subtotal o precio
+          const precioMostrar = producto.subtotal || (producto.precio_final ? producto.precio_final * producto.cantidad : (producto.precio_unitario * producto.cantidad));
+          const tieneOferta = producto.precio_oferta && producto.precio_oferta > 0 && producto.precio_oferta < producto.precio_unitario;
+          
+          return (
               <View key={index} style={styles.productoItemModerno}>
                 <View style={styles.productoDot} />
                 <Text style={[styles.productoNombreModerno, { color: currentTheme.text }]}>
@@ -872,11 +882,17 @@ const PedidosRecibidosScreen = () => {
                 <Text style={[styles.productoCantidadModerno, { color: currentTheme.primary }]}>
                   x{producto.cantidad}
                 </Text>
-                <Text style={[styles.productoPrecioModerno, { color: currentTheme.text }]}>
-                  ${producto.subtotal?.toLocaleString() || producto.precio?.toLocaleString() || 'N/A'}
+                {tieneOferta && (
+                  <Text style={[styles.productoPrecioOriginal, { color: currentTheme.textSecondary }]}>
+                    ${(producto.precio_unitario * producto.cantidad).toLocaleString()}
+                  </Text>
+                )}
+                <Text style={[styles.productoPrecioModerno, { color: tieneOferta ? '#27ae60' : currentTheme.text }]}>
+                  ${precioMostrar.toLocaleString()}
             </Text>
           </View>
-        ))}
+          );
+        })}
       </View>
 
       {/* Ruta de Estados */}
@@ -1196,6 +1212,54 @@ const PedidosRecibidosScreen = () => {
                   </Text>
                 </View>
                   </View>
+                  
+                  {/* ✅ Desglose de Costos */}
+                  <View style={[styles.pedidoDetallesCardModerno, { backgroundColor: currentTheme.background }]}>
+                <View style={styles.sectionHeaderModerno}>
+                  <Ionicons name="cash-outline" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.sectionTituloModerno, { color: currentTheme.text }]}>Desglose de Costos</Text>
+                </View>
+                
+                {pedidoSeleccionado.subtotal && (
+                  <View style={styles.detalleRowModerno}>
+                    <Ionicons name="cart-outline" size={18} color={currentTheme.primary} />
+                    <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Subtotal:</Text>
+                    <Text style={[styles.detalleRowValue, { color: currentTheme.text }]}>
+                      ${pedidoSeleccionado.subtotal?.toLocaleString('es-CL') || pedidoSeleccionado.total?.toLocaleString('es-CL')}
+                    </Text>
+                  </View>
+                )}
+                
+                {pedidoSeleccionado.costo_delivery !== undefined && pedidoSeleccionado.modoEntrega === 'delivery' && (
+                  <View style={styles.detalleRowModerno}>
+                    <Ionicons name="bicycle" size={18} color={currentTheme.primary} />
+                    <Text style={[styles.detalleRowLabel, { color: currentTheme.textSecondary }]}>Delivery:</Text>
+                    <Text style={[styles.detalleRowValue, { color: pedidoSeleccionado.costo_delivery === 0 ? '#27ae60' : currentTheme.text }]}>
+                      {pedidoSeleccionado.costo_delivery === 0 ? '¡Gratis!' : `$${pedidoSeleccionado.costo_delivery?.toLocaleString('es-CL')}`}
+                    </Text>
+                  </View>
+                )}
+                
+                {pedidoSeleccionado.cupon_codigo && pedidoSeleccionado.descuento_cupon > 0 && (
+                  <View style={styles.detalleRowModerno}>
+                    <Ionicons name="pricetag" size={18} color="#27ae60" />
+                    <Text style={[styles.detalleRowLabel, { color: '#27ae60' }]}>
+                      Cupón ({pedidoSeleccionado.cupon_codigo}):
+                    </Text>
+                    <Text style={[styles.detalleRowValue, { color: '#27ae60', fontWeight: '700' }]}>
+                      -${pedidoSeleccionado.descuento_cupon?.toLocaleString('es-CL')}
+                    </Text>
+                  </View>
+                )}
+                
+                <View style={[styles.detalleRowModerno, { marginTop: 12, paddingTop: 12, borderTopWidth: 2, borderTopColor: currentTheme.border }]}>
+                  <Ionicons name="cash" size={20} color={currentTheme.primary} />
+                  <Text style={[styles.detalleRowLabel, { color: currentTheme.text, fontWeight: '700', fontSize: 16 }]}>Total:</Text>
+                  <Text style={[styles.detalleRowValue, { color: currentTheme.primary, fontWeight: '800', fontSize: 18 }]}>
+                    ${pedidoSeleccionado.total?.toLocaleString('es-CL')}
+                  </Text>
+                </View>
+              </View>
 
               {/* Botón para Abrir Mapa en Pantalla Completa */}
               <View style={[styles.mapaCardModerno, { backgroundColor: currentTheme.background }]}>
@@ -2072,6 +2136,12 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 8,
     backgroundColor: '#2A9D8F15',
+  },
+  productoPrecioOriginal: {
+    fontSize: 12,
+    fontWeight: '600',
+    textDecorationLine: 'line-through',
+    marginRight: 6,
   },
   productoPrecioModerno: {
     fontSize: 14,
