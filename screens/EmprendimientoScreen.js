@@ -1132,6 +1132,52 @@ const EmprendimientoScreen = () => {
     }
   };
 
+  // Función para normalizar dirección desde geocoding a formato estandarizado
+  const normalizarDireccionDesdeGeocode = (addressComponents) => {
+    try {
+      // 1. Extraer número de calle
+      const numero = addressComponents.find((c) =>
+        c.types.includes("street_number")
+      )?.long_name || '';
+
+      // 2. Extraer nombre de la calle
+      const calle = addressComponents.find((c) =>
+        c.types.includes("route")
+      )?.long_name || '';
+
+      // 3. Extraer COMUNA (priorizar administrative_area_level_3 en Chile)
+      let comuna = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_3")
+      )?.long_name;
+      
+      if (!comuna) {
+        comuna = addressComponents.find((c) =>
+          c.types.includes("locality") && !c.types.includes("sublocality")
+        )?.long_name;
+      }
+
+      // 4. Extraer REGIÓN
+      let region = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_1")
+      )?.long_name || '';
+      
+      region = region.replace(/^Región\s+(de\s+)?/i, '').replace(/\s+de\s+Santiago$/i, '').trim();
+      if (region === 'Metropolitana de Santiago') region = 'Metropolitana';
+
+      const calleCompleta = `${calle} ${numero}`.trim();
+      
+      return {
+        calle: calleCompleta,
+        comuna: comuna,
+        region: region,
+        direccionCompleta: `${calleCompleta}, ${comuna}, ${region}`
+      };
+    } catch (error) {
+      console.error('Error al normalizar dirección:', error);
+      return null;
+    }
+  };
+
   // Función para confirmar la ubicación del mapa (nueva función mejorada)
   const confirmMapLocation = async () => {
     if (!selectedLocation) {
@@ -1141,16 +1187,46 @@ const EmprendimientoScreen = () => {
 
     setValidandoDireccion(true);
     try {
-      // Validar dirección con Google Maps
-      const validationResult = await validarDireccionConGoogle(currentAddress, selectedLocation);
+      // Usar Google Maps Geocoding API para obtener address_components detallados
+      const API_KEY = "AIzaSyC7UNb-61Xv8cAd_020VrzG7ccvXpTrJg4";
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${selectedLocation.latitude},${selectedLocation.longitude}&key=${API_KEY}&language=es&region=cl`;
       
-      if (validationResult.exacta) {
-        setDireccionValidada(validationResult);
-        setDireccion(validationResult.direccion);
-        setMapModalVisible(false);
-        toast.success("Dirección validada correctamente");
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data.status === "OK" && data.results.length > 0) {
+        const resultado = data.results[0];
+        
+        // Normalizar dirección a formato estandarizado
+        const direccionNormalizada = normalizarDireccionDesdeGeocode(resultado.address_components);
+        
+        if (direccionNormalizada && direccionNormalizada.calle && direccionNormalizada.comuna) {
+          // Verificar que la comuna esté en nuestra base de datos
+          const comunaEncontrada = comunas.find(c => 
+            c.nombre && c.nombre.toLowerCase() === direccionNormalizada.comuna.toLowerCase()
+          );
+          
+          if (comunaEncontrada) {
+            setDireccion(direccionNormalizada.direccionCompleta);
+            setCurrentAddress(direccionNormalizada.direccionCompleta);
+            setDireccionValidada({
+              exacta: true,
+              direccion: direccionNormalizada.direccionCompleta,
+              coordenadas: resultado.geometry.location,
+            });
+            setMapModalVisible(false);
+            toast.success(`Dirección validada: ${direccionNormalizada.direccionCompleta}`);
+          } else {
+            toast.warning(`La comuna "${direccionNormalizada.comuna}" no está en tu lista. Verifica que sea correcta.`, 4000);
+            setDireccion(direccionNormalizada.direccionCompleta);
+            setCurrentAddress(direccionNormalizada.direccionCompleta);
+            setMapModalVisible(false);
+          }
+        } else {
+          toast.error("No se pudo extraer la dirección completa. Intenta con otra ubicación.");
+        }
       } else {
-        toast.error("La dirección no es lo suficientemente precisa. Por favor selecciona un punto más específico", 4000);
+        toast.error("No se pudo validar la ubicación seleccionada.");
       }
     } catch (error) {
       console.log('Error al validar dirección:', error);

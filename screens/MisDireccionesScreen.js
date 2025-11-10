@@ -80,26 +80,60 @@ const MisDireccionesScreen = () => {
   // Función para normalizar dirección desde geocoding a formato estandarizado
   const normalizarDireccionDesdeGeocode = (addressComponents) => {
     try {
-      // Extraer componentes específicos
+      console.log('🔍 Normalizando dirección desde geocode...');
+      console.log('📦 Address components:', JSON.stringify(addressComponents.map(c => ({ types: c.types, name: c.long_name }))));
+      
+      // 1. Extraer número de calle
       const numero = addressComponents.find((c) =>
         c.types.includes("street_number")
       )?.long_name || '';
 
+      // 2. Extraer nombre de la calle
       const calle = addressComponents.find((c) =>
         c.types.includes("route")
       )?.long_name || '';
 
-      const comuna = addressComponents.find((c) =>
-        c.types.includes("administrative_area_level_3") || 
-        c.types.includes("locality")
-      )?.long_name || '';
+      // 3. Extraer COMUNA (priorizar administrative_area_level_3 en Chile)
+      // En Chile, la jerarquía es: País > Región > Provincia > Comuna
+      let comuna = addressComponents.find((c) =>
+        c.types.includes("administrative_area_level_3") // Comuna (ej: Santiago, Providencia)
+      )?.long_name;
+      
+      // Fallback 1: Si no hay level_3, intentar con locality (a veces es la comuna)
+      if (!comuna) {
+        comuna = addressComponents.find((c) =>
+          c.types.includes("locality") && !c.types.includes("sublocality")
+        )?.long_name;
+      }
+      
+      // Fallback 2: Si sigue sin comuna, intentar con political
+      if (!comuna) {
+        const political = addressComponents.filter((c) =>
+          c.types.includes("political") && 
+          !c.types.includes("country") && 
+          !c.types.includes("administrative_area_level_1") &&
+          !c.types.includes("administrative_area_level_2")
+        );
+        comuna = political.length > 0 ? political[0].long_name : '';
+      }
 
-      const region = addressComponents.find((c) =>
+      // 4. Extraer REGIÓN (administrative_area_level_1 en Chile)
+      let region = addressComponents.find((c) =>
         c.types.includes("administrative_area_level_1")
       )?.long_name || '';
+      
+      // Limpiar "Región de" o "Región Metropolitana de Santiago"
+      region = region.replace(/^Región\s+(de\s+)?/i, '').replace(/\s+de\s+Santiago$/i, '').trim();
+      if (region === 'Metropolitana de Santiago') region = 'Metropolitana';
 
       // Construir dirección limpia: "Calle 123, Comuna, Región"
       const calleCompleta = `${calle} ${numero}`.trim();
+      
+      console.log('✅ Dirección normalizada:', {
+        calle: calleCompleta,
+        comuna: comuna,
+        region: region
+      });
       
       return {
         calle: calleCompleta,
@@ -108,7 +142,7 @@ const MisDireccionesScreen = () => {
         direccionCompleta: `${calleCompleta}, ${comuna}, ${region}`
       };
     } catch (error) {
-      console.error('Error al normalizar dirección:', error);
+      console.error('❌ Error al normalizar dirección:', error);
       return null;
     }
   };
