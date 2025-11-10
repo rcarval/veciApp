@@ -1795,12 +1795,47 @@ const enviarReporte = async () => {
                     </Text>
                   </View>
                 ))}
+                
+                {/* Desglose de costos */}
+                <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: currentTheme.border }}>
+                  <View style={styles.confirmacionItemRow}>
+                    <Text style={[styles.confirmacionItem, { color: currentTheme.textSecondary, fontSize: 14 }]}>
+                      Subtotal ({obtenerCantidadTotalItems()} productos)
+                    </Text>
+                    <Text style={[styles.confirmacionItemCantidad, { color: currentTheme.text, fontSize: 14 }]}>
+                      ${obtenerTotalCarrito().toLocaleString("es-CL")}
+                    </Text>
+                  </View>
+                  
+                  {modoEntrega === "delivery" && (
+                    <View style={styles.confirmacionItemRow}>
+                      <Text style={[styles.confirmacionItem, { color: currentTheme.textSecondary, fontSize: 14 }]}>
+                        Costo de Delivery
+                      </Text>
+                      <Text style={[styles.confirmacionItemCantidad, { color: obtenerCostoDelivery() === 0 ? '#27ae60' : currentTheme.text, fontSize: 14 }]}>
+                        {obtenerCostoDelivery() === 0 ? '¡Gratis!' : `$${obtenerCostoDelivery().toLocaleString("es-CL")}`}
+                      </Text>
+                    </View>
+                  )}
+                  
+                  {cuponAplicado && descuentoCupon > 0 && (
+                    <View style={styles.confirmacionItemRow}>
+                      <Text style={[styles.confirmacionItem, { color: '#27ae60', fontSize: 14 }]}>
+                        🎫 Descuento ({cuponAplicado.codigo || 'Cupón'})
+                      </Text>
+                      <Text style={[styles.confirmacionItemCantidad, { color: '#27ae60', fontSize: 14 }]}>
+                        -${descuentoCupon.toLocaleString("es-CL")}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                
                 <View style={[styles.confirmacionTotalRow, { borderTopColor: currentTheme.border }]}>
-                  <Text style={[styles.confirmacionTotalLabel, { color: currentTheme.textSecondary }]}>
-                    Total:
+                  <Text style={[styles.confirmacionTotalLabel, { color: currentTheme.text }]}>
+                    Total a Pagar:
                   </Text>
                   <Text style={[styles.confirmacionTotal, { color: currentTheme.primary }]}>
-                    ${obtenerTotalCarrito().toLocaleString("es-CL")}
+                    ${obtenerTotalConDelivery().toLocaleString("es-CL")}
               </Text>
                 </View>
               </View>
