@@ -9,9 +9,8 @@ import {
 } from 'react-native';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import { FontAwesome } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
+import { useUser } from '../context/UserContext';
 import pedidoService from '../services/pedidoService';
 import io from 'socket.io-client';
 import env from '../config/env';
@@ -20,217 +19,136 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const PedidoPopup = ({ navigation }) => {
   const { currentTheme } = useTheme();
+  const { usuario } = useUser(); // ✅ Usar contexto en lugar de AsyncStorage
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
   const [visible, setVisible] = useState(false);
-  const [hasLoggedIn, setHasLoggedIn] = useState(false);
-  const [usuario, setUsuario] = useState(null);
   const [position, setPosition] = useState({ 
-    x: screenWidth * 0.02,  // 80% del ancho (esquina derecha)
-    y: screenHeight * 0.78  // 78% de la altura (parte inferior)
+    x: screenWidth * 0.02,
+    y: screenHeight * 0.78
   });
   const translateX = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0)).current;
+  const socketRef = useRef(null);
 
-  // Cargar usuario desde AsyncStorage
-  useEffect(() => {
-    const cargarUsuario = async () => {
-      try {
-        const usuarioGuardado = await AsyncStorage.getItem('usuario');
-        if (usuarioGuardado) {
-          const usuarioData = JSON.parse(usuarioGuardado);
-          console.log('👤 Usuario cargado desde AsyncStorage:', usuarioData.nombre);
-          setUsuario(usuarioData);
-        } else {
-          console.log('👤 No hay usuario guardado en AsyncStorage');
-          setUsuario(null);
-        }
-      } catch (error) {
-        console.log('Error al cargar usuario:', error);
-        setUsuario(null);
+  // ✅ Función para cargar pedidos desde el backend
+  const cargarPedidos = async () => {
+    if (!usuario) {
+      console.log('❌ No hay usuario, no se cargan pedidos');
+      return;
+    }
+
+    try {
+      console.log('📦 Cargando pedidos para usuario:', usuario.id);
+      const response = await pedidoService.obtenerPedidos();
+      
+      if (response.ok && response.pedidos) {
+        const pendientes = response.pedidos.filter(p => 
+          ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado)
+        );
+        const rechazados = response.pedidos.filter(p => 
+          p.estado === 'rechazado' && !p.rechazo_confirmado
+        );
+        
+        console.log(`✅ Pedidos cargados: ${pendientes.length} pendientes, ${rechazados.length} rechazados`);
+        
+        setPedidosPendientes(pendientes);
+        setPedidosRechazadosPendientes(rechazados);
+        
+        const totalPendientes = pendientes.length + rechazados.length;
+        setVisible(totalPendientes > 0);
       }
+    } catch (error) {
+      console.error('❌ Error al cargar pedidos:', error);
+    }
+  };
+
+  // ✅ Limpiar estado cuando no hay usuario (cerró sesión o cambió de cuenta)
+  useEffect(() => {
+    if (!usuario) {
+      console.log('🧹 Usuario no existe, limpiando estado del popup');
+      setPedidosPendientes([]);
+      setPedidosRechazadosPendientes([]);
+      setVisible(false);
+      
+      // Desconectar WebSocket si existe
+      if (socketRef.current) {
+        console.log('🔌 Desconectando WebSocket por falta de usuario');
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    }
+  }, [usuario]);
+
+  // ✅ Cargar pedidos iniciales cuando hay usuario
+  useEffect(() => {
+    if (usuario) {
+      console.log('👤 Usuario detectado, cargando pedidos iniciales');
+      cargarPedidos();
+    }
+  }, [usuario?.id]); // Solo cuando cambia el ID del usuario
+
+  // ✅ Conectar WebSocket y escuchar eventos en tiempo real
+  useEffect(() => {
+    if (!usuario) {
+      console.log('❌ No hay usuario, WebSocket no se conecta');
+      return;
+    }
+    
+    console.log('🔌 Conectando WebSocket para usuario:', usuario.id);
+    
+    const socket = io(env.WS_URL, {
+      transports: ['websocket'],
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+    });
+    
+    socketRef.current = socket;
+    
+    // Eventos de conexión
+    socket.on('connect', () => {
+      console.log('✅ WebSocket conectado - ID:', socket.id);
+    });
+    
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket desconectado');
+    });
+    
+    socket.on('error', (error) => {
+      console.error('❌ WebSocket error:', error);
+    });
+    
+    // ✅ Escuchar TODOS los cambios de estado (incluye confirmado, preparando, rechazado, etc.)
+    socket.on(`pedido:estado:${usuario.id}`, (data) => {
+      console.log('📡 Evento pedido:estado recibido:', data);
+      cargarPedidos();
+    });
+    
+    return () => {
+      console.log('🔌 Limpieza: Desconectando WebSocket');
+      socket.disconnect();
+      socketRef.current = null;
     };
+  }, [usuario?.id]); // Reconectar si cambia el usuario
 
-    cargarUsuario();
-  }, []);
-
-  // Detectar cuando la app vuelve del background
+  // ✅ Detectar cuando la app vuelve del background
   useEffect(() => {
     const { AppState } = require('react-native');
     
     const handleAppStateChange = async (nextAppState) => {
-      if (nextAppState === 'active') {
-        console.log('📱 App volvió a estar activa, verificando popup...');
-        
-        // Recargar usuario desde AsyncStorage cada vez que la app vuelva a estar activa
-        try {
-          const usuarioGuardado = await AsyncStorage.getItem('usuario');
-          if (usuarioGuardado) {
-            const usuarioData = JSON.parse(usuarioGuardado);
-            console.log('📱 Usuario recargado al volver:', usuarioData.nombre);
-            setUsuario(usuarioData);
-            
-            // Verificar pedidos pendientes desde el backend
-            try {
-              console.log('📱 Cargando pedidos desde el backend al volver...');
-              const response = await pedidoService.obtenerPedidos();
-              
-              if (response.ok && response.pedidos) {
-                const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
-                const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
-                
-                console.log(`📱 Pedidos encontrados al volver: ${pendientes.length} pendientes, ${rechazados.length} rechazados sin confirmar`);
-                
-                setPedidosPendientes(pendientes);
-                setPedidosRechazadosPendientes(rechazados);
-                
-                const totalPendientes = pendientes.length + rechazados.length;
-                console.log('📱 Total pendientes al volver:', totalPendientes);
-                setVisible(totalPendientes > 0);
-              }
-            } catch (error) {
-              console.log('Error al cargar pedidos al volver:', error);
-            }
-          } else {
-            console.log('📱 No hay usuario guardado, ocultando popup');
-            setUsuario(null);
-            setVisible(false);
-          }
-        } catch (error) {
-          console.log('Error al recargar usuario al volver:', error);
-        }
+      if (nextAppState === 'active' && usuario) {
+        console.log('📱 App activa, recargando pedidos');
+        cargarPedidos();
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     
     return () => subscription?.remove();
-  }, [usuario]);
-
-  // Limpiar sesión solo al iniciar la app (no durante la navegación)
-  useEffect(() => {
-    const limpiarSesionAlInicio = async () => {
-      try {
-        // Solo limpiar si no hay usuario logueado
-        if (!usuario) {
-          console.log('🧹 No hay usuario, limpiando sesión activa');
-          await AsyncStorage.removeItem('sesionActiva');
-          setHasLoggedIn(false);
-          setVisible(false);
-        }
-      } catch (error) {
-        console.log('Error al limpiar sesión:', error);
-      }
-    };
-
-    limpiarSesionAlInicio();
-  }, [usuario]);
-
-  // Verificar si el usuario hizo login en esta sesión
-  useEffect(() => {
-    const verificarSesionActiva = async () => {
-      try {
-        const sesionActiva = await AsyncStorage.getItem('sesionActiva');
-        console.log('🔍 Sesión activa:', sesionActiva);
-        console.log('👤 Usuario:', usuario ? 'EXISTE' : 'NULL');
-        
-        if (sesionActiva === 'true' && usuario) {
-          console.log('✅ Sesión activa detectada, marcando hasLoggedIn = true');
-          setHasLoggedIn(true);
-        } else {
-          console.log('❌ No hay sesión activa, marcando hasLoggedIn = false');
-          setHasLoggedIn(false);
-          setVisible(false);
-        }
-      } catch (error) {
-        console.log('Error al verificar sesión:', error);
-        setHasLoggedIn(false);
-        setVisible(false);
-      }
-    };
-
-    verificarSesionActiva();
-  }, [usuario]);
-
-  // Monitorear cambios en sesionActiva
-  useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const sesionActiva = await AsyncStorage.getItem('sesionActiva');
-        if (sesionActiva === 'true' && usuario && !hasLoggedIn) {
-          console.log('🔄 Sesión activa detectada en monitoreo, marcando hasLoggedIn = true');
-          setHasLoggedIn(true);
-        }
-      } catch (error) {
-        console.log('Error al monitorear sesión:', error);
-      }
-    }, 1000); // Verificar cada segundo
-
-    return () => clearInterval(interval);
-  }, [usuario, hasLoggedIn]);
-
-
-  // Conectar WebSocket y escuchar eventos en tiempo real
-  useEffect(() => {
-    if (!usuario || !hasLoggedIn) {
-      console.log('❌ WebSocket no conectado - usuario:', !!usuario, 'hasLoggedIn:', hasLoggedIn);
-      return;
-    }
-    
-    console.log('🔌 Conectando WebSocket para usuario:', usuario.id);
-    const socket = io(env.WS_URL, {
-      transports: ['websocket'],
-      forceNew: true
-    });
-    
-    // Función para cargar pedidos actuales
-    const cargarPedidos = async () => {
-      try {
-        console.log('📦 [WebSocket] Cargando pedidos desde el backend...');
-        const response = await pedidoService.obtenerPedidos();
-        
-        if (response.ok && response.pedidos) {
-          const pendientes = response.pedidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado));
-          const rechazados = response.pedidos.filter(p => p.estado === 'rechazado' && !p.rechazo_confirmado);
-          
-          console.log(`📦 [WebSocket] Pedidos: ${pendientes.length} pendientes, ${rechazados.length} rechazados`);
-          
-          setPedidosPendientes(pendientes);
-          setPedidosRechazadosPendientes(rechazados);
-          
-          const totalPendientes = pendientes.length + rechazados.length;
-          console.log('📊 [WebSocket] Total pendientes:', totalPendientes, 'Visible:', totalPendientes > 0);
-          setVisible(totalPendientes > 0);
-        }
-      } catch (error) {
-        console.log('❌ [WebSocket] Error al cargar pedidos:', error);
-      }
-    };
-    
-    // Cargar pedidos iniciales
-    cargarPedidos();
-    
-    // Escuchar eventos de cambio de estado del pedido
-    socket.on(`pedido:estado:${usuario.id}`, (data) => {
-      console.log('📡 [WebSocket] Evento recibido pedido:estado:', data);
-      // Recargar pedidos cuando llegue un cambio
-      cargarPedidos();
-    });
-    
-    socket.on('connect', () => {
-      console.log('✅ [WebSocket] Conectado - ID:', socket.id);
-    });
-    
-    socket.on('disconnect', () => {
-      console.log('❌ [WebSocket] Desconectado');
-    });
-    
-    return () => {
-      console.log('🔌 [WebSocket] Desconectando...');
-      socket.disconnect();
-    };
-  }, [usuario, hasLoggedIn]);
+  }, [usuario?.id]);
 
   // Animación de entrada cuando se vuelve visible
   useEffect(() => {
