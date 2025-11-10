@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TouchableOpacity, Text, StyleSheet, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { CommonActions } from '@react-navigation/native';
 import { useTheme } from '../context/ThemeContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useUser } from '../context/UserContext';
 import io from 'socket.io-client';
 import env from '../config/env';
 import pedidoService from '../services/pedidoService';
@@ -13,13 +13,21 @@ import pedidoService from '../services/pedidoService';
 const BottomTabBarEmprendedor = () => {
   const navigation = useNavigation();
   const { currentTheme } = useTheme();
+  const { usuario } = useUser(); // ✅ Usar contexto en lugar de AsyncStorage
   const styles = BottomTabBarEmprendedorStyles(currentTheme);
   const [pedidosPendientes, setPedidosPendientes] = useState(0);
-  const [usuarioId, setUsuarioId] = useState(null);
+  const socketRef = useRef(null);
 
-  // Función para contar pedidos pendientes
+  // ✅ Función para contar pedidos pendientes
   const contarPedidosPendientes = async () => {
+    if (!usuario) {
+      console.log('❌ No hay usuario, no se cuentan pedidos');
+      setPedidosPendientes(0);
+      return;
+    }
+
     try {
+      console.log('📊 Contando pedidos pendientes para emprendedor:', usuario.id);
       const response = await pedidoService.obtenerPedidosRecibidos();
       
       if (response.ok && response.pedidos) {
@@ -29,64 +37,81 @@ const BottomTabBarEmprendedor = () => {
         ).length;
         
         setPedidosPendientes(pendientes);
-        console.log(`📊 Pedidos pendientes: ${pendientes}`);
+        console.log(`✅ Badge actualizado - Pedidos pendientes: ${pendientes}`);
       }
     } catch (error) {
       console.error('❌ Error al contar pedidos pendientes:', error);
     }
   };
 
-  // Cargar usuario y contar pedidos al iniciar
+  // ✅ Limpiar contador cuando no hay usuario (cerró sesión)
   useEffect(() => {
-    const cargarUsuarioYPedidos = async () => {
-      try {
-        const usuarioGuardado = await AsyncStorage.getItem('usuario');
-        if (usuarioGuardado) {
-          const usuarioData = JSON.parse(usuarioGuardado);
-          setUsuarioId(usuarioData.id);
-          
-          // Contar pedidos inicialmente
-          await contarPedidosPendientes();
-        }
-      } catch (error) {
-        console.error('Error al cargar usuario:', error);
+    if (!usuario) {
+      console.log('🧹 Usuario no existe, limpiando contador de pedidos');
+      setPedidosPendientes(0);
+      
+      // Desconectar WebSocket si existe
+      if (socketRef.current) {
+        console.log('🔌 Desconectando WebSocket por falta de usuario');
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
-    };
+    }
+  }, [usuario]);
 
-    cargarUsuarioYPedidos();
-  }, []);
-
-  // Escuchar eventos WebSocket para actualizar contador en tiempo real
+  // ✅ Cargar pedidos iniciales cuando hay usuario
   useEffect(() => {
-    if (!usuarioId) return;
+    if (usuario) {
+      console.log('👤 Usuario emprendedor detectado, cargando pedidos iniciales');
+      contarPedidosPendientes();
+    }
+  }, [usuario?.id]);
 
-    console.log('🔌 Conectando WebSocket para contador de pedidos...');
+  // ✅ Conectar WebSocket y escuchar eventos en tiempo real
+  useEffect(() => {
+    if (!usuario) {
+      console.log('❌ No hay usuario, WebSocket no se conecta');
+      return;
+    }
+
+    console.log('🔌 Conectando WebSocket para contador de pedidos emprendedor:', usuario.id);
+    
     const socket = io(env.WS_URL, {
       transports: ['websocket'],
-      forceNew: true
+      forceNew: true,
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
     });
+
+    socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('✅ WebSocket conectado para contador de pedidos');
     });
+    
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket desconectado del contador');
+    });
 
-    // Escuchar nuevos pedidos
-    socket.on(`pedido:nuevo:${usuarioId}`, async (data) => {
+    // Escuchar NUEVOS pedidos (para el emprendedor)
+    socket.on(`pedido:nuevo:${usuario.id}`, async (data) => {
       console.log('📡 Nuevo pedido recibido, actualizando contador...');
       await contarPedidosPendientes();
     });
 
-    // Escuchar cambios de estado
-    socket.on(`pedido:estado:${usuarioId}`, async (data) => {
+    // Escuchar CAMBIOS DE ESTADO (incluye rechazos, confirmaciones, etc.)
+    socket.on(`pedido:estado:${usuario.id}`, async (data) => {
       console.log('📡 Estado de pedido actualizado, actualizando contador...');
       await contarPedidosPendientes();
     });
 
     return () => {
-      console.log('🔌 Desconectando WebSocket del contador...');
+      console.log('🔌 Limpieza: Desconectando WebSocket del contador');
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, [usuarioId]);
+  }, [usuario?.id]);
 
   // Función para obtener el color del icono (todos blancos por ahora)
   const getIconColor = () => {
