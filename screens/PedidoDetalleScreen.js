@@ -227,9 +227,10 @@ const PedidoDetalleScreen = ({ route, navigation }) => {
   
   // LOG: Detectar cambios en advertenciaVisible
   useEffect(() => {
-    console.log('🚨 ADVERTENCIA VISIBLE CAMBIÓ A:', advertenciaVisible);
-    console.log('   - advertenciaEnProceso.current:', advertenciaEnProceso.current);
-    console.log('   - Stack trace:', new Error().stack);
+    console.log('\n🔴 ====== ADVERTENCIA VISIBLE CAMBIÓ ======');
+    console.log('  👁️ Nuevo valor:', advertenciaVisible);
+    console.log('  🚨 Flag en proceso:', advertenciaEnProceso.current);
+    console.log('🔴 ==========================================\n');
   }, [advertenciaVisible]);
   const [confirmacionVisible, setConfirmacionVisible] = useState(false);
   const [calificacionesData, setCalificacionesData] = useState(null);
@@ -479,7 +480,6 @@ const enviarReporte = async () => {
     return carritoRef.current.reduce((total, item) => {
       // Usar precioOferta si existe y es mayor a 0, si no usar precio normal
       const precioFinal = (item.precioOferta && item.precioOferta > 0) ? item.precioOferta : item.precio;
-      console.log(`  💵 Item: ${item.nombre} | Precio normal: $${item.precio} | Precio oferta: $${item.precioOferta || 'N/A'} | Usando: $${precioFinal}`);
       return total + (precioFinal * item.cantidad);
     }, 0);
   }, []);
@@ -497,12 +497,11 @@ const enviarReporte = async () => {
       const config = producto.configDelivery;
       const subtotal = obtenerTotalCarrito();
       
-      console.log('💰 =================================');
-      console.log('💰 CALCULANDO COSTO DE DELIVERY');
-      console.log('💰 =================================');
-      console.log('  📦 Emprendimiento:', producto.nombre);
-      console.log('  🔧 Modalidad:', modalidad);
-      console.log('  📊 Config completa:', JSON.stringify(config, null, 2));
+      // Logs reducidos para evitar spam
+      const debugDelivery = false; // Cambiar a true solo para debugging
+      if (debugDelivery) {
+        console.log('💰 CALCULANDO DELIVERY: modalidad=' + modalidad + ', distancia=' + distanciaKm + 'km, subtotal=$' + subtotal);
+      }
       
       // Extraer distancia en kilómetros del string (ej: "2.5 km" -> 2.5)
       let distanciaKm = 0;
@@ -510,14 +509,8 @@ const enviarReporte = async () => {
         const match = distancia.match(/([\d.]+)\s*km/i);
         if (match) {
           distanciaKm = parseFloat(match[1]);
-          console.log('  📏 Distancia parseada:', distanciaKm, 'km (desde string:', distancia, ')');
-        } else {
-          console.log('  ⚠️ No se pudo parsear distancia desde:', distancia);
         }
-      } else {
-        console.log('  ⚠️ Distancia no es string válido:', distancia, '(tipo:', typeof distancia, ')');
       }
-      console.log('  💵 Subtotal del pedido:', subtotal);
       
       // Calcular costo base según modalidad
       let costoBase = 0;
@@ -525,90 +518,44 @@ const enviarReporte = async () => {
       switch (modalidad) {
         case 'gratis':
           costoBase = 0;
-          console.log('  ✅ Modalidad GRATIS → Costo = 0');
           break;
           
         case 'por_distancia':
-          console.log('  📍 Modalidad POR DISTANCIA');
-          // Interpretar rangos dinámicos
           if (config.rangos && Array.isArray(config.rangos)) {
             const rangos = config.rangos;
-            console.log('  📋 Rangos recibidos:', JSON.stringify(rangos, null, 2));
-            
-            // Ordenar rangos por distancia (de menor a mayor)
             const rangosOrdenados = rangos.sort((a, b) => parseFloat(a.hastaKm) - parseFloat(b.hastaKm));
-            console.log('  📋 Rangos ordenados:', rangosOrdenados.map(r => `${r.hastaKm}km = $${r.costo}`).join(', '));
-            
-            // Buscar en qué rango cae la distancia
-            let costoEncontrado = false;
             
             for (let i = 0; i < rangosOrdenados.length; i++) {
               const rango = rangosOrdenados[i];
               const hastaKm = parseFloat(rango.hastaKm) || 0;
               const costo = parseInt(rango.costo) || 0;
-              const desdeKm = i > 0 ? parseFloat(rangosOrdenados[i - 1].hastaKm) : 0;
               
-              console.log(`  🔍 Evaluando Rango ${i + 1}:`);
-              console.log(`      - Desde: ${desdeKm} km`);
-              console.log(`      - Hasta: ${hastaKm} km`);
-              console.log(`      - Costo: $${costo}`);
-              console.log(`      - ¿Distancia (${distanciaKm}) <= ${hastaKm}?`, distanciaKm <= hastaKm);
-              console.log(`      - ¿Es último rango?`, i === rangosOrdenados.length - 1);
-              
-              // Si es el último rango o la distancia es menor o igual
               if (i === rangosOrdenados.length - 1 || distanciaKm <= hastaKm) {
-                console.log(`  ✅ RANGO SELECCIONADO: Rango ${i + 1} (${desdeKm} - ${i === rangosOrdenados.length - 1 ? '∞' : hastaKm} km) = $${costo}`);
                 costoBase = costo;
-                costoEncontrado = true;
                 break;
               }
             }
-            
-            if (!costoEncontrado) {
-              console.log('  ⚠️ No se encontró rango aplicable, costo = 0');
-              costoBase = 0;
-            }
-          } else {
-            console.log('  ⚠️ No hay rangos definidos o no es array');
-            costoBase = 0;
           }
           break;
           
         case 'fijo':
           costoBase = parseInt(config.costoFijo) || 0;
-          console.log('  💵 Costo fijo:', costoBase);
           break;
           
         default:
-          console.log('  ⚠️ Modalidad desconocida:', modalidad);
           costoBase = 0;
       }
-      
-      console.log('  📊 Costo base calculado:', costoBase);
       
       // Aplicar regla adicional: "Gratis desde monto mínimo" (override si se cumple)
       if (config.gratisDesde && config.montoMinimoGratis) {
         const montoMinimo = parseInt(config.montoMinimoGratis) || 0;
-        console.log(`  🎁 Verificando regla "Gratis desde":`);
-        console.log(`      - Activada: ${config.gratisDesde}`);
-        console.log(`      - Monto mínimo: $${montoMinimo}`);
-        console.log(`      - Subtotal actual: $${subtotal}`);
-        console.log(`      - ¿Subtotal (${subtotal}) >= Monto mínimo (${montoMinimo})?`, subtotal >= montoMinimo);
-        
         if (subtotal >= montoMinimo) {
-          console.log(`  ✅ REGLA APLICADA: Delivery gratis porque el pedido ($${subtotal}) ≥ monto mínimo ($${montoMinimo})`);
-          console.log('💰 RESULTADO FINAL: $0 (GRATIS)');
-          console.log('💰 =================================\n');
+          if (debugDelivery) console.log('🎁 Delivery gratis: pedido $' + subtotal + ' >= mínimo $' + montoMinimo);
           return 0;
-        } else {
-          console.log(`  ❌ Regla NO aplicada: ${subtotal} < ${montoMinimo}`);
         }
-      } else {
-        console.log(`  ℹ️ Regla "Gratis desde" no configurada (gratisDesde: ${config.gratisDesde}, montoMinimo: ${config.montoMinimoGratis})`);
       }
       
-      console.log('💰 RESULTADO FINAL:', costoBase);
-      console.log('💰 =================================\n');
+      if (debugDelivery) console.log('💰 Delivery: $' + costoBase + ' (modalidad: ' + modalidad + ')');
       return costoBase;
     }
     
@@ -740,11 +687,6 @@ const enviarReporte = async () => {
   // Función para cargar datos completos del emprendimiento (incluye config de delivery)
   const cargarDatosEmprendimiento = useCallback(async () => {
     try {
-      console.log('🏢 =====================================');
-      console.log('🏢 CARGANDO DATOS DEL EMPRENDIMIENTO');
-      console.log('🏢 =====================================');
-      console.log('  📌 ID:', emprendimientoIdReal);
-      
       const response = await fetch(API_ENDPOINTS.EMPRENDIMIENTO_BY_ID(emprendimientoIdReal));
       
       if (!response.ok) {
@@ -752,24 +694,16 @@ const enviarReporte = async () => {
       }
       
       const data = await response.json();
-      console.log('  📦 Respuesta del backend:', JSON.stringify(data, null, 2));
       
       if (data.ok && data.emprendimiento) {
         const emp = data.emprendimiento;
-        console.log('  ✅ Emprendimiento encontrado:', emp.nombre);
-        console.log('  🚚 DATOS DE DELIVERY:');
-        console.log('     - modalidad_delivery (backend):', emp.modalidad_delivery);
-        console.log('     - config_delivery (backend):', typeof emp.config_delivery === 'string' ? emp.config_delivery : JSON.stringify(emp.config_delivery));
-        console.log('     - comunas_cobertura (backend):', typeof emp.comunas_cobertura === 'string' ? emp.comunas_cobertura : JSON.stringify(emp.comunas_cobertura));
         
         // Parsear JSONB si viene como string
         let configDeliveryParsed = emp.config_delivery;
         if (typeof emp.config_delivery === 'string') {
           try {
             configDeliveryParsed = JSON.parse(emp.config_delivery);
-            console.log('     - config_delivery parseado:', JSON.stringify(configDeliveryParsed));
           } catch (e) {
-            console.error('     ⚠️ Error al parsear config_delivery:', e);
             configDeliveryParsed = {};
           }
         }
@@ -778,9 +712,7 @@ const enviarReporte = async () => {
         if (typeof emp.comunas_cobertura === 'string') {
           try {
             comunasCoberturaParsed = JSON.parse(emp.comunas_cobertura);
-            console.log('     - comunas_cobertura parseado:', JSON.stringify(comunasCoberturaParsed));
           } catch (e) {
-            console.error('     ⚠️ Error al parsear comunas_cobertura:', e);
             comunasCoberturaParsed = [];
           }
         }
@@ -793,8 +725,7 @@ const enviarReporte = async () => {
           comunasCobertura: comunasCoberturaParsed || [],
         }));
         
-        console.log('  ✅ Producto actualizado con config de delivery');
-        console.log('🏢 =====================================\n');
+        console.log('✅ Config de delivery cargada:', emp.modalidad_delivery);
       }
     } catch (error) {
       console.error('❌ Error al cargar datos del emprendimiento:', error);
@@ -1412,20 +1343,32 @@ const enviarReporte = async () => {
 
     // Agregar nuevo listener
     const unsubscribeTabPress = parent.addListener('tabPress', (e) => {
-      console.log('📱 TabPress detectado - Items en carrito:', carritoRef.current.length);
+      console.log('\n🔔 ============================================');
+      console.log('🔔 EVENTO TABPRESS DISPARADO');
+      console.log('🔔 ============================================');
+      console.log('  📊 Items en carrito:', carritoRef.current.length);
+      console.log('  🚨 advertenciaEnProceso.current:', advertenciaEnProceso.current);
+      console.log('  👁️ advertenciaVisible:', advertenciaVisible);
+      
       if (carritoRef.current.length > 0) {
         // Prevenir solo si el modal no está ya visible
         if (advertenciaEnProceso.current) {
-          console.log('⏭️ Modal ya en proceso, ignorando evento duplicado de tab');
+          console.log('  ⏭️ MODAL YA EN PROCESO - Ignorando evento duplicado');
+          console.log('🔔 ============================================\n');
           e.preventDefault(); // Seguir previniendo la navegación
           return;
         }
         
-        console.log('🛑 Previniendo navegación tab - Mostrando advertencia');
+        console.log('  🛑 ABRIENDO MODAL DE ADVERTENCIA');
         e.preventDefault();
         advertenciaEnProceso.current = true;
         setNavegacionPendiente({ tipo: 'tab', evento: e });
         setAdvertenciaVisible(true);
+        console.log('  ✅ Modal abierto - Flag activado');
+        console.log('🔔 ============================================\n');
+      } else {
+        console.log('  ℹ️ No hay items en carrito - Permitiendo navegación');
+        console.log('🔔 ============================================\n');
       }
     });
 
@@ -1688,7 +1631,12 @@ const enviarReporte = async () => {
         }}
       >
         {(() => {
-          console.log('🎨 RENDERIZANDO MODAL DE ADVERTENCIA - visible:', advertenciaVisible);
+          if (advertenciaVisible) {
+            console.log('\n🎨 ====== RENDERIZANDO MODAL ======');
+            console.log('  visible:', advertenciaVisible);
+            console.log('  items en carrito:', carritoRef.current.length);
+            console.log('🎨 ==================================\n');
+          }
           return null;
         })()}
         <View style={styles.advertenciaModalContainer}>
@@ -1728,11 +1676,14 @@ const enviarReporte = async () => {
               <TouchableOpacity
                   style={styles.advertenciaCancelarModerno}
                   onPress={() => {
-                    console.log('👈 Usuario eligió VOLVER - Cerrando modal');
+                    console.log('\n👈 ====== BOTÓN VOLVER PRESIONADO ======');
+                    console.log('  🚨 advertenciaEnProceso antes:', advertenciaEnProceso.current);
                     advertenciaEnProceso.current = false; // Resetear flag
+                    console.log('  🚨 advertenciaEnProceso después:', advertenciaEnProceso.current);
                     setAdvertenciaVisible(false);
                     setNavegacionPendiente(null);
                     cancelarNavegacionPendiente();
+                    console.log('👈 =====================================\n');
                   }}
                   activeOpacity={0.8}
               >
@@ -1745,13 +1696,22 @@ const enviarReporte = async () => {
               <TouchableOpacity
                   style={styles.advertenciaSalirModerno}
                 onPress={() => {
-                    console.log('🗑️ Usuario eligió VACIAR - Limpiando carrito');
+                    console.log('\n🗑️ ====== BOTÓN VACIAR PRESIONADO ======');
+                    console.log('  🚨 advertenciaEnProceso antes:', advertenciaEnProceso.current);
+                    console.log('  📦 Items en carrito antes:', carritoRef.current.length);
+                    
                     // Limpiar el carrito local y contexto global
                   carritoRef.current = [];
                     limpiarCarrito();
                   forceUpdate({});
+                    
                     advertenciaEnProceso.current = false; // Resetear flag
                   setAdvertenciaVisible(false);
+                    
+                    console.log('  🚨 advertenciaEnProceso después:', advertenciaEnProceso.current);
+                    console.log('  📦 Items en carrito después:', carritoRef.current.length);
+                    console.log('  ✅ Modal cerrado - Flag reseteado');
+                    console.log('🗑️ =====================================\n');
                     
                     // Ejecutar la navegación pendiente del contexto global si existe
                     if (navPendienteContexto) {
