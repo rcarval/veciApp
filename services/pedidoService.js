@@ -19,12 +19,15 @@ class PedidoService {
   }
 
   /**
-   * Obtiene los pedidos del cliente
+   * Obtiene los pedidos del cliente con paginación
+   * @param {number} page - Página a cargar (default: 1)
+   * @param {number} limit - Cantidad de registros por página (default: 10)
+   * @param {string} tab - Tab activo ('pendientes', 'rechazados', 'historial')
    */
-  async obtenerPedidos() {
+  async obtenerPedidos(page = 1, limit = 10, tab = 'pendientes') {
     try {
       const token = await this.getAuthToken();
-      const url = API_ENDPOINTS.MIS_PEDIDOS;
+      const url = `${API_ENDPOINTS.MIS_PEDIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
       
       console.log('[Pedidos] GET', url);
       
@@ -52,12 +55,15 @@ class PedidoService {
   }
 
   /**
-   * Obtiene los pedidos recibidos del emprendedor
+   * Obtiene los pedidos recibidos del emprendedor con paginación
+   * @param {number} page - Página a cargar (default: 1)
+   * @param {number} limit - Cantidad de registros por página (default: 10)
+   * @param {string} tab - Tab activo ('pendientes', 'cancelados', 'historial')
    */
-  async obtenerPedidosRecibidos() {
+  async obtenerPedidosRecibidos(page = 1, limit = 10, tab = 'pendientes') {
     try {
       const token = await this.getAuthToken();
-      const url = API_ENDPOINTS.PEDIDOS_RECIBIDOS;
+      const url = `${API_ENDPOINTS.PEDIDOS_RECIBIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
       
       console.log('[Pedidos] GET', url);
       
