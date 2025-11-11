@@ -827,6 +827,15 @@ const MisPedidosScreen = () => {
             </View>
           </View>
         </View>
+
+        {/* Toast dentro del modal de calificación para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </Modal>
 
       {/* Modal de Cancelación */}
@@ -925,6 +934,15 @@ const MisPedidosScreen = () => {
             </View>
           </View>
         </View>
+
+        {/* Toast dentro del modal de cancelación para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </Modal>
 
       <View style={[styles.containerMaster, { backgroundColor: currentTheme.background }]}>

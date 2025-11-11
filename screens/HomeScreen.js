@@ -843,6 +843,15 @@ const getIconForCategory = (categoria) => {
               </ScrollView>
             </View>
           </Pressable>
+
+          {/* Toast dentro del modal de dirección para que aparezca por encima */}
+          <Toast
+            visible={toast.toastConfig.visible}
+            message={toast.toastConfig.message}
+            type={toast.toastConfig.type}
+            duration={toast.toastConfig.duration}
+            onHide={toast.hideToast}
+          />
         </Modal>
 
         {/* ✅ Sección de productos destacados */}
@@ -1526,6 +1535,15 @@ const getIconForCategory = (categoria) => {
             </View>
           </View>
         </View>
+
+        {/* Toast dentro del modal obligatorio para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </Modal>
 
       {/* Toast para notificaciones */}

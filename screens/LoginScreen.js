@@ -531,6 +531,15 @@ const LoginScreen = ({ navigation }) => {
           style={styles.modalContainer}
         >
           <LoadingAnimation />
+
+          {/* Toast dentro del modal de loading para que aparezca por encima */}
+          <Toast
+            visible={toast.toastConfig.visible}
+            message={toast.toastConfig.message}
+            type={toast.toastConfig.type}
+            duration={toast.toastConfig.duration}
+            onHide={toast.hideToast}
+          />
         </LinearGradient>
       </Modal>
 
