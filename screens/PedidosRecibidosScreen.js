@@ -247,8 +247,30 @@ const PedidosRecibidosScreen = () => {
     }
   }, [tabActivo]);
 
+  // Cargar contadores al iniciar
+  const cargarContadores = useCallback(async () => {
+    try {
+      console.log('📊 Cargando contadores iniciales...');
+      const response = await pedidoService.obtenerContadoresPedidosRecibidos();
+      
+      if (response.ok && response.contadores) {
+        console.log('✅ Contadores obtenidos:', response.contadores);
+        // Actualizar totales en paginación
+        paginacionRef.current.pendientes.total = response.contadores.pendientes;
+        paginacionRef.current.cancelados.total = response.contadores.cancelados;
+        paginacionRef.current.historial.total = response.contadores.historial;
+      }
+    } catch (error) {
+      console.log('❌ Error al cargar contadores:', error);
+    }
+  }, []);
+
   useEffect(() => {
+    // Cargar contadores primero (rápido)
+    cargarContadores();
+    // Luego cargar pedidos del tab activo
     cargarPedidosRecibidos(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   // Resetear y recargar cuando cambia el tab
@@ -257,8 +279,9 @@ const PedidosRecibidosScreen = () => {
     
     console.log(`🔄 Cambió tab a: ${tabKey}, reseteando paginación`);
     
-    // Resetear paginación del tab actual
-    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: 0 };
+    // Resetear paginación del tab actual (mantener el total)
+    const totalActual = paginacionRef.current[tabKey].total;
+    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: totalActual };
     
     // Limpiar pedidos y cargar desde página 1
     setPedidosRecibidos([]);
@@ -290,13 +313,15 @@ const PedidosRecibidosScreen = () => {
       // Reproducir sonido de notificación
       await reproducirSonidoNotificacion();
       
-      // Recargar la lista de pedidos (refresh)
+      // Recargar contadores y pedidos
+      cargarContadores();
       cargarPedidosRecibidos(true);
     });
 
     // También escuchar cambios de estado (si el emprendedor está viendo la pantalla)
     socket.on(`pedido:estado:${usuario.id}`, (data) => {
       console.log('📡 Cambio de estado recibido via WebSocket:', data);
+      cargarContadores();
       cargarPedidosRecibidos(true);
     });
 
@@ -304,7 +329,7 @@ const PedidosRecibidosScreen = () => {
       console.log('🔌 Desconectando WebSocket de PedidosRecibidos...');
       socket.disconnect();
     };
-  }, [usuario?.id, cargarPedidosRecibidos]);
+  }, [usuario?.id, cargarPedidosRecibidos, cargarContadores]);
 
   // Función temporal para limpiar AsyncStorage (eliminar después de usar)
   const limpiarAsyncStorage = async () => {
@@ -1644,7 +1669,10 @@ const PedidosRecibidosScreen = () => {
               console.log('🔄 Pull to refresh');
               setPedidosRecibidos([]);
               const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
-              paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: 0 };
+              const totalActual = paginacionRef.current[tabKey].total;
+              paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: totalActual };
+              // Recargar contadores y pedidos
+              cargarContadores();
               cargarPedidosRecibidos(true);
             }}
             colors={[currentTheme.primary]}
