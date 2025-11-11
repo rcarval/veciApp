@@ -115,13 +115,13 @@ const styles = StyleSheet.create({
     top: 60,
     left: 16,
     right: 16,
-    zIndex: 9999,
+    zIndex: 999999, // ✅ Máxima prioridad - por encima de TODOS los modales
     borderRadius: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 10,
+    elevation: 999, // ✅ Android - máxima elevación
   },
   content: {
     flexDirection: 'row',
