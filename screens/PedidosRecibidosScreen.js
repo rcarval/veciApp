@@ -12,6 +12,7 @@ import {
   Image,
   Linking,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -42,13 +43,17 @@ const PedidosRecibidosScreen = () => {
   
   const [pedidosRecibidos, setPedidosRecibidos] = useState([]);
   const [tabActivo, setTabActivo] = useState("pendientes");
+  const [refreshing, setRefreshing] = useState(false);
   
   // Estados para paginación - usar useRef para evitar dependencias circulares
   const paginacionRef = useRef({
-    pendientes: { page: 1, hasMore: true, loading: false },
-    cancelados: { page: 1, hasMore: true, loading: false },
-    historial: { page: 1, hasMore: true, loading: false },
+    pendientes: { page: 1, hasMore: true, loading: false, total: 0 },
+    cancelados: { page: 1, hasMore: true, loading: false, total: 0 },
+    historial: { page: 1, hasMore: true, loading: false, total: 0 },
   });
+  
+  // Estado para mostrar el loading más prominente
+  const [loadingMas, setLoadingMas] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -164,6 +169,10 @@ const PedidosRecibidosScreen = () => {
       
       if (refresh) {
         setCargando(true);
+        setRefreshing(true);
+      } else {
+        // Mostrar indicador prominente para carga de más pedidos
+        setLoadingMas(true);
       }
       
       const page = refresh ? 1 : estadoPaginacion.page;
@@ -211,10 +220,11 @@ const PedidosRecibidosScreen = () => {
         paginacionRef.current[tabKey] = {
           page: response.pagination.hasMore ? page + 1 : page,
           hasMore: response.pagination.hasMore,
-          loading: false
+          loading: false,
+          total: response.pagination.total
         };
         
-        console.log(`📊 Paginación actualizada - page: ${paginacionRef.current[tabKey].page}, hasMore: ${paginacionRef.current[tabKey].hasMore}`);
+        console.log(`📊 Paginación actualizada - page: ${paginacionRef.current[tabKey].page}, hasMore: ${paginacionRef.current[tabKey].hasMore}, total: ${response.pagination.total}`);
       } else {
         console.log('⚠️ No se pudieron cargar pedidos');
         if (refresh) {
@@ -229,6 +239,8 @@ const PedidosRecibidosScreen = () => {
       }
     } finally {
       setCargando(false);
+      setRefreshing(false);
+      setLoadingMas(false);
       const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
       paginacionRef.current[tabKey].loading = false;
     }
@@ -245,7 +257,7 @@ const PedidosRecibidosScreen = () => {
     console.log(`🔄 Cambió tab a: ${tabKey}, reseteando paginación`);
     
     // Resetear paginación del tab actual
-    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false };
+    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: 0 };
     
     // Limpiar pedidos y cargar desde página 1
     setPedidosRecibidos([]);
@@ -787,23 +799,50 @@ const PedidosRecibidosScreen = () => {
 
   // Obtener contadores de resultados por tab (considerando búsqueda)
   const obtenerContadores = () => {
-    const pendientes = pedidosRecibidos.filter(p => 
+    // Si hay búsqueda, mostrar solo resultados filtrados
+    if (busqueda.trim()) {
+      const pendientes = pedidosRecibidos.filter(p => 
+        ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
+      );
+      const cancelados = pedidosRecibidos.filter(p => 
+        p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
+      );
+      const historial = pedidosRecibidos.filter(p => {
+        if (p.estado === 'entregado') return true;
+        if (p.estado === 'rechazado') return true;
+        if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
+        return false;
+      });
+
+      return {
+        pendientes: `${filtrarPedidosPorBusqueda(pendientes).length}`,
+        cancelados: `${filtrarPedidosPorBusqueda(cancelados).length}`,
+        historial: `${filtrarPedidosPorBusqueda(historial).length}`,
+      };
+    }
+
+    // Sin búsqueda: mostrar "cargados de total" usando datos del backend
+    const totalPendientes = paginacionRef.current.pendientes.total;
+    const totalCancelados = paginacionRef.current.cancelados.total;
+    const totalHistorial = paginacionRef.current.historial.total;
+
+    const cargadosPendientes = pedidosRecibidos.filter(p => 
       ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
-    );
-    const cancelados = pedidosRecibidos.filter(p => 
+    ).length;
+    const cargadosCancelados = pedidosRecibidos.filter(p => 
       p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
-    );
-    const historial = pedidosRecibidos.filter(p => {
+    ).length;
+    const cargadosHistorial = pedidosRecibidos.filter(p => {
       if (p.estado === 'entregado') return true;
       if (p.estado === 'rechazado') return true;
       if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
       return false;
-    });
+    }).length;
 
     return {
-      pendientes: filtrarPedidosPorBusqueda(pendientes).length,
-      cancelados: filtrarPedidosPorBusqueda(cancelados).length,
-      historial: filtrarPedidosPorBusqueda(historial).length,
+      pendientes: totalPendientes > 0 ? `${cargadosPendientes}/${totalPendientes}` : `${cargadosPendientes}`,
+      cancelados: totalCancelados > 0 ? `${cargadosCancelados}/${totalCancelados}` : `${cargadosCancelados}`,
+      historial: totalHistorial > 0 ? `${cargadosHistorial}/${totalHistorial}` : `${cargadosHistorial}`,
     };
   };
 
@@ -1589,12 +1628,26 @@ const PedidosRecibidosScreen = () => {
       <ScrollView 
         style={[styles.container, { backgroundColor: currentTheme.background }]} 
         contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              console.log('🔄 Pull to refresh');
+              setPedidosRecibidos([]);
+              const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+              paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: 0 };
+              cargarPedidosRecibidos(true);
+            }}
+            colors={[currentTheme.primary]}
+            tintColor={currentTheme.primary}
+          />
+        }
         onScroll={({ nativeEvent }) => {
           const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const paddingToBottom = 100;
+          const paddingToBottom = 200;
           const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
           
-          if (isCloseToBottom && !busqueda) {
+          if (isCloseToBottom && !busqueda && !loadingMas) {
             console.log('📜 Llegaste al final del scroll, cargando más...');
             // Cargar más pedidos al llegar al final (solo si no hay búsqueda activa)
             cargarPedidosRecibidos(false);
@@ -1611,21 +1664,31 @@ const PedidosRecibidosScreen = () => {
           <>
             {pedidosFiltrados.map(renderPedido)}
             
-            {/* Indicador de carga al final */}
-            {!busqueda && paginacionRef.current[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].loading && (
-              <View style={styles.loadingMasContainer}>
-                <ActivityIndicator size="small" color={currentTheme.primary} />
-                <Text style={[styles.loadingMasTexto, { color: currentTheme.textSecondary }]}>
-                  Cargando más pedidos...
-                </Text>
+            {/* Indicador de carga al final - CON MARGEN BOTTOM PARA LA BARRA INFERIOR */}
+            {!busqueda && loadingMas && (
+              <View style={[styles.loadingMasContainer, { backgroundColor: currentTheme.background, paddingBottom: 150 }]}>
+                <View style={[styles.loadingMasCard, { backgroundColor: currentTheme.cardBackground }]}>
+                  <ActivityIndicator size="large" color={currentTheme.primary} />
+                  <Text style={[styles.loadingMasTexto, { color: currentTheme.text, fontSize: 16 }]}>
+                    Cargando más pedidos...
+                  </Text>
+                  <Text style={[styles.loadingMasSubtexto, { color: currentTheme.textSecondary }]}>
+                    {(() => {
+                      const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+                      const total = paginacionRef.current[tabKey].total;
+                      const cargados = pedidosFiltrados.length;
+                      return total > 0 ? `${cargados} de ${total}` : `${cargados}`;
+                    })()}
+                  </Text>
+                </View>
               </View>
             )}
             
-            {/* Mensaje cuando ya no hay más pedidos */}
+            {/* Mensaje cuando ya no hay más pedidos - CON MARGEN BOTTOM */}
             {!busqueda && !paginacionRef.current[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].hasMore && pedidosFiltrados.length >= 10 && (
-              <View style={styles.finListaContainer}>
-                <Ionicons name="checkmark-circle" size={20} color={currentTheme.textSecondary} />
-                <Text style={[styles.finListaTexto, { color: currentTheme.textSecondary }]}>
+              <View style={[styles.finListaContainer, { paddingBottom: 150 }]}>
+                <Ionicons name="checkmark-circle" size={24} color={currentTheme.primary} />
+                <Text style={[styles.finListaTexto, { color: currentTheme.text }]}>
                   Has visto todos los pedidos
                 </Text>
               </View>
@@ -2150,27 +2213,42 @@ const styles = StyleSheet.create({
     color: "#7f8c8d",
   },
   loadingMasContainer: {
-    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 10,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
+  loadingMasCard: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    minWidth: 200,
   },
   loadingMasTexto: {
     fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  loadingMasSubtexto: {
+    fontSize: 13,
     fontWeight: '500',
   },
   finListaContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 20,
-    gap: 8,
+    paddingVertical: 30,
+    gap: 10,
   },
   finListaTexto: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
-    fontStyle: 'italic',
   },
   pedidoCardModerno: {
     borderRadius: 20,
