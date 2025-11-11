@@ -4,7 +4,7 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  ScrollView,
+  FlatList,
   Alert,
   Modal,
   ActivityIndicator,
@@ -1625,9 +1625,17 @@ const PedidosRecibidosScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView 
+      <FlatList 
         style={[styles.container, { backgroundColor: currentTheme.background }]} 
-        contentContainerStyle={styles.scrollContainer}
+        contentContainerStyle={[
+          styles.scrollContainer,
+          pedidosFiltrados.length === 0 && styles.emptyListContainer
+        ]}
+        data={pedidosFiltrados}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => renderPedido(item)}
+        
+        // Pull to refresh
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -1642,30 +1650,28 @@ const PedidosRecibidosScreen = () => {
             tintColor={currentTheme.primary}
           />
         }
-        onScroll={({ nativeEvent }) => {
-          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const paddingToBottom = 200;
-          const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
-          
-          if (isCloseToBottom && !busqueda && !loadingMas) {
-            console.log('📜 Llegaste al final del scroll, cargando más...');
-            // Cargar más pedidos al llegar al final (solo si no hay búsqueda activa)
+        
+        // Scroll infinito automático
+        onEndReached={() => {
+          if (!busqueda && !loadingMas && !cargando) {
+            console.log('📜 onEndReached disparado, cargando más...');
             cargarPedidosRecibidos(false);
           }
         }}
-        scrollEventThrottle={400}
-      >
-        {cargando ? (
-          <View style={styles.loadingContainer}>
-            <LoadingVeciApp size={120} color={currentTheme.primary} />
-            <Text style={[styles.loadingTexto, { marginTop: 30 }]}>Cargando pedidos...</Text>
-          </View>
-        ) : pedidosFiltrados.length > 0 ? (
-          <>
-            {pedidosFiltrados.map(renderPedido)}
-            
-            {/* Indicador de carga al final - CON MARGEN BOTTOM PARA LA BARRA INFERIOR */}
-            {!busqueda && loadingMas && (
+        onEndReachedThreshold={0.3}
+        
+        // Footer con indicador de carga
+        ListFooterComponent={() => {
+          if (cargando) return null;
+          
+          const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+          const hasMore = paginacionRef.current[tabKey].hasMore;
+          const total = paginacionRef.current[tabKey].total;
+          
+          if (busqueda) return <View style={{ height: 150 }} />;
+          
+          if (loadingMas) {
+            return (
               <View style={[styles.loadingMasContainer, { backgroundColor: currentTheme.background, paddingBottom: 150 }]}>
                 <View style={[styles.loadingMasCard, { backgroundColor: currentTheme.cardBackground }]}>
                   <ActivityIndicator size="large" color={currentTheme.primary} />
@@ -1673,51 +1679,63 @@ const PedidosRecibidosScreen = () => {
                     Cargando más pedidos...
                   </Text>
                   <Text style={[styles.loadingMasSubtexto, { color: currentTheme.textSecondary }]}>
-                    {(() => {
-                      const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
-                      const total = paginacionRef.current[tabKey].total;
-                      const cargados = pedidosFiltrados.length;
-                      return total > 0 ? `${cargados} de ${total}` : `${cargados}`;
-                    })()}
+                    {total > 0 ? `${pedidosFiltrados.length} de ${total}` : `${pedidosFiltrados.length}`}
                   </Text>
                 </View>
               </View>
-            )}
-            
-            {/* Mensaje cuando ya no hay más pedidos - CON MARGEN BOTTOM */}
-            {!busqueda && !paginacionRef.current[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].hasMore && pedidosFiltrados.length >= 10 && (
+            );
+          }
+          
+          if (!hasMore && pedidosFiltrados.length >= 10) {
+            return (
               <View style={[styles.finListaContainer, { paddingBottom: 150 }]}>
                 <Ionicons name="checkmark-circle" size={24} color={currentTheme.primary} />
                 <Text style={[styles.finListaTexto, { color: currentTheme.text }]}>
                   Has visto todos los pedidos
                 </Text>
               </View>
-            )}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            {(() => {
-              const iconName = busqueda ? "search" : (tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "cancelados" ? "check-circle" : "history"));
-              const iconColor = tabActivo === "cancelados" ? currentTheme.primary : currentTheme.textSecondary;
-              return <FontAwesome name={iconName} size={64} color={iconColor} />;
-            })()}
-            <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
-              {busqueda ? "No se encontraron pedidos" : (tabActivo === "pendientes" 
-                ? "No hay pedidos pendientes" 
-                : tabActivo === "cancelados"
-                ? "No hay pedidos cancelados"
-                : "No hay pedidos en el historial")}
-            </Text>
-            <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-              {busqueda ? "No hay pedidos con ese número" : (tabActivo === "pendientes" 
-                ? "Los pedidos de tus clientes aparecerán aquí" 
-                : tabActivo === "cancelados"
-                ? "Los pedidos cancelados por clientes aparecerán aquí"
-                : "Los pedidos completados aparecerán aquí")}
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+            );
+          }
+          
+          return <View style={{ height: 150 }} />;
+        }}
+        
+        // Estado vacío
+        ListEmptyComponent={() => {
+          if (cargando) {
+            return (
+              <View style={styles.loadingContainer}>
+                <LoadingVeciApp size={120} color={currentTheme.primary} />
+                <Text style={[styles.loadingTexto, { marginTop: 30 }]}>Cargando pedidos...</Text>
+              </View>
+            );
+          }
+          
+          return (
+            <View style={styles.emptyState}>
+              {(() => {
+                const iconName = busqueda ? "search" : (tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "cancelados" ? "check-circle" : "history"));
+                const iconColor = tabActivo === "cancelados" ? currentTheme.primary : currentTheme.textSecondary;
+                return <FontAwesome name={iconName} size={64} color={iconColor} />;
+              })()}
+              <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+                {busqueda ? "No se encontraron pedidos" : (tabActivo === "pendientes" 
+                  ? "No hay pedidos pendientes" 
+                  : tabActivo === "cancelados"
+                  ? "No hay pedidos cancelados"
+                  : "No hay pedidos en el historial")}
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                {busqueda ? "No hay pedidos con ese número" : (tabActivo === "pendientes" 
+                  ? "Los pedidos de tus clientes aparecerán aquí" 
+                  : tabActivo === "cancelados"
+                  ? "Los pedidos cancelados por clientes aparecerán aquí"
+                  : "Los pedidos completados aparecerán aquí")}
+              </Text>
+            </View>
+          );
+        }}
+      />
 
       {renderModalDetalle()}
       
@@ -2202,6 +2220,10 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     padding: 16,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
   },
   loadingContainer: {
     alignItems: "center",
