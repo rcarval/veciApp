@@ -621,6 +621,15 @@ const EmprendimientoScreen = () => {
               </View>
             </Modal>
           </ScrollView>
+
+          {/* Toast dentro del modal de horarios para que aparezca por encima */}
+          <Toast
+            visible={toast.toastConfig.visible}
+            message={toast.toastConfig.message}
+            type={toast.toastConfig.type}
+            duration={toast.toastConfig.duration}
+            onHide={toast.hideToast}
+          />
         </View>
       </Modal>
     );
@@ -1017,6 +1026,15 @@ const EmprendimientoScreen = () => {
             </View>
           </View>
         </View>
+
+        {/* Toast dentro del modal de mapa para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </View>
     </Modal>
   );
@@ -3743,6 +3761,15 @@ const EmprendimientoScreen = () => {
             </TouchableOpacity>
           </View>
         </ScrollView>
+
+        {/* Toast dentro del modal para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </Modal>
 
       {renderMapModal()}
@@ -3927,6 +3954,15 @@ const EmprendimientoScreen = () => {
             </View>
           </View>
         </ScrollView>
+
+        {/* Toast dentro del modal de verificación para que aparezca por encima */}
+        <Toast
+          visible={toast.toastConfig.visible}
+          message={toast.toastConfig.message}
+          type={toast.toastConfig.type}
+          duration={toast.toastConfig.duration}
+          onHide={toast.hideToast}
+        />
       </Modal>
 
       {/* Diálogo de confirmación elegante */}
