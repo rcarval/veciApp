@@ -27,6 +27,8 @@ import pedidoService from '../services/pedidoService';
 import io from 'socket.io-client';
 import env from '../config/env';
 import LoadingVeciApp from '../components/LoadingVeciApp';
+import Toast from '../components/Toast';
+import useToast from '../hooks/useToast';
 
 const PedidosRecibidosScreen = () => {
   const navigation = useNavigation();
@@ -35,8 +37,18 @@ const PedidosRecibidosScreen = () => {
   const { usuario: usuarioFromContext } = useUser();
   const usuario = route.params?.usuario || usuarioFromContext || {};
   
+  // Toast para notificaciones
+  const toast = useToast();
+  
   const [pedidosRecibidos, setPedidosRecibidos] = useState([]);
   const [tabActivo, setTabActivo] = useState("pendientes");
+  
+  // Estados para paginación
+  const [paginacion, setPaginacion] = useState({
+    pendientes: { page: 1, hasMore: true, loading: false },
+    cancelados: { page: 1, hasMore: true, loading: false },
+    historial: { page: 1, hasMore: true, loading: false },
+  });
   const [modalVisible, setModalVisible] = useState(false);
   const [pedidoSeleccionado, setPedidoSeleccionado] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -135,25 +147,42 @@ const PedidosRecibidosScreen = () => {
     }
   };
 
-  // Función para cargar pedidos recibidos del backend
-  const cargarPedidosRecibidos = useCallback(async () => {
+  // Función para cargar pedidos recibidos del backend con paginación
+  const cargarPedidosRecibidos = useCallback(async (refresh = false) => {
     try {
-      setCargando(true);
+      const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+      const estadoPaginacion = paginacion[tabKey];
       
-      console.log('📥 Cargando pedidos recibidos desde el backend...');
-      const response = await pedidoService.obtenerPedidosRecibidos();
+      // Si ya estamos cargando o no hay más datos, no hacer nada
+      if (estadoPaginacion.loading || (!refresh && !estadoPaginacion.hasMore)) {
+        return;
+      }
+      
+      // Actualizar estado de loading
+      setPaginacion(prev => ({
+        ...prev,
+        [tabKey]: { ...prev[tabKey], loading: true }
+      }));
+      
+      if (refresh) {
+        setCargando(true);
+      }
+      
+      const page = refresh ? 1 : estadoPaginacion.page;
+      
+      console.log(`📥 Cargando pedidos tab: ${tabKey}, page: ${page}, refresh: ${refresh}`);
+      const response = await pedidoService.obtenerPedidosRecibidos(page, 10, tabKey);
       
       if (response.ok && response.pedidos) {
-        console.log(`✅ Pedidos recibidos cargados: ${response.pedidos.length}`);
+        console.log(`✅ Pedidos cargados: ${response.pedidos.length}, hasMore: ${response.pagination.hasMore}`);
         
         // Mapear los datos del backend al formato esperado por el frontend
         const pedidosMapeados = response.pedidos.map(pedido => {
-          // Generar datos adicionales del cliente solo si faltan datos del backend
           const datosCliente = generarDatosCliente();
           
           return {
             id: pedido.id,
-            clienteId: pedido.usuario_id, // ID del cliente para cargar calificación
+            clienteId: pedido.usuario_id,
             negocio: pedido.emprendimiento_nombre || 'Mi Negocio',
             fecha: pedido.created_at,
             fechaHoraReserva: pedido.created_at,
@@ -161,8 +190,8 @@ const PedidosRecibidosScreen = () => {
             cliente: pedido.cliente_nombre || datosCliente.nombre,
             telefonoCliente: pedido.cliente_telefono || datosCliente.telefono,
             fotoPerfilCliente: pedido.cliente_avatar || datosCliente.fotoPerfil,
-            pedidosRealizadosCliente: pedido.total_pedidos || 1, // Usar datos reales del backend
-            clienteDesde: pedido.primera_compra ? new Date(pedido.primera_compra).toLocaleDateString('es-CL') : datosCliente.clienteDesde, // Usar fecha real del backend
+            pedidosRealizadosCliente: pedido.total_pedidos || 1,
+            clienteDesde: pedido.primera_compra ? new Date(pedido.primera_compra).toLocaleDateString('es-CL') : datosCliente.clienteDesde,
             direccion: pedido.direccion_entrega,
             modoEntrega: pedido.modo_entrega,
             total: parseFloat(pedido.total),
@@ -170,7 +199,6 @@ const PedidosRecibidosScreen = () => {
             tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
             motivoCancelacion: pedido.motivo_rechazo,
             cancelacion_confirmada: pedido.cancelacion_confirmada || false,
-            // ✅ Nuevos campos para desglose
             subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
             costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
             cupon_codigo: pedido.cupon_codigo || null,
@@ -178,23 +206,58 @@ const PedidosRecibidosScreen = () => {
           };
         });
         
-        setPedidosRecibidos(pedidosMapeados);
+        // Si es refresh, reemplazar; si no, agregar al final
+        setPedidosRecibidos(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+        
+        // Actualizar paginación
+        setPaginacion(prev => ({
+          ...prev,
+          [tabKey]: {
+            page: response.pagination.hasMore ? page + 1 : page,
+            hasMore: response.pagination.hasMore,
+            loading: false
+          }
+        }));
       } else {
         console.log('⚠️ No se pudieron cargar pedidos');
-        setPedidosRecibidos([]);
+        if (refresh) {
+          setPedidosRecibidos([]);
+        }
       }
     } catch (error) {
       console.log('❌ Error al cargar pedidos recibidos:', error);
-      Alert.alert('Error', 'No se pudieron cargar los pedidos recibidos');
-      setPedidosRecibidos([]);
+      toast.error('No se pudieron cargar los pedidos recibidos');
+      if (refresh) {
+        setPedidosRecibidos([]);
+      }
     } finally {
       setCargando(false);
+      const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+      setPaginacion(prev => ({
+        ...prev,
+        [tabKey]: { ...prev[tabKey], loading: false }
+      }));
     }
-  }, []);
+  }, [tabActivo, paginacion]);
 
   useEffect(() => {
-    cargarPedidosRecibidos();
-  }, [cargarPedidosRecibidos]);
+    cargarPedidosRecibidos(true);
+  }, []);
+  
+  // Resetear y recargar cuando cambia el tab
+  useEffect(() => {
+    const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+    
+    // Resetear paginación del tab actual
+    setPaginacion(prev => ({
+      ...prev,
+      [tabKey]: { page: 1, hasMore: true, loading: false }
+    }));
+    
+    // Limpiar pedidos y cargar desde página 1
+    setPedidosRecibidos([]);
+    cargarPedidosRecibidos(true);
+  }, [tabActivo]);
 
   // Escuchar eventos WebSocket para nuevos pedidos
   useEffect(() => {
@@ -221,14 +284,14 @@ const PedidosRecibidosScreen = () => {
       // Reproducir sonido de notificación
       await reproducirSonidoNotificacion();
       
-      // Recargar la lista de pedidos
-      cargarPedidosRecibidos();
+      // Recargar la lista de pedidos (refresh)
+      cargarPedidosRecibidos(true);
     });
 
     // También escuchar cambios de estado (si el emprendedor está viendo la pantalla)
     socket.on(`pedido:estado:${usuario.id}`, (data) => {
       console.log('📡 Cambio de estado recibido via WebSocket:', data);
-      cargarPedidosRecibidos();
+      cargarPedidosRecibidos(true);
     });
 
     return () => {
@@ -242,12 +305,12 @@ const PedidosRecibidosScreen = () => {
     try {
       await AsyncStorage.clear();
       console.log('✅ AsyncStorage limpiado completamente');
-      Alert.alert('Éxito', 'Todos los datos han sido eliminados. La app se reiniciará.');
+      toast.success('Todos los datos han sido eliminados. La app se reiniciará.');
       // Recargar la pantalla
-      cargarPedidosRecibidos();
+      cargarPedidosRecibidos(true);
     } catch (error) {
       console.log('❌ Error al limpiar AsyncStorage:', error);
-      Alert.alert('Error', 'No se pudieron eliminar los datos');
+      toast.error('No se pudieron eliminar los datos');
     }
   };
 
@@ -369,7 +432,7 @@ const PedidosRecibidosScreen = () => {
   const abrirDireccionesEnMapa = async () => {
     try {
       if (!coordenadasDireccion) {
-        Alert.alert('Error', 'No se han cargado las coordenadas de destino');
+        toast.error('No se han cargado las coordenadas de destino');
         return;
       }
 
@@ -391,11 +454,11 @@ const PedidosRecibidosScreen = () => {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'No se puede abrir la aplicación de mapas');
+        toast.error('No se puede abrir la aplicación de mapas');
       }
     } catch (error) {
       console.error('Error al abrir direcciones:', error);
-      Alert.alert('Error', 'No se pudo abrir la aplicación de mapas');
+      toast.error('No se pudo abrir la aplicación de mapas');
     }
   };
 
@@ -408,11 +471,11 @@ const PedidosRecibidosScreen = () => {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'No se puede realizar la llamada');
+        toast.error('No se puede realizar la llamada');
       }
     } catch (error) {
       console.error('Error al llamar:', error);
-      Alert.alert('Error', 'No se pudo realizar la llamada');
+      toast.error('No se pudo realizar la llamada');
     }
   };
 
@@ -430,11 +493,11 @@ const PedidosRecibidosScreen = () => {
       if (supported) {
         await Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'WhatsApp no está instalado en este dispositivo');
+        toast.error('WhatsApp no está instalado en este dispositivo');
       }
     } catch (error) {
       console.error('Error al abrir WhatsApp:', error);
-      Alert.alert('Error', 'No se pudo abrir WhatsApp');
+      toast.error('No se pudo abrir WhatsApp');
     }
   };
 
@@ -444,15 +507,12 @@ const PedidosRecibidosScreen = () => {
       await pedidoService.cambiarEstadoPedido(pedidoId, nuevoEstado);
       
       // Recargar pedidos desde el backend
-      await cargarPedidosRecibidos();
+      await cargarPedidosRecibidos(true);
       
-      Alert.alert(
-        "Estado actualizado",
-        `El pedido ha sido marcado como: ${getEstadoTexto(nuevoEstado)}`
-      );
+      toast.success(`El pedido ha sido marcado como: ${getEstadoTexto(nuevoEstado)}`);
     } catch (error) {
       console.log('❌ Error al actualizar estado:', error);
-      Alert.alert("Error", "No se pudo actualizar el estado del pedido");
+      toast.error("No se pudo actualizar el estado del pedido");
     }
   };
 
@@ -502,17 +562,14 @@ const PedidosRecibidosScreen = () => {
       setTiempoEntrega(30); // Resetear al valor por defecto
       
       // Recargar pedidos desde el backend
-      await cargarPedidosRecibidos();
+      await cargarPedidosRecibidos(true);
       
       const tiempoSeleccionado = opcionesTiempo.find(op => op.value === tiempoEnMinutos)?.label || `${tiempoEnMinutos} minutos`;
       
-      Alert.alert(
-        'Pedido confirmado', 
-        `Pedido confirmado exitosamente.\nTiempo estimado: ${tiempoSeleccionado}\nHora estimada: ${horaEntregaEstimada.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
-      );
+      toast.success(`Pedido confirmado exitosamente. Tiempo estimado: ${tiempoSeleccionado}, Hora: ${horaEntregaEstimada.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`, 4000);
     } catch (error) {
       console.log('❌ Error al confirmar tiempo de entrega:', error);
-      Alert.alert('Error', 'No se pudo confirmar el pedido.');
+      toast.error('No se pudo confirmar el pedido.');
     }
   };
 
@@ -561,9 +618,9 @@ const PedidosRecibidosScreen = () => {
       await pedidoService.calificarCliente(pedidoParaCalificarCliente.id, calificacionesCliente);
       
       // Recargar pedidos desde el backend
-      await cargarPedidosRecibidos();
+      await cargarPedidosRecibidos(true);
     
-    Alert.alert('Calificación Guardada', 'La calificación del cliente ha sido guardada exitosamente.');
+    toast.success('La calificación del cliente ha sido guardada exitosamente.');
     
     setModalCalificacionClienteVisible(false);
     setPedidoParaCalificarCliente(null);
@@ -575,7 +632,7 @@ const PedidosRecibidosScreen = () => {
     });
     } catch (error) {
       console.log('❌ Error al guardar calificación:', error);
-      Alert.alert('Error', 'No se pudo guardar la calificación.');
+      toast.error('No se pudo guardar la calificación.');
     }
   };
 
@@ -617,7 +674,7 @@ const PedidosRecibidosScreen = () => {
     const motivoFinal = motivoSeleccionado === 'Otro' ? motivoPersonalizado : motivoSeleccionado;
     
     if (!motivoFinal.trim()) {
-      Alert.alert('Motivo requerido', 'Por favor selecciona un motivo para rechazar el pedido.');
+      toast.warning('Por favor selecciona un motivo para rechazar el pedido.');
       return;
     }
 
@@ -632,12 +689,12 @@ const PedidosRecibidosScreen = () => {
       setMotivoRechazo('');
       
       // Recargar pedidos desde el backend
-      await cargarPedidosRecibidos();
+      await cargarPedidosRecibidos(true);
       
-      Alert.alert('Pedido rechazado', 'El pedido ha sido rechazado exitosamente.');
+      toast.success('El pedido ha sido rechazado exitosamente.');
     } catch (error) {
       console.log('❌ Error al rechazar pedido:', error);
-      Alert.alert('Error', 'No se pudo rechazar el pedido.');
+      toast.error('No se pudo rechazar el pedido.');
     }
   };
 
@@ -649,12 +706,12 @@ const PedidosRecibidosScreen = () => {
       await pedidoService.confirmarCancelacion(pedido.id);
       
       // Recargar pedidos desde el backend
-      await cargarPedidosRecibidos();
+      await cargarPedidosRecibidos(true);
       
-      Alert.alert('Cancelación confirmada', 'El pedido cancelado ha sido movido al historial.');
+      toast.success('El pedido cancelado ha sido movido al historial.');
     } catch (error) {
       console.log('❌ Error al confirmar cancelación:', error);
-      Alert.alert('Error', error.message || 'No se pudo confirmar la cancelación.');
+      toast.error(error.message || 'No se pudo confirmar la cancelación.');
     }
   };
 
@@ -760,36 +817,17 @@ const PedidosRecibidosScreen = () => {
   const contadores = obtenerContadores();
 
   const obtenerPedidosFiltrados = () => {
-    let pedidosFiltrados = [];
+    // Los pedidos ya vienen filtrados y ordenados del backend según el tab
+    // Solo aplicar filtro de búsqueda si hay búsqueda activa
+    let pedidosFiltrados = pedidosRecibidos;
     
-    if (tabActivo === "pendientes") {
-      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
-        ['pendiente', 'confirmado', 'preparando', 'listo'].includes(pedido.estado)
-      );
-    } else if (tabActivo === "cancelados") {
-      // Filtrar solo pedidos cancelados NO confirmados (pendientes de confirmar)
-      pedidosFiltrados = pedidosRecibidos.filter(pedido => 
-        pedido.estado === 'cancelado' && pedido.motivoCancelacion && !pedido.cancelacion_confirmada
-      );
-    } else {
-      // Historial: entregados, rechazados y cancelados CONFIRMADOS
-      pedidosFiltrados = pedidosRecibidos.filter(pedido => {
-        if (pedido.estado === 'entregado') return true;
-        if (pedido.estado === 'rechazado') return true;
-        if (pedido.estado === 'cancelado' && pedido.cancelacion_confirmada) return true;
-        return false;
-      });
+    // Aplicar filtro de búsqueda si existe
+    if (busqueda.trim()) {
+      pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosFiltrados);
     }
     
-    // Aplicar filtro de búsqueda
-    pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosFiltrados);
-    
-    // Ordenar del más antiguo al más nuevo por fechaHoraReserva
-    return pedidosFiltrados.sort((a, b) => {
-      const fechaA = a.fechaHoraReserva ? new Date(a.fechaHoraReserva) : new Date(a.fecha);
-      const fechaB = b.fechaHoraReserva ? new Date(b.fechaHoraReserva) : new Date(b.fecha);
-      return fechaA - fechaB; // Más antiguo primero
-    });
+    // NO reordenar - el backend ya lo hizo correctamente
+    return pedidosFiltrados;
   };
 
   const renderPedido = (pedido) => {
@@ -1555,14 +1593,40 @@ const PedidosRecibidosScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={[styles.container, { backgroundColor: currentTheme.background }]} contentContainerStyle={styles.scrollContainer}>
+      <ScrollView 
+        style={[styles.container, { backgroundColor: currentTheme.background }]} 
+        contentContainerStyle={styles.scrollContainer}
+        onScroll={({ nativeEvent }) => {
+          const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+          const paddingToBottom = 20;
+          const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+          
+          if (isCloseToBottom && !busqueda) {
+            // Cargar más pedidos al llegar al final (solo si no hay búsqueda activa)
+            cargarPedidosRecibidos(false);
+          }
+        }}
+        scrollEventThrottle={400}
+      >
         {cargando ? (
           <View style={styles.loadingContainer}>
             <LoadingVeciApp size={120} color={currentTheme.primary} />
             <Text style={[styles.loadingTexto, { marginTop: 30 }]}>Cargando pedidos...</Text>
           </View>
         ) : pedidosFiltrados.length > 0 ? (
-          pedidosFiltrados.map(renderPedido)
+          <>
+            {pedidosFiltrados.map(renderPedido)}
+            
+            {/* Indicador de carga al final */}
+            {paginacion[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].loading && (
+              <View style={styles.loadingMasContainer}>
+                <ActivityIndicator size="small" color={currentTheme.primary} />
+                <Text style={[styles.loadingMasTexto, { color: currentTheme.textSecondary }]}>
+                  Cargando más pedidos...
+                </Text>
+              </View>
+            )}
+          </>
         ) : (
           <View style={styles.emptyState}>
             {(() => {
@@ -1903,6 +1967,15 @@ const PedidosRecibidosScreen = () => {
           )}
         </View>
       </Modal>
+
+      {/* Toast para notificaciones */}
+      <Toast
+        visible={toast.toastConfig.visible}
+        message={toast.toastConfig.message}
+        type={toast.toastConfig.type}
+        duration={toast.toastConfig.duration}
+        onHide={toast.hideToast}
+      />
     </View>
   );
 };
@@ -2071,6 +2144,17 @@ const styles = StyleSheet.create({
     marginTop: 15,
     fontSize: 16,
     color: "#7f8c8d",
+  },
+  loadingMasContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 10,
+  },
+  loadingMasTexto: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   pedidoCardModerno: {
     borderRadius: 20,
