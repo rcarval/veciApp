@@ -49,6 +49,7 @@ const MisPedidosScreen = () => {
   const [motivoCancelacion, setMotivoCancelacion] = useState('');
   const [motivoSeleccionado, setMotivoSeleccionado] = useState('');
   const [motivoPersonalizado, setMotivoPersonalizado] = useState('');
+  const [busqueda, setBusqueda] = useState('');
 
   // Motivos predefinidos para cancelación
   const motivosCancelacion = [
@@ -326,6 +327,22 @@ const MisPedidosScreen = () => {
     }
   };
 
+  // Función para formatear número de pedido
+  const formatearNumeroPedido = (id) => {
+    return `#P-${String(id).padStart(6, '0')}`;
+  };
+
+  // Función para filtrar pedidos por búsqueda
+  const filtrarPedidosPorBusqueda = (pedidos) => {
+    if (!busqueda.trim()) return pedidos;
+    
+    const busquedaLower = busqueda.toLowerCase().trim();
+    return pedidos.filter(pedido => {
+      const numeroPedido = formatearNumeroPedido(pedido.id).toLowerCase();
+      return numeroPedido.includes(busquedaLower);
+    });
+  };
+
   // Función para ordenar pedidos del más nuevo al más antiguo
   const ordenarPedidosPorFecha = (pedidos) => {
     return pedidos.sort((a, b) => {
@@ -443,7 +460,12 @@ const MisPedidosScreen = () => {
               )}
             </View>
             <View style={styles.pedidoInfoModerno}>
-              <Text style={[styles.pedidoNegocioModerno, { color: currentTheme.text }]}>{pedido.negocio}</Text>
+              <View style={styles.negocioYNumeroContainer}>
+                <Text style={[styles.pedidoNegocioModerno, { color: currentTheme.text }]}>{pedido.negocio}</Text>
+                <View style={[styles.numeroPedidoBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                  <Text style={[styles.numeroPedidoTexto, { color: currentTheme.primary }]}>{formatearNumeroPedido(pedido.id)}</Text>
+                </View>
+              </View>
               <View style={styles.fechaContainer}>
                 <Ionicons name="calendar-outline" size={12} color={currentTheme.textSecondary} />
                 <Text style={[styles.pedidoFechaModerno, { color: currentTheme.textSecondary }]}>
@@ -529,7 +551,12 @@ const MisPedidosScreen = () => {
               )}
             </View>
             <View style={styles.pedidoInfoModerno}>
-              <Text style={[styles.pedidoNegocioModerno, { color: currentTheme.text }]}>{pedido.negocio}</Text>
+              <View style={styles.negocioYNumeroContainer}>
+                <Text style={[styles.pedidoNegocioModerno, { color: currentTheme.text }]}>{pedido.negocio}</Text>
+                <View style={[styles.numeroPedidoBadge, { backgroundColor: currentTheme.primary + '15' }]}>
+                  <Text style={[styles.numeroPedidoTexto, { color: currentTheme.primary }]}>{formatearNumeroPedido(pedido.id)}</Text>
+                </View>
+              </View>
               <View style={styles.fechaContainer}>
                 <Ionicons name="calendar-outline" size={12} color={currentTheme.textSecondary} />
                 <Text style={[styles.pedidoFechaModerno, { color: currentTheme.textSecondary }]}>
@@ -913,6 +940,27 @@ const MisPedidosScreen = () => {
           </View>
         </LinearGradient>
 
+        {/* Buscador por número de pedido */}
+        <View style={[styles.buscadorContainer, { backgroundColor: currentTheme.background }]}>
+          <View style={[styles.buscadorInputContainer, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+            <Ionicons name="search-outline" size={20} color={currentTheme.textSecondary} />
+            <TextInput
+              style={[styles.buscadorInput, { color: currentTheme.text }]}
+              placeholder="Buscar por número de pedido (ej: P-000001)"
+              placeholderTextColor={currentTheme.textSecondary}
+              value={busqueda}
+              onChangeText={setBusqueda}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {busqueda.length > 0 && (
+              <TouchableOpacity onPress={() => setBusqueda('')} activeOpacity={0.7}>
+                <Ionicons name="close-circle" size={20} color={currentTheme.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+
       <View style={[styles.tabsContainer, { backgroundColor: currentTheme.background }]}>
         <TouchableOpacity
           style={styles.tabModerno}
@@ -1032,36 +1080,48 @@ const MisPedidosScreen = () => {
         })()}
         
         {tabActivo === 'pendientes' ? (
-          pedidosPendientes.length > 0 ? (
-            ordenarPedidosPorFecha([...pedidosPendientes]).map(renderPedido)
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome name="shopping-cart" size={48} color={currentTheme.textSecondary} />
-              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos pendientes</Text>
-            </View>
-          )
+          (() => {
+            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosPendientes);
+            return pedidosFiltrados.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedido)
+            ) : (
+              <View style={styles.emptyState}>
+                <FontAwesome name={busqueda ? "search" : "shopping-cart"} size={48} color={currentTheme.textSecondary} />
+                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
+                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos pendientes'}
+                </Text>
+              </View>
+            );
+          })()
         ) : tabActivo === 'rechazados' ? (
-          pedidosRechazadosPendientes.length > 0 ? (
-            (() => {
-              console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosRechazadosPendientes.length, 'pedidos');
-              console.log('❌ DEBUG - Datos:', pedidosRechazadosPendientes);
-              return ordenarPedidosPorFecha([...pedidosRechazadosPendientes]).map(renderPedidoRechazado);
-            })()
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome name="check-circle" size={48} color={currentTheme.primary} />
-              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos rechazados pendientes</Text>
-            </View>
-          )
+          (() => {
+            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosRechazadosPendientes);
+            console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosFiltrados.length, 'pedidos');
+            return pedidosFiltrados.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedidoRechazado)
+            ) : (
+              <View style={styles.emptyState}>
+                <FontAwesome name={busqueda ? "search" : "check-circle"} size={48} color={currentTheme.primary} />
+                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
+                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos rechazados pendientes'}
+                </Text>
+              </View>
+            );
+          })()
         ) : (
-          pedidosCompletados.length > 0 ? (
-            ordenarPedidosPorFecha([...pedidosCompletados]).map(renderPedido)
-          ) : (
-            <View style={styles.emptyState}>
-              <FontAwesome name="history" size={48} color={currentTheme.textSecondary} />
-              <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>No tienes pedidos en el historial</Text>
-            </View>
-          )
+          (() => {
+            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosCompletados);
+            return pedidosFiltrados.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedido)
+            ) : (
+              <View style={styles.emptyState}>
+                <FontAwesome name={busqueda ? "search" : "history"} size={48} color={currentTheme.textSecondary} />
+                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
+                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos en el historial'}
+                </Text>
+              </View>
+            );
+          })()
         )}
       </ScrollView>
       </View>
@@ -1149,10 +1209,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  buscadorContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  buscadorInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buscadorInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
   tabsContainer: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: 20,
+    marginTop: 12,
     gap: 10,
   },
   tabModerno: {
@@ -1241,10 +1325,26 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  negocioYNumeroContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
   pedidoNegocioModerno: {
     fontSize: 17,
     fontWeight: '800',
     letterSpacing: 0.3,
+  },
+  numeroPedidoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  numeroPedidoTexto: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
   },
   fechaContainer: {
     flexDirection: 'row',

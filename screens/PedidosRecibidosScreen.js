@@ -64,6 +64,7 @@ const PedidosRecibidosScreen = () => {
   const [calificacionClienteReal, setCalificacionClienteReal] = useState(null);
   const [modalMapaFullVisible, setModalMapaFullVisible] = useState(false);
   const [direccionMapa, setDireccionMapa] = useState('');
+  const [busqueda, setBusqueda] = useState('');
 
   // Opciones de tiempo de entrega
   const opcionesTiempo = [
@@ -717,6 +718,22 @@ const PedidosRecibidosScreen = () => {
     );
   };
 
+  // Función para formatear número de pedido
+  const formatearNumeroPedido = (id) => {
+    return `#P-${String(id).padStart(6, '0')}`;
+  };
+
+  // Función para filtrar pedidos por búsqueda
+  const filtrarPedidosPorBusqueda = (pedidos) => {
+    if (!busqueda.trim()) return pedidos;
+    
+    const busquedaLower = busqueda.toLowerCase().trim();
+    return pedidos.filter(pedido => {
+      const numeroPedido = formatearNumeroPedido(pedido.id).toLowerCase();
+      return numeroPedido.includes(busquedaLower);
+    });
+  };
+
   const obtenerPedidosFiltrados = () => {
     let pedidosFiltrados = [];
     
@@ -738,6 +755,9 @@ const PedidosRecibidosScreen = () => {
         return false;
       });
     }
+    
+    // Aplicar filtro de búsqueda
+    pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosFiltrados);
     
     // Ordenar del más antiguo al más nuevo por fechaHoraReserva
     return pedidosFiltrados.sort((a, b) => {
@@ -768,12 +788,15 @@ const PedidosRecibidosScreen = () => {
           colors={[estadoColor + '08', 'transparent']}
           style={styles.pedidoCardGradiente}
         >
-          {/* Nombre del Emprendimiento */}
+          {/* Nombre del Emprendimiento + Número de Pedido */}
           <View style={styles.negocioContainerModerno}>
             <Ionicons name="storefront" size={16} color={currentTheme.primary} />
             <Text style={[styles.negocioNombreModerno, { color: currentTheme.primary }]}>
               {pedido.negocio}
             </Text>
+            <View style={[styles.numeroPedidoBadge, { backgroundColor: currentTheme.primary + '15', marginLeft: 'auto' }]}>
+              <Text style={[styles.numeroPedidoTexto, { color: currentTheme.primary }]}>{formatearNumeroPedido(pedido.id)}</Text>
+            </View>
             </View>
 
           {/* Header con foto del cliente */}
@@ -1369,6 +1392,27 @@ const PedidosRecibidosScreen = () => {
         </View>
       </LinearGradient>
 
+      {/* Buscador por número de pedido */}
+      <View style={[styles.buscadorContainer, { backgroundColor: currentTheme.background }]}>
+        <View style={[styles.buscadorInputContainer, { backgroundColor: currentTheme.cardBackground, borderColor: currentTheme.border }]}>
+          <Ionicons name="search-outline" size={20} color={currentTheme.textSecondary} />
+          <TextInput
+            style={[styles.buscadorInput, { color: currentTheme.text }]}
+            placeholder="Buscar por número de pedido (ej: P-000001)"
+            placeholderTextColor={currentTheme.textSecondary}
+            value={busqueda}
+            onChangeText={setBusqueda}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {busqueda.length > 0 && (
+            <TouchableOpacity onPress={() => setBusqueda('')} activeOpacity={0.7}>
+              <Ionicons name="close-circle" size={20} color={currentTheme.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
       {/* Tabs Modernos */}
       <View style={[styles.tabsContainer, { backgroundColor: currentTheme.background }]}>
         <TouchableOpacity
@@ -1496,23 +1540,23 @@ const PedidosRecibidosScreen = () => {
         ) : (
           <View style={styles.emptyState}>
             {(() => {
-              const iconName = tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "cancelados" ? "check-circle" : "history");
+              const iconName = busqueda ? "search" : (tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "cancelados" ? "check-circle" : "history"));
               const iconColor = tabActivo === "cancelados" ? currentTheme.primary : currentTheme.textSecondary;
               return <FontAwesome name={iconName} size={64} color={iconColor} />;
             })()}
             <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
-              {tabActivo === "pendientes" 
+              {busqueda ? "No se encontraron pedidos" : (tabActivo === "pendientes" 
                 ? "No hay pedidos pendientes" 
                 : tabActivo === "cancelados"
                 ? "No hay pedidos cancelados"
-                : "No hay pedidos en el historial"}
+                : "No hay pedidos en el historial")}
             </Text>
             <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
-              {tabActivo === "pendientes" 
+              {busqueda ? "No hay pedidos con ese número" : (tabActivo === "pendientes" 
                 ? "Los pedidos de tus clientes aparecerán aquí" 
                 : tabActivo === "cancelados"
                 ? "Los pedidos cancelados por clientes aparecerán aquí"
-                : "Los pedidos completados aparecerán aquí"}
+                : "Los pedidos completados aparecerán aquí")}
             </Text>
           </View>
         )}
@@ -1908,10 +1952,44 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
   },
+  buscadorContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 8,
+  },
+  buscadorInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    gap: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  buscadorInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  numeroPedidoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  numeroPedidoTexto: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
   tabsContainer: {
     flexDirection: 'row',
     marginHorizontal: 16,
-    marginTop: 20,
+    marginTop: 12,
     marginBottom: 10,
     paddingVertical: 8,
     gap: 10,
