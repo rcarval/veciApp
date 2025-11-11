@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  ScrollView,
   Alert,
   Modal,
   ActivityIndicator,
