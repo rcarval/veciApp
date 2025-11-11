@@ -332,14 +332,15 @@ const MisPedidosScreen = () => {
     return `#P-${String(id).padStart(6, '0')}`;
   };
 
-  // Función para filtrar pedidos por búsqueda
+  // Función para filtrar pedidos por búsqueda (solo números)
   const filtrarPedidosPorBusqueda = (pedidos) => {
     if (!busqueda.trim()) return pedidos;
     
-    const busquedaLower = busqueda.toLowerCase().trim();
+    const busquedaNumeros = busqueda.trim();
     return pedidos.filter(pedido => {
-      const numeroPedido = formatearNumeroPedido(pedido.id).toLowerCase();
-      return numeroPedido.includes(busquedaLower);
+      // Extraer solo la parte numérica del ID (000001, 000020, etc)
+      const idNumerico = String(pedido.id).padStart(6, '0');
+      return idNumerico.includes(busquedaNumeros);
     });
   };
 
@@ -946,10 +947,16 @@ const MisPedidosScreen = () => {
             <Ionicons name="search-outline" size={20} color={currentTheme.textSecondary} />
             <TextInput
               style={[styles.buscadorInput, { color: currentTheme.text }]}
-              placeholder="Buscar por número de pedido (ej: P-000001)"
+              placeholder="Buscar por número (ej: 20, 123, 456)"
               placeholderTextColor={currentTheme.textSecondary}
               value={busqueda}
-              onChangeText={setBusqueda}
+              onChangeText={(text) => {
+                // Solo permitir números
+                const soloNumeros = text.replace(/[^0-9]/g, '');
+                setBusqueda(soloNumeros);
+              }}
+              keyboardType="numeric"
+              maxLength={6}
               autoCapitalize="none"
               autoCorrect={false}
             />
