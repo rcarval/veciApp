@@ -353,6 +353,17 @@ const MisPedidosScreen = () => {
     });
   };
 
+  // Obtener contadores de resultados por tab (considerando búsqueda)
+  const obtenerContadores = () => {
+    return {
+      pendientes: filtrarPedidosPorBusqueda(pedidosPendientes).length,
+      rechazados: filtrarPedidosPorBusqueda(pedidosRechazadosPendientes).length,
+      historial: filtrarPedidosPorBusqueda(pedidosCompletados).length,
+    };
+  };
+
+  const contadores = obtenerContadores();
+
   // Función para manejar calificación de criterio
   const manejarCalificacionCriterio = (criterio, valor) => {
     setCalificacionesUsuario(prev => ({
@@ -934,7 +945,7 @@ const MisPedidosScreen = () => {
             <View style={styles.headerBadgeWrapper}>
               <View style={[styles.headerBadge, { backgroundColor: 'white' }]}>
                 <Text style={[styles.headerBadgeText, { color: currentTheme.primary }]}>
-                  {pedidosPendientes.length}
+                  {contadores.pendientes}
                 </Text>
               </View>
             </View>
@@ -999,7 +1010,7 @@ const MisPedidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === 'pendientes' ? "white" : currentTheme.primary }
               ]}>
-                {pedidosPendientes.length}
+                {contadores.pendientes}
               </Text>
             </View>
           </LinearGradient>
@@ -1035,7 +1046,7 @@ const MisPedidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === 'rechazados' ? "white" : '#e74c3c' }
               ]}>
-                {pedidosRechazadosPendientes.length}
+                {contadores.rechazados}
               </Text>
             </View>
           </LinearGradient>
@@ -1071,7 +1082,7 @@ const MisPedidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === 'historial' ? "white" : currentTheme.primary }
               ]}>
-                {pedidosCompletados.length}
+                {contadores.historial}
               </Text>
             </View>
           </LinearGradient>

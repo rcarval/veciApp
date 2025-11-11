@@ -735,6 +735,30 @@ const PedidosRecibidosScreen = () => {
     });
   };
 
+  // Obtener contadores de resultados por tab (considerando búsqueda)
+  const obtenerContadores = () => {
+    const pendientes = pedidosRecibidos.filter(p => 
+      ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
+    );
+    const cancelados = pedidosRecibidos.filter(p => 
+      p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
+    );
+    const historial = pedidosRecibidos.filter(p => {
+      if (p.estado === 'entregado') return true;
+      if (p.estado === 'rechazado') return true;
+      if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
+      return false;
+    });
+
+    return {
+      pendientes: filtrarPedidosPorBusqueda(pendientes).length,
+      cancelados: filtrarPedidosPorBusqueda(cancelados).length,
+      historial: filtrarPedidosPorBusqueda(historial).length,
+    };
+  };
+
+  const contadores = obtenerContadores();
+
   const obtenerPedidosFiltrados = () => {
     let pedidosFiltrados = [];
     
@@ -1386,7 +1410,7 @@ const PedidosRecibidosScreen = () => {
           <View style={styles.headerBadgeWrapper}>
             <View style={[styles.headerBadge, { backgroundColor: 'white' }]}>
               <Text style={[styles.headerBadgeText, { color: currentTheme.primary }]}>
-                {pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length}
+                {contadores.pendientes}
               </Text>
             </View>
           </View>
@@ -1452,7 +1476,7 @@ const PedidosRecibidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === "pendientes" ? "white" : currentTheme.primary }
               ]}>
-              {pedidosRecibidos.filter(p => ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)).length}
+              {contadores.pendientes}
             </Text>
           </View>
           </LinearGradient>
@@ -1488,7 +1512,7 @@ const PedidosRecibidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === "cancelados" ? "white" : '#e74c3c' }
               ]}>
-                {pedidosRecibidos.filter(p => p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada).length}
+                {contadores.cancelados}
             </Text>
           </View>
           </LinearGradient>
@@ -1524,12 +1548,7 @@ const PedidosRecibidosScreen = () => {
                 styles.tabBadgeTextoModerno, 
                 { color: tabActivo === "historial" ? "white" : currentTheme.primary }
               ]}>
-                {pedidosRecibidos.filter(p => {
-                  if (p.estado === 'entregado') return true;
-                  if (p.estado === 'rechazado') return true;
-                  if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
-                  return false;
-                }).length}
+                {contadores.historial}
             </Text>
           </View>
           </LinearGradient>
