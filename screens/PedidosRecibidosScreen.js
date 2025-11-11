@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -43,8 +43,8 @@ const PedidosRecibidosScreen = () => {
   const [pedidosRecibidos, setPedidosRecibidos] = useState([]);
   const [tabActivo, setTabActivo] = useState("pendientes");
   
-  // Estados para paginación
-  const [paginacion, setPaginacion] = useState({
+  // Estados para paginación - usar useRef para evitar dependencias circulares
+  const paginacionRef = useRef({
     pendientes: { page: 1, hasMore: true, loading: false },
     cancelados: { page: 1, hasMore: true, loading: false },
     historial: { page: 1, hasMore: true, loading: false },
@@ -151,18 +151,16 @@ const PedidosRecibidosScreen = () => {
   const cargarPedidosRecibidos = useCallback(async (refresh = false) => {
     try {
       const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
-      const estadoPaginacion = paginacion[tabKey];
+      const estadoPaginacion = paginacionRef.current[tabKey];
       
       // Si ya estamos cargando o no hay más datos, no hacer nada
       if (estadoPaginacion.loading || (!refresh && !estadoPaginacion.hasMore)) {
+        console.log(`⏭️ Saltando carga - loading: ${estadoPaginacion.loading}, hasMore: ${estadoPaginacion.hasMore}, refresh: ${refresh}`);
         return;
       }
       
       // Actualizar estado de loading
-      setPaginacion(prev => ({
-        ...prev,
-        [tabKey]: { ...prev[tabKey], loading: true }
-      }));
+      paginacionRef.current[tabKey].loading = true;
       
       if (refresh) {
         setCargando(true);
@@ -174,7 +172,7 @@ const PedidosRecibidosScreen = () => {
       const response = await pedidoService.obtenerPedidosRecibidos(page, 10, tabKey);
       
       if (response.ok && response.pedidos) {
-        console.log(`✅ Pedidos cargados: ${response.pedidos.length}, hasMore: ${response.pagination.hasMore}`);
+        console.log(`✅ Pedidos cargados: ${response.pedidos.length}, total: ${response.pagination.total}, hasMore: ${response.pagination.hasMore}`);
         
         // Mapear los datos del backend al formato esperado por el frontend
         const pedidosMapeados = response.pedidos.map(pedido => {
@@ -209,15 +207,14 @@ const PedidosRecibidosScreen = () => {
         // Si es refresh, reemplazar; si no, agregar al final
         setPedidosRecibidos(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
         
-        // Actualizar paginación
-        setPaginacion(prev => ({
-          ...prev,
-          [tabKey]: {
-            page: response.pagination.hasMore ? page + 1 : page,
-            hasMore: response.pagination.hasMore,
-            loading: false
-          }
-        }));
+        // Actualizar paginación en el ref
+        paginacionRef.current[tabKey] = {
+          page: response.pagination.hasMore ? page + 1 : page,
+          hasMore: response.pagination.hasMore,
+          loading: false
+        };
+        
+        console.log(`📊 Paginación actualizada - page: ${paginacionRef.current[tabKey].page}, hasMore: ${paginacionRef.current[tabKey].hasMore}`);
       } else {
         console.log('⚠️ No se pudieron cargar pedidos');
         if (refresh) {
@@ -233,12 +230,9 @@ const PedidosRecibidosScreen = () => {
     } finally {
       setCargando(false);
       const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
-      setPaginacion(prev => ({
-        ...prev,
-        [tabKey]: { ...prev[tabKey], loading: false }
-      }));
+      paginacionRef.current[tabKey].loading = false;
     }
-  }, [tabActivo, paginacion]);
+  }, [tabActivo]);
 
   useEffect(() => {
     cargarPedidosRecibidos(true);
@@ -248,16 +242,15 @@ const PedidosRecibidosScreen = () => {
   useEffect(() => {
     const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
     
+    console.log(`🔄 Cambió tab a: ${tabKey}, reseteando paginación`);
+    
     // Resetear paginación del tab actual
-    setPaginacion(prev => ({
-      ...prev,
-      [tabKey]: { page: 1, hasMore: true, loading: false }
-    }));
+    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false };
     
     // Limpiar pedidos y cargar desde página 1
     setPedidosRecibidos([]);
     cargarPedidosRecibidos(true);
-  }, [tabActivo]);
+  }, [tabActivo, cargarPedidosRecibidos]);
 
   // Escuchar eventos WebSocket para nuevos pedidos
   useEffect(() => {
@@ -1598,10 +1591,11 @@ const PedidosRecibidosScreen = () => {
         contentContainerStyle={styles.scrollContainer}
         onScroll={({ nativeEvent }) => {
           const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-          const paddingToBottom = 20;
+          const paddingToBottom = 100;
           const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
           
           if (isCloseToBottom && !busqueda) {
+            console.log('📜 Llegaste al final del scroll, cargando más...');
             // Cargar más pedidos al llegar al final (solo si no hay búsqueda activa)
             cargarPedidosRecibidos(false);
           }
@@ -1618,11 +1612,21 @@ const PedidosRecibidosScreen = () => {
             {pedidosFiltrados.map(renderPedido)}
             
             {/* Indicador de carga al final */}
-            {paginacion[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].loading && (
+            {!busqueda && paginacionRef.current[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].loading && (
               <View style={styles.loadingMasContainer}>
                 <ActivityIndicator size="small" color={currentTheme.primary} />
                 <Text style={[styles.loadingMasTexto, { color: currentTheme.textSecondary }]}>
                   Cargando más pedidos...
+                </Text>
+              </View>
+            )}
+            
+            {/* Mensaje cuando ya no hay más pedidos */}
+            {!busqueda && !paginacionRef.current[tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes'].hasMore && pedidosFiltrados.length >= 10 && (
+              <View style={styles.finListaContainer}>
+                <Ionicons name="checkmark-circle" size={20} color={currentTheme.textSecondary} />
+                <Text style={[styles.finListaTexto, { color: currentTheme.textSecondary }]}>
+                  Has visto todos los pedidos
                 </Text>
               </View>
             )}
@@ -2155,6 +2159,18 @@ const styles = StyleSheet.create({
   loadingMasTexto: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  finListaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    gap: 8,
+  },
+  finListaTexto: {
+    fontSize: 13,
+    fontWeight: '600',
+    fontStyle: 'italic',
   },
   pedidoCardModerno: {
     borderRadius: 20,
