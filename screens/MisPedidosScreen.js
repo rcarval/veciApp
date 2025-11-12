@@ -114,7 +114,7 @@ const MisPedidosScreen = () => {
       console.log(`📥 Cargando pedidos tab: ${tabKey}, page: ${page}, refresh: ${refresh}, search: "${searchTerm}"`);
       
       if (searchTerm) {
-        // CON BÚSQUEDA: Hacer una sola llamada global
+        // CON BÚSQUEDA: Hacer una sola llamada global y guardar TODO en 'pedidos'
         const response = await pedidoService.obtenerPedidos(1, 1000, 'pendientes', searchTerm);
         
         if (response.ok && response.pedidos) {
@@ -144,29 +144,10 @@ const MisPedidosScreen = () => {
             descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
           }));
           
-          // Separar por estado para contadores
-          const pendientes = pedidosMapeados.filter(p => 
-            ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
-            (p.estado === 'entregado' && !p.entrega_confirmada)
-          );
-          
-          const rechazadosPendientes = pedidosMapeados.filter(p => 
-            p.estado === 'rechazado' && !p.rechazo_confirmado
-          );
-          
-          const completados = pedidosMapeados.filter(p => 
-            (p.estado === 'entregado' && p.entrega_confirmada) || 
-            p.estado === 'cerrado' || 
-            (p.estado === 'rechazado' && p.rechazo_confirmado) ||
-            p.estado === 'cancelado'
-          );
-          
-          console.log(`📊 Contadores búsqueda - Pendientes: ${pendientes.length}, Rechazados: ${rechazadosPendientes.length}, Historial: ${completados.length}`);
-          
+          // SOLO guardar en 'pedidos' - NO tocar los otros arrays
+          // El filtrado se hace en obtenerPedidosFiltrados()
+          console.log(`📊 Resultados búsqueda guardados: ${pedidosMapeados.length} pedidos`);
           setPedidos(pedidosMapeados);
-          setPedidosPendientes(pendientes);
-          setPedidosRechazadosPendientes(rechazadosPendientes);
-          setPedidosCompletados(completados);
         }
       } else {
         // SIN BÚSQUEDA: Cargar con paginación para el tab activo
@@ -235,9 +216,13 @@ const MisPedidosScreen = () => {
           };
           
           console.log(`📊 Paginación actualizada - page: ${paginacionRef.current[tabKey].page}, hasMore: ${paginacionRef.current[tabKey].hasMore}, total: ${response.pagination.total}`);
+          
+          // Limpiar array de búsqueda cuando no hay búsqueda
+          setPedidos([]);
         } else {
           console.log('⚠️ No se pudieron cargar pedidos');
           if (refresh) {
+            setPedidos([]);
             setPedidosPendientes([]);
             setPedidosCompletados([]);
             setPedidosRechazadosPendientes([]);
@@ -248,6 +233,7 @@ const MisPedidosScreen = () => {
       console.log('❌ Error al cargar pedidos:', error);
       toast.error('No se pudieron cargar los pedidos. Verifica tu conexión');
       if (refresh) {
+        setPedidos([]);
         setPedidosPendientes([]);
         setPedidosCompletados([]);
         setPedidosRechazadosPendientes([]);
@@ -293,13 +279,12 @@ const MisPedidosScreen = () => {
     const timeoutId = setTimeout(() => {
       if (busqueda.trim()) {
         console.log(`🔍 Buscando en backend: "${busqueda}"`);
-        setPedidosPendientes([]);
-        setPedidosRechazadosPendientes([]);
-        setPedidosCompletados([]);
+        setPedidos([]); // Limpiar búsqueda anterior
         cargarPedidos(true, busqueda.trim());
       } else {
         // Si se limpia la búsqueda, recargar lista normal
         console.log(`🔄 Búsqueda limpiada, recargando lista normal`);
+        setPedidos([]); // Limpiar búsqueda
         setPedidosPendientes([]);
         setPedidosRechazadosPendientes([]);
         setPedidosCompletados([]);
@@ -312,7 +297,7 @@ const MisPedidosScreen = () => {
   
   // Resetear y recargar cuando cambia el tab
   useEffect(() => {
-    // Si hay búsqueda activa, NO recargar (ya tenemos todos los resultados)
+    // Si hay búsqueda activa, NO recargar (ya tenemos todos los resultados en 'pedidos')
     if (busqueda.trim()) {
       console.log(`🔄 Cambió tab a: ${tabActivo}, pero hay búsqueda activa - NO recargar`);
       return;
@@ -327,6 +312,7 @@ const MisPedidosScreen = () => {
     paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: totalActual };
     
     // Limpiar pedidos y cargar desde página 1
+    setPedidos([]); // Limpiar búsqueda
     if (tabKey === 'pendientes') {
       setPedidosPendientes([]);
     } else if (tabKey === 'rechazados') {
@@ -341,8 +327,14 @@ const MisPedidosScreen = () => {
   useFocusEffect(
     React.useCallback(() => {
       console.log('🔄 MisPedidosScreen recibió foco, recargando datos...');
+      // Limpiar búsqueda si había una activa
+      if (busqueda.trim()) {
+        setBusqueda('');
+      }
+      setPedidos([]);
+      cargarContadores();
       cargarPedidos(true);
-    }, [cargarPedidos])
+    }, [cargarPedidos, cargarContadores, busqueda])
   );
 
   // Escuchar eventos WebSocket para cambios de estado
@@ -366,7 +358,8 @@ const MisPedidosScreen = () => {
     // Escuchar cambios de estado de pedidos para el cliente
     socket.on(`pedido:estado:${usuario.id}`, (data) => {
       console.log('📡 Cambio de estado recibido via WebSocket en MisPedidos:', data);
-      // Recargar contadores y pedidos
+      // Limpiar búsqueda y recargar contadores y pedidos
+      setPedidos([]);
       cargarContadores();
       cargarPedidos(true);
     });
@@ -526,12 +519,28 @@ const MisPedidosScreen = () => {
 
   // Obtener contadores de resultados por tab
   const obtenerContadores = () => {
-    // Si hay búsqueda, contar resultados por estado
+    // Si hay búsqueda, contar desde el array 'pedidos' por estado
     if (busqueda.trim()) {
+      const pendientes = pedidos.filter(p => 
+        ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
+        (p.estado === 'entregado' && !p.entrega_confirmada)
+      ).length;
+      
+      const rechazados = pedidos.filter(p => 
+        p.estado === 'rechazado' && !p.rechazo_confirmado
+      ).length;
+      
+      const historial = pedidos.filter(p => 
+        (p.estado === 'entregado' && p.entrega_confirmada) || 
+        p.estado === 'cerrado' || 
+        (p.estado === 'rechazado' && p.rechazo_confirmado) ||
+        p.estado === 'cancelado'
+      ).length;
+      
       return {
-        pendientes: `${pedidosPendientes.length}`,
-        rechazados: `${pedidosRechazadosPendientes.length}`,
-        historial: `${pedidosCompletados.length}`,
+        pendientes: `${pendientes}`,
+        rechazados: `${rechazados}`,
+        historial: `${historial}`,
       };
     }
 
@@ -551,9 +560,25 @@ const MisPedidosScreen = () => {
 
   // Función para obtener pedidos filtrados por tab activo
   const obtenerPedidosFiltrados = () => {
-    // Los pedidos ya vienen ordenados del backend
-    // Pendientes/Rechazados: ASC (más antiguo primero)
-    // Historial: DESC (más nuevo primero)
+    // Si hay búsqueda, filtrar desde 'pedidos' por el tab activo
+    if (busqueda.trim()) {
+      return pedidos.filter(pedido => {
+        if (tabActivo === 'pendientes') {
+          return ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(pedido.estado) || 
+                 (pedido.estado === 'entregado' && !pedido.entrega_confirmada);
+        } else if (tabActivo === 'rechazados') {
+          return pedido.estado === 'rechazado' && !pedido.rechazo_confirmado;
+        } else if (tabActivo === 'historial') {
+          return (pedido.estado === 'entregado' && pedido.entrega_confirmada) ||
+                 pedido.estado === 'cerrado' ||
+                 (pedido.estado === 'rechazado' && pedido.rechazo_confirmado) ||
+                 pedido.estado === 'cancelado';
+        }
+        return false;
+      });
+    }
+    
+    // Sin búsqueda: retornar los arrays separados (ya vienen ordenados del backend)
     if (tabActivo === 'pendientes') {
       return pedidosPendientes;
     } else if (tabActivo === 'rechazados') {
