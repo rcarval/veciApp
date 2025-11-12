@@ -76,40 +76,36 @@ const MisPedidosScreen = () => {
     try {
       console.log(`🔍 DEBUG - Cargando pedidos desde el backend... search: "${searchTerm}"`);
       
-      const response = await pedidoService.obtenerPedidos(1, 100, 'pendientes', searchTerm);
-      
-      if (response.ok && response.pedidos) {
-        console.log(`✅ Pedidos cargados: ${response.pedidos.length}`);
+      if (searchTerm) {
+        // CON BÚSQUEDA: Hacer una sola llamada global
+        const response = await pedidoService.obtenerPedidos(1, 1000, 'pendientes', searchTerm);
         
-        // Mapear los datos del backend al formato esperado por el frontend
-        const pedidosMapeados = response.pedidos.map(pedido => ({
-          id: pedido.id,
-          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
-          negocioId: pedido.emprendimiento_id, // Para guardar calificaciones
-          emprendimiento_logo: pedido.emprendimiento_logo || null, // ✅ Logo del emprendimiento
-          fecha: pedido.created_at,
-          fechaHoraReserva: pedido.created_at,
-          estado: pedido.estado,
-          total: parseFloat(pedido.total),
-          productos: pedido.detalle || [],
-          direccion: pedido.direccion_entrega,
-          modoEntrega: pedido.modo_entrega,
-          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
-          motivoCancelacion: pedido.motivo_rechazo,
-          rechazo_confirmado: pedido.rechazo_confirmado || false,
-          entrega_confirmada: pedido.entrega_confirmada || false,
-          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
-          // ✅ Nuevos campos para desglose
-          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
-          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
-          cupon_codigo: pedido.cupon_codigo || null,
-          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
-        }));
-        
-        // Si hay búsqueda, guardar TODOS los resultados en el estado 'pedidos'
-        // y separar también en los 3 estados para los contadores
-        if (searchTerm) {
-          console.log(`🔍 Búsqueda activa: ${pedidosMapeados.length} resultados totales`);
+        if (response.ok && response.pedidos) {
+          console.log(`🔍 Búsqueda activa: ${response.pedidos.length} resultados totales`);
+          
+          // Mapear los datos del backend al formato esperado por el frontend
+          const pedidosMapeados = response.pedidos.map(pedido => ({
+            id: pedido.id,
+            negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+            negocioId: pedido.emprendimiento_id,
+            emprendimiento_logo: pedido.emprendimiento_logo || null,
+            fecha: pedido.created_at,
+            fechaHoraReserva: pedido.created_at,
+            estado: pedido.estado,
+            total: parseFloat(pedido.total),
+            productos: pedido.detalle || [],
+            direccion: pedido.direccion_entrega,
+            modoEntrega: pedido.modo_entrega,
+            tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+            motivoCancelacion: pedido.motivo_rechazo,
+            rechazo_confirmado: pedido.rechazo_confirmado || false,
+            entrega_confirmada: pedido.entrega_confirmada || false,
+            cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+            subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+            costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+            cupon_codigo: pedido.cupon_codigo || null,
+            descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
+          }));
           
           // Separar por estado para contadores
           const pendientes = pedidosMapeados.filter(p => 
@@ -130,40 +126,99 @@ const MisPedidosScreen = () => {
           
           console.log(`📊 Contadores búsqueda - Pendientes: ${pendientes.length}, Rechazados: ${rechazadosPendientes.length}, Historial: ${completados.length}`);
           
-          setPedidos(pedidosMapeados); // Guardar TODOS
+          setPedidos(pedidosMapeados);
           setPedidosPendientes(pendientes);
           setPedidosRechazadosPendientes(rechazadosPendientes);
           setPedidosCompletados(completados);
-        } else {
-          // Sin búsqueda: separar normalmente
-          const pendientes = pedidosMapeados.filter(p => 
-            ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
-            (p.estado === 'entregado' && !p.entrega_confirmada)
-          );
-          
-          const rechazadosPendientes = pedidosMapeados.filter(p => 
-            p.estado === 'rechazado' && !p.rechazo_confirmado
-          );
-          
-          const completados = pedidosMapeados.filter(p => 
-            (p.estado === 'entregado' && p.entrega_confirmada) || 
-            p.estado === 'cerrado' || 
-            (p.estado === 'rechazado' && p.rechazo_confirmado) ||
-            p.estado === 'cancelado'
-          );
-          
-          console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
-          
-          setPedidos([]);
-          setPedidosPendientes(pendientes);
-          setPedidosCompletados(completados);
-          setPedidosRechazadosPendientes(rechazadosPendientes);
         }
       } else {
-        console.log('⚠️ No se pudieron cargar pedidos');
-        setPedidosPendientes([]);
-        setPedidosCompletados([]);
-        setPedidosRechazadosPendientes([]);
+        // SIN BÚSQUEDA: Cargar los 3 tabs por separado
+        console.log('📦 Cargando todos los tabs...');
+        
+        const [resPendientes, resRechazados, resHistorial] = await Promise.all([
+          pedidoService.obtenerPedidos(1, 100, 'pendientes', ''),
+          pedidoService.obtenerPedidos(1, 100, 'rechazados', ''),
+          pedidoService.obtenerPedidos(1, 100, 'historial', '')
+        ]);
+        
+        // Mapear pedidos pendientes
+        const pendientes = resPendientes.ok && resPendientes.pedidos ? resPendientes.pedidos.map(pedido => ({
+          id: pedido.id,
+          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+          negocioId: pedido.emprendimiento_id,
+          emprendimiento_logo: pedido.emprendimiento_logo || null,
+          fecha: pedido.created_at,
+          fechaHoraReserva: pedido.created_at,
+          estado: pedido.estado,
+          total: parseFloat(pedido.total),
+          productos: pedido.detalle || [],
+          direccion: pedido.direccion_entrega,
+          modoEntrega: pedido.modo_entrega,
+          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+          motivoCancelacion: pedido.motivo_rechazo,
+          rechazo_confirmado: pedido.rechazo_confirmado || false,
+          entrega_confirmada: pedido.entrega_confirmada || false,
+          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+          cupon_codigo: pedido.cupon_codigo || null,
+          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
+        })) : [];
+        
+        // Mapear pedidos rechazados
+        const rechazadosPendientes = resRechazados.ok && resRechazados.pedidos ? resRechazados.pedidos.map(pedido => ({
+          id: pedido.id,
+          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+          negocioId: pedido.emprendimiento_id,
+          emprendimiento_logo: pedido.emprendimiento_logo || null,
+          fecha: pedido.created_at,
+          fechaHoraReserva: pedido.created_at,
+          estado: pedido.estado,
+          total: parseFloat(pedido.total),
+          productos: pedido.detalle || [],
+          direccion: pedido.direccion_entrega,
+          modoEntrega: pedido.modo_entrega,
+          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+          motivoCancelacion: pedido.motivo_rechazo,
+          rechazo_confirmado: pedido.rechazo_confirmado || false,
+          entrega_confirmada: pedido.entrega_confirmada || false,
+          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+          cupon_codigo: pedido.cupon_codigo || null,
+          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
+        })) : [];
+        
+        // Mapear pedidos historial
+        const completados = resHistorial.ok && resHistorial.pedidos ? resHistorial.pedidos.map(pedido => ({
+          id: pedido.id,
+          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+          negocioId: pedido.emprendimiento_id,
+          emprendimiento_logo: pedido.emprendimiento_logo || null,
+          fecha: pedido.created_at,
+          fechaHoraReserva: pedido.created_at,
+          estado: pedido.estado,
+          total: parseFloat(pedido.total),
+          productos: pedido.detalle || [],
+          direccion: pedido.direccion_entrega,
+          modoEntrega: pedido.modo_entrega,
+          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+          motivoCancelacion: pedido.motivo_rechazo,
+          rechazo_confirmado: pedido.rechazo_confirmado || false,
+          entrega_confirmada: pedido.entrega_confirmada || false,
+          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+          cupon_codigo: pedido.cupon_codigo || null,
+          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
+        })) : [];
+        
+        console.log(`✅ Pedidos cargados - Pendientes: ${pendientes.length}, Rechazados: ${rechazadosPendientes.length}, Historial: ${completados.length}`);
+        
+        setPedidos([]);
+        setPedidosPendientes(pendientes);
+        setPedidosRechazadosPendientes(rechazadosPendientes);
+        setPedidosCompletados(completados);
       }
     } catch (error) {
       console.log('❌ Error al cargar pedidos:', error);
