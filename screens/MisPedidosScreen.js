@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
+  FlatList,
   Modal,
   Image,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { FontAwesome, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,6 +24,7 @@ import io from 'socket.io-client';
 import env from '../config/env';
 import Toast from '../components/Toast';
 import useToast from '../hooks/useToast';
+import LoadingVeciApp from '../components/LoadingVeciApp';
 
 const MisPedidosScreen = () => {
   const navigation = useNavigation();
@@ -36,6 +40,16 @@ const MisPedidosScreen = () => {
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
   const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
   const [tabActivo, setTabActivo] = useState(route.params?.tabInicial || 'pendientes');
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMas, setLoadingMas] = useState(false);
+  const [cargando, setCargando] = useState(false);
+  
+  // Estados para paginación - usar useRef para evitar dependencias circulares
+  const paginacionRef = useRef({
+    pendientes: { page: 1, hasMore: true, loading: false, total: 0 },
+    rechazados: { page: 1, hasMore: true, loading: false, total: 0 },
+    historial: { page: 1, hasMore: true, loading: false, total: 0 },
+  });
   const [modalCalificacionVisible, setModalCalificacionVisible] = useState(false);
   const [pedidoParaCalificar, setPedidoParaCalificar] = useState(null);
   const [calificacionesUsuario, setCalificacionesUsuario] = useState({
@@ -71,10 +85,33 @@ const MisPedidosScreen = () => {
     return null;
   };
 
-  // Función para cargar pedidos del backend
-  const cargarPedidos = useCallback(async (searchTerm = '') => {
+  // Función para cargar pedidos del backend con paginación
+  const cargarPedidos = useCallback(async (refresh = false, searchTerm = '') => {
     try {
-      console.log(`🔍 DEBUG - Cargando pedidos desde el backend... search: "${searchTerm}"`);
+      const tabKey = tabActivo === 'rechazados' ? 'rechazados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+      const estadoPaginacion = paginacionRef.current[tabKey];
+      
+      // Si hay búsqueda, siempre hacer la petición (ignorar hasMore)
+      // Si no hay búsqueda, validar hasMore
+      if (!searchTerm && (estadoPaginacion.loading || (!refresh && !estadoPaginacion.hasMore))) {
+        console.log(`⏭️ Saltando carga - loading: ${estadoPaginacion.loading}, hasMore: ${estadoPaginacion.hasMore}, refresh: ${refresh}`);
+        return;
+      }
+      
+      // Actualizar estado de loading
+      paginacionRef.current[tabKey].loading = true;
+      
+      if (refresh) {
+        setCargando(true);
+        setRefreshing(true);
+      } else {
+        // Mostrar indicador prominente para carga de más pedidos
+        setLoadingMas(true);
+      }
+      
+      const page = refresh ? 1 : estadoPaginacion.page;
+      
+      console.log(`📥 Cargando pedidos tab: ${tabKey}, page: ${page}, refresh: ${refresh}, search: "${searchTerm}"`);
       
       if (searchTerm) {
         // CON BÚSQUEDA: Hacer una sola llamada global
@@ -132,106 +169,86 @@ const MisPedidosScreen = () => {
           setPedidosCompletados(completados);
         }
       } else {
-        // SIN BÚSQUEDA: Cargar los 3 tabs por separado
-        console.log('📦 Cargando todos los tabs...');
+        // SIN BÚSQUEDA: Cargar con paginación para el tab activo
+        console.log(`📦 Cargando tab ${tabKey} con paginación...`);
         
-        const [resPendientes, resRechazados, resHistorial] = await Promise.all([
-          pedidoService.obtenerPedidos(1, 100, 'pendientes', ''),
-          pedidoService.obtenerPedidos(1, 100, 'rechazados', ''),
-          pedidoService.obtenerPedidos(1, 100, 'historial', '')
-        ]);
+        const response = await pedidoService.obtenerPedidos(page, 10, tabKey, '');
         
-        // Mapear pedidos pendientes
-        const pendientes = resPendientes.ok && resPendientes.pedidos ? resPendientes.pedidos.map(pedido => ({
-          id: pedido.id,
-          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
-          negocioId: pedido.emprendimiento_id,
-          emprendimiento_logo: pedido.emprendimiento_logo || null,
-          fecha: pedido.created_at,
-          fechaHoraReserva: pedido.created_at,
-          estado: pedido.estado,
-          total: parseFloat(pedido.total),
-          productos: pedido.detalle || [],
-          direccion: pedido.direccion_entrega,
-          modoEntrega: pedido.modo_entrega,
-          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
-          motivoCancelacion: pedido.motivo_rechazo,
-          rechazo_confirmado: pedido.rechazo_confirmado || false,
-          entrega_confirmada: pedido.entrega_confirmada || false,
-          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
-          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
-          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
-          cupon_codigo: pedido.cupon_codigo || null,
-          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
-        })) : [];
-        
-        // Mapear pedidos rechazados
-        const rechazadosPendientes = resRechazados.ok && resRechazados.pedidos ? resRechazados.pedidos.map(pedido => ({
-          id: pedido.id,
-          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
-          negocioId: pedido.emprendimiento_id,
-          emprendimiento_logo: pedido.emprendimiento_logo || null,
-          fecha: pedido.created_at,
-          fechaHoraReserva: pedido.created_at,
-          estado: pedido.estado,
-          total: parseFloat(pedido.total),
-          productos: pedido.detalle || [],
-          direccion: pedido.direccion_entrega,
-          modoEntrega: pedido.modo_entrega,
-          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
-          motivoCancelacion: pedido.motivo_rechazo,
-          rechazo_confirmado: pedido.rechazo_confirmado || false,
-          entrega_confirmada: pedido.entrega_confirmada || false,
-          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
-          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
-          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
-          cupon_codigo: pedido.cupon_codigo || null,
-          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
-        })) : [];
-        
-        // Mapear pedidos historial
-        const completados = resHistorial.ok && resHistorial.pedidos ? resHistorial.pedidos.map(pedido => ({
-          id: pedido.id,
-          negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
-          negocioId: pedido.emprendimiento_id,
-          emprendimiento_logo: pedido.emprendimiento_logo || null,
-          fecha: pedido.created_at,
-          fechaHoraReserva: pedido.created_at,
-          estado: pedido.estado,
-          total: parseFloat(pedido.total),
-          productos: pedido.detalle || [],
-          direccion: pedido.direccion_entrega,
-          modoEntrega: pedido.modo_entrega,
-          tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
-          motivoCancelacion: pedido.motivo_rechazo,
-          rechazo_confirmado: pedido.rechazo_confirmado || false,
-          entrega_confirmada: pedido.entrega_confirmada || false,
-          cancelacion_confirmada: pedido.cancelacion_confirmada || false,
-          subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
-          costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
-          cupon_codigo: pedido.cupon_codigo || null,
-          descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
-        })) : [];
-        
-        console.log(`✅ Pedidos cargados - Pendientes: ${pendientes.length}, Rechazados: ${rechazadosPendientes.length}, Historial: ${completados.length}`);
-        
-        setPedidos([]);
-        setPedidosPendientes(pendientes);
-        setPedidosRechazadosPendientes(rechazadosPendientes);
-        setPedidosCompletados(completados);
+        if (response.ok && response.pedidos) {
+          console.log(`✅ Pedidos cargados: ${response.pedidos.length}, total: ${response.pagination.total}, hasMore: ${response.pagination.hasMore}`);
+          
+          // Mapear los datos del backend
+          const pedidosMapeados = response.pedidos.map(pedido => ({
+            id: pedido.id,
+            negocio: pedido.emprendimiento_nombre || pedido.emprendimiento_id?.toString() || 'Mi Negocio',
+            negocioId: pedido.emprendimiento_id,
+            emprendimiento_logo: pedido.emprendimiento_logo || null,
+            fecha: pedido.created_at,
+            fechaHoraReserva: pedido.created_at,
+            estado: pedido.estado,
+            total: parseFloat(pedido.total),
+            productos: pedido.detalle || [],
+            direccion: pedido.direccion_entrega,
+            modoEntrega: pedido.modo_entrega,
+            tiempoEntregaMinutos: pedido.tiempo_entrega_minutos,
+            motivoCancelacion: pedido.motivo_rechazo,
+            rechazo_confirmado: pedido.rechazo_confirmado || false,
+            entrega_confirmada: pedido.entrega_confirmada || false,
+            cancelacion_confirmada: pedido.cancelacion_confirmada || false,
+            subtotal: pedido.subtotal ? parseFloat(pedido.subtotal) : null,
+            costo_delivery: pedido.costo_delivery ? parseFloat(pedido.costo_delivery) : 0,
+            cupon_codigo: pedido.cupon_codigo || null,
+            descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
+          }));
+          
+          // Si es refresh, reemplazar; si no, agregar al final
+          if (tabKey === 'pendientes') {
+            setPedidosPendientes(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+          } else if (tabKey === 'rechazados') {
+            setPedidosRechazadosPendientes(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+          } else if (tabKey === 'historial') {
+            setPedidosCompletados(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+          }
+          
+          // Actualizar paginación en el ref
+          paginacionRef.current[tabKey] = {
+            page: response.pagination.hasMore ? page + 1 : page,
+            hasMore: response.pagination.hasMore,
+            loading: false,
+            total: response.pagination.total
+          };
+          
+          console.log(`📊 Paginación actualizada - page: ${paginacionRef.current[tabKey].page}, hasMore: ${paginacionRef.current[tabKey].hasMore}, total: ${response.pagination.total}`);
+        } else {
+          console.log('⚠️ No se pudieron cargar pedidos');
+          if (refresh) {
+            setPedidosPendientes([]);
+            setPedidosCompletados([]);
+            setPedidosRechazadosPendientes([]);
+          }
+        }
       }
     } catch (error) {
       console.log('❌ Error al cargar pedidos:', error);
       toast.error('No se pudieron cargar los pedidos. Verifica tu conexión');
-      setPedidosPendientes([]);
-      setPedidosCompletados([]);
-      setPedidosRechazadosPendientes([]);
+      if (refresh) {
+        setPedidosPendientes([]);
+        setPedidosCompletados([]);
+        setPedidosRechazadosPendientes([]);
+      }
+    } finally {
+      setCargando(false);
+      setRefreshing(false);
+      setLoadingMas(false);
+      const tabKey = tabActivo === 'rechazados' ? 'rechazados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+      paginacionRef.current[tabKey].loading = false;
     }
-  }, []);
+  }, [tabActivo]);
 
   useEffect(() => {
-    cargarPedidos();
-  }, [cargarPedidos]);
+    cargarPedidos(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // useEffect para búsqueda con debounce
   useEffect(() => {
@@ -239,22 +256,55 @@ const MisPedidosScreen = () => {
     const timeoutId = setTimeout(() => {
       if (busqueda.trim()) {
         console.log(`🔍 Buscando en backend: "${busqueda}"`);
-        cargarPedidos(busqueda.trim());
+        setPedidosPendientes([]);
+        setPedidosRechazadosPendientes([]);
+        setPedidosCompletados([]);
+        cargarPedidos(true, busqueda.trim());
       } else {
         // Si se limpia la búsqueda, recargar lista normal
         console.log(`🔄 Búsqueda limpiada, recargando lista normal`);
-        cargarPedidos();
+        setPedidosPendientes([]);
+        setPedidosRechazadosPendientes([]);
+        setPedidosCompletados([]);
+        cargarPedidos(true);
       }
     }, 500); // 500ms de debounce
 
     return () => clearTimeout(timeoutId);
   }, [busqueda, cargarPedidos]);
+  
+  // Resetear y recargar cuando cambia el tab
+  useEffect(() => {
+    // Si hay búsqueda activa, NO recargar (ya tenemos todos los resultados)
+    if (busqueda.trim()) {
+      console.log(`🔄 Cambió tab a: ${tabActivo}, pero hay búsqueda activa - NO recargar`);
+      return;
+    }
+    
+    const tabKey = tabActivo === 'rechazados' ? 'rechazados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+    
+    console.log(`🔄 Cambió tab a: ${tabKey}, reseteando paginación`);
+    
+    // Resetear paginación del tab actual (mantener el total)
+    const totalActual = paginacionRef.current[tabKey].total;
+    paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: totalActual };
+    
+    // Limpiar pedidos y cargar desde página 1
+    if (tabKey === 'pendientes') {
+      setPedidosPendientes([]);
+    } else if (tabKey === 'rechazados') {
+      setPedidosRechazadosPendientes([]);
+    } else if (tabKey === 'historial') {
+      setPedidosCompletados([]);
+    }
+    cargarPedidos(true);
+  }, [tabActivo, cargarPedidos, busqueda]);
 
   // Recargar datos cuando la pantalla reciba el foco
   useFocusEffect(
     React.useCallback(() => {
       console.log('🔄 MisPedidosScreen recibió foco, recargando datos...');
-      cargarPedidos();
+      cargarPedidos(true);
     }, [cargarPedidos])
   );
 
@@ -280,7 +330,7 @@ const MisPedidosScreen = () => {
     socket.on(`pedido:estado:${usuario.id}`, (data) => {
       console.log('📡 Cambio de estado recibido via WebSocket en MisPedidos:', data);
       // Recargar la lista de pedidos
-      cargarPedidos();
+      cargarPedidos(true);
     });
 
     return () => {
@@ -418,7 +468,7 @@ const MisPedidosScreen = () => {
       setMotivoPersonalizado('');
       
       // Recargar pedidos desde el backend
-      await cargarPedidos();
+      await cargarPedidos(true);
       
       toast.success('El pedido ha sido cancelado exitosamente');
     } catch (error) {
@@ -444,25 +494,46 @@ const MisPedidosScreen = () => {
     });
   };
 
-  // Función para filtrar pedidos localmente por tab cuando hay búsqueda
-  const obtenerPedidosFiltrados = (listaPedidos) => {
-    // Si hay búsqueda, el backend devolvió TODOS los pedidos que coinciden
-    // NO necesitamos filtrar localmente
-    return listaPedidos;
-  };
-
   // Obtener contadores de resultados por tab
   const obtenerContadores = () => {
-    // Los pedidos ya están separados correctamente por estado en cargarPedidos
-    // Solo necesitamos contar cada array
+    // Si hay búsqueda, contar resultados por estado
+    if (busqueda.trim()) {
+      return {
+        pendientes: `${pedidosPendientes.length}`,
+        rechazados: `${pedidosRechazadosPendientes.length}`,
+        historial: `${pedidosCompletados.length}`,
+      };
+    }
+
+    // Sin búsqueda: mostrar "cargados de total" usando datos del backend
+    const totalPendientes = paginacionRef.current.pendientes.total;
+    const totalRechazados = paginacionRef.current.rechazados.total;
+    const totalHistorial = paginacionRef.current.historial.total;
+
     return {
-      pendientes: pedidosPendientes.length,
-      rechazados: pedidosRechazadosPendientes.length,
-      historial: pedidosCompletados.length,
+      pendientes: totalPendientes > 0 ? `${pedidosPendientes.length}/${totalPendientes}` : `${pedidosPendientes.length}`,
+      rechazados: totalRechazados > 0 ? `${pedidosRechazadosPendientes.length}/${totalRechazados}` : `${pedidosRechazadosPendientes.length}`,
+      historial: totalHistorial > 0 ? `${pedidosCompletados.length}/${totalHistorial}` : `${pedidosCompletados.length}`,
     };
   };
 
   const contadores = obtenerContadores();
+
+  // Función para obtener pedidos filtrados por tab activo
+  const obtenerPedidosFiltrados = () => {
+    // Si hay búsqueda, los pedidos ya están filtrados por estado
+    // Solo retornar el array correspondiente al tab activo
+    if (tabActivo === 'pendientes') {
+      return ordenarPedidosPorFecha([...pedidosPendientes]);
+    } else if (tabActivo === 'rechazados') {
+      return ordenarPedidosPorFecha([...pedidosRechazadosPendientes]);
+    } else if (tabActivo === 'historial') {
+      return ordenarPedidosPorFecha([...pedidosCompletados]);
+    }
+    return [];
+  };
+
+  const pedidosFiltrados = obtenerPedidosFiltrados();
 
   // Función para manejar calificación de criterio
   const manejarCalificacionCriterio = (criterio, valor) => {
@@ -525,8 +596,8 @@ const MisPedidosScreen = () => {
       });
       
       // Recargar pedidos desde el backend
-      await cargarPedidos();
-
+      await cargarPedidos(true);
+      
       toast.success("¡Gracias! Tu calificación ha sido registrada exitosamente");
 
     } catch (error) {
@@ -543,7 +614,7 @@ const MisPedidosScreen = () => {
       await pedidoService.confirmarRechazo(pedidoRechazado.id);
       
       // Recargar pedidos desde el backend
-      await cargarPedidos();
+      await cargarPedidos(true);
       
       toast.success('El pedido rechazado ha sido movido al historial');
     } catch (error) {
@@ -1207,56 +1278,131 @@ const MisPedidosScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={[styles.scrollContainer, { backgroundColor: currentTheme.background }]} contentContainerStyle={styles.scrollContent}>
-        {(() => {
-          console.log('🔍 DEBUG - Tab activo:', tabActivo);
-          console.log('🔍 DEBUG - pedidosRechazadosPendientes.length:', pedidosRechazadosPendientes.length);
-          console.log('🔍 DEBUG - pedidosCompletados.length:', pedidosCompletados.length);
-          return null;
-        })()}
+      <FlatList
+        style={[styles.scrollContainer, { backgroundColor: currentTheme.background }]}
+        contentContainerStyle={[
+          styles.scrollContent,
+          pedidosFiltrados.length === 0 && styles.emptyListContainer
+        ]}
+        data={pedidosFiltrados}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={({ item }) => {
+          // Determinar qué función de renderizado usar
+          if (tabActivo === 'rechazados') {
+            return renderPedidoRechazado(item);
+          } else {
+            return renderPedido(item);
+          }
+        }}
         
-        {tabActivo === 'pendientes' ? (
-          (() => {
-            return pedidosPendientes.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosPendientes]).map(renderPedido)
-            ) : (
-              <View style={styles.emptyState}>
-                <FontAwesome name={busqueda ? "search" : "shopping-cart"} size={48} color={currentTheme.textSecondary} />
-                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos pendientes con ese número' : 'No tienes pedidos pendientes'}
+        // Pull to refresh
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              console.log('🔄 Pull to refresh');
+              const tabKey = tabActivo === 'rechazados' ? 'rechazados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+              const totalActual = paginacionRef.current[tabKey].total;
+              paginacionRef.current[tabKey] = { page: 1, hasMore: true, loading: false, total: totalActual };
+              if (tabKey === 'pendientes') {
+                setPedidosPendientes([]);
+              } else if (tabKey === 'rechazados') {
+                setPedidosRechazadosPendientes([]);
+              } else if (tabKey === 'historial') {
+                setPedidosCompletados([]);
+              }
+              cargarPedidos(true);
+            }}
+            colors={[currentTheme.primary]}
+            tintColor={currentTheme.primary}
+          />
+        }
+        
+        // Scroll infinito automático
+        onEndReached={() => {
+          if (!busqueda && !loadingMas && !cargando) {
+            console.log('📜 onEndReached disparado, cargando más...');
+            cargarPedidos(false);
+          }
+        }}
+        onEndReachedThreshold={0.3}
+        
+        // Footer con indicador de carga
+        ListFooterComponent={() => {
+          if (cargando) return null;
+          
+          const tabKey = tabActivo === 'rechazados' ? 'rechazados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
+          const hasMore = paginacionRef.current[tabKey].hasMore;
+          const total = paginacionRef.current[tabKey].total;
+          
+          if (busqueda) return <View style={{ height: 150 }} />;
+          
+          if (loadingMas) {
+            return (
+              <View style={[styles.loadingMasContainer, { backgroundColor: currentTheme.background, paddingBottom: 150 }]}>
+                <View style={[styles.loadingMasCard, { backgroundColor: currentTheme.cardBackground }]}>
+                  <ActivityIndicator size="large" color={currentTheme.primary} />
+                  <Text style={[styles.loadingMasTexto, { color: currentTheme.text, fontSize: 16 }]}>
+                    Cargando más pedidos...
+                  </Text>
+                  <Text style={[styles.loadingMasSubtexto, { color: currentTheme.textSecondary }]}>
+                    {total > 0 ? `${pedidosFiltrados.length} de ${total}` : `${pedidosFiltrados.length}`}
+                  </Text>
+                </View>
+              </View>
+            );
+          }
+          
+          if (!hasMore && pedidosFiltrados.length >= 10) {
+            return (
+              <View style={[styles.finListaContainer, { paddingBottom: 150 }]}>
+                <Ionicons name="checkmark-circle" size={24} color={currentTheme.primary} />
+                <Text style={[styles.finListaTexto, { color: currentTheme.text }]}>
+                  Has visto todos los pedidos
                 </Text>
               </View>
             );
-          })()
-        ) : tabActivo === 'rechazados' ? (
-          (() => {
-            console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosRechazadosPendientes.length, 'pedidos');
-            return pedidosRechazadosPendientes.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosRechazadosPendientes]).map(renderPedidoRechazado)
-            ) : (
-              <View style={styles.emptyState}>
-                <FontAwesome name={busqueda ? "search" : "check-circle"} size={48} color={currentTheme.primary} />
-                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos rechazados con ese número' : 'No tienes pedidos rechazados pendientes'}
-                </Text>
+          }
+          
+          return <View style={{ height: 150 }} />;
+        }}
+        
+        // Estado vacío
+        ListEmptyComponent={() => {
+          if (cargando) {
+            return (
+              <View style={styles.loadingContainer}>
+                <LoadingVeciApp size={120} color={currentTheme.primary} />
+                <Text style={[styles.loadingTexto, { marginTop: 30, color: currentTheme.textSecondary }]}>Cargando pedidos...</Text>
               </View>
             );
-          })()
-        ) : (
-          (() => {
-            return pedidosCompletados.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosCompletados]).map(renderPedido)
-            ) : (
-              <View style={styles.emptyState}>
-                <FontAwesome name={busqueda ? "search" : "history"} size={48} color={currentTheme.textSecondary} />
-                <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos en el historial con ese número' : 'No tienes pedidos en el historial'}
-                </Text>
-              </View>
-            );
-          })()
-        )}
-      </ScrollView>
+          }
+          
+          return (
+            <View style={styles.emptyState}>
+              {(() => {
+                const iconName = busqueda ? "search" : (tabActivo === "pendientes" ? "shopping-cart" : (tabActivo === "rechazados" ? "check-circle" : "history"));
+                const iconColor = tabActivo === "rechazados" ? currentTheme.primary : currentTheme.textSecondary;
+                return <FontAwesome name={iconName} size={64} color={iconColor} />;
+              })()}
+              <Text style={[styles.emptyTitle, { color: currentTheme.text }]}>
+                {busqueda ? "No se encontraron pedidos" : (tabActivo === "pendientes" 
+                  ? "No hay pedidos pendientes" 
+                  : tabActivo === "rechazados"
+                  ? "No hay pedidos rechazados"
+                  : "No hay pedidos en el historial")}
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: currentTheme.textSecondary }]}>
+                {busqueda ? "No hay pedidos con ese número" : (tabActivo === "pendientes" 
+                  ? "Tus pedidos aparecerán aquí" 
+                  : tabActivo === "rechazados"
+                  ? "Los pedidos rechazados por el emprendedor aparecerán aquí"
+                  : "Los pedidos completados aparecerán aquí")}
+              </Text>
+            </View>
+          );
+        }}
+      />
       </View>
 
       {/* Toast para notificaciones */}
@@ -1416,6 +1562,68 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 20,
+  },
+  emptyListContainer: {
+    flexGrow: 1,
+    justifyContent: 'center',
+  },
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: 60,
+  },
+  loadingTexto: {
+    marginTop: 15,
+    fontSize: 16,
+    color: "#7f8c8d",
+  },
+  loadingMasContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+  },
+  loadingMasCard: {
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    minWidth: 200,
+  },
+  loadingMasTexto: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  loadingMasSubtexto: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  finListaContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 30,
+    gap: 10,
+  },
+  finListaTexto: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    lineHeight: 22,
   },
   pedidoCardModerno: {
     borderRadius: 20,
