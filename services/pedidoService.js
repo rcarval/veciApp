@@ -102,7 +102,40 @@ class PedidoService {
   }
 
   /**
-   * Obtiene solo los contadores por tab (sin cargar pedidos)
+   * Obtiene solo los contadores de pedidos del cliente (sin la data completa)
+   */
+  async obtenerContadoresPedidos() {
+    try {
+      const token = await this.getAuthToken();
+      const url = API_ENDPOINTS.PEDIDOS_CONTADORES;
+      
+      console.log('[Pedidos] GET CONTADORES CLIENTE', url);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      console.log('[Pedidos] GET CONTADORES CLIENTE status:', response.status, 'ok:', response.ok);
+      
+      if (!response.ok) {
+        console.log('[Pedidos] GET CONTADORES CLIENTE body:', data);
+        throw new Error(data.mensaje || 'Error al obtener contadores');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error en obtenerContadoresPedidos:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene solo los contadores de pedidos recibidos del emprendedor (sin la data completa)
    */
   async obtenerContadoresPedidosRecibidos() {
     try {

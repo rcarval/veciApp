@@ -82,6 +82,7 @@ export const API_ENDPOINTS = {
   
   // Pedidos
   MIS_PEDIDOS: `${API_BASE_URL}/pedidos`,
+  PEDIDOS_CONTADORES: `${API_BASE_URL}/pedidos/contadores`,
   PEDIDOS_RECIBIDOS: `${API_BASE_URL}/pedidos/recibidos`,
   PEDIDOS_RECIBIDOS_CONTADORES: `${API_BASE_URL}/pedidos/recibidos/contadores`,
   PEDIDO_BY_ID: (id) => `${API_BASE_URL}/pedidos/${id}`,

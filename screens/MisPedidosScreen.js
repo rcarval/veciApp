@@ -201,13 +201,29 @@ const MisPedidosScreen = () => {
             descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
           }));
           
-          // Si es refresh, reemplazar; si no, agregar al final
+          // Si es refresh, reemplazar; si no, agregar al final (evitando duplicados)
           if (tabKey === 'pendientes') {
-            setPedidosPendientes(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+            setPedidosPendientes(prev => {
+              if (refresh) return pedidosMapeados;
+              // Filtrar duplicados por ID
+              const idsExistentes = new Set(prev.map(p => p.id));
+              const nuevos = pedidosMapeados.filter(p => !idsExistentes.has(p.id));
+              return [...prev, ...nuevos];
+            });
           } else if (tabKey === 'rechazados') {
-            setPedidosRechazadosPendientes(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+            setPedidosRechazadosPendientes(prev => {
+              if (refresh) return pedidosMapeados;
+              const idsExistentes = new Set(prev.map(p => p.id));
+              const nuevos = pedidosMapeados.filter(p => !idsExistentes.has(p.id));
+              return [...prev, ...nuevos];
+            });
           } else if (tabKey === 'historial') {
-            setPedidosCompletados(prev => refresh ? pedidosMapeados : [...prev, ...pedidosMapeados]);
+            setPedidosCompletados(prev => {
+              if (refresh) return pedidosMapeados;
+              const idsExistentes = new Set(prev.map(p => p.id));
+              const nuevos = pedidosMapeados.filter(p => !idsExistentes.has(p.id));
+              return [...prev, ...nuevos];
+            });
           }
           
           // Actualizar paginación en el ref
@@ -245,7 +261,28 @@ const MisPedidosScreen = () => {
     }
   }, [tabActivo]);
 
+  // Cargar contadores al iniciar
+  const cargarContadores = useCallback(async () => {
+    try {
+      console.log('📊 Cargando contadores iniciales...');
+      const response = await pedidoService.obtenerContadoresPedidos();
+      
+      if (response.ok && response.contadores) {
+        console.log('✅ Contadores obtenidos:', response.contadores);
+        // Actualizar totales en paginación
+        paginacionRef.current.pendientes.total = response.contadores.pendientes;
+        paginacionRef.current.rechazados.total = response.contadores.rechazados;
+        paginacionRef.current.historial.total = response.contadores.historial;
+      }
+    } catch (error) {
+      console.log('❌ Error al cargar contadores:', error);
+    }
+  }, []);
+
   useEffect(() => {
+    // Cargar contadores primero (rápido)
+    cargarContadores();
+    // Luego cargar pedidos del tab activo
     cargarPedidos(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -329,7 +366,8 @@ const MisPedidosScreen = () => {
     // Escuchar cambios de estado de pedidos para el cliente
     socket.on(`pedido:estado:${usuario.id}`, (data) => {
       console.log('📡 Cambio de estado recibido via WebSocket en MisPedidos:', data);
-      // Recargar la lista de pedidos
+      // Recargar contadores y pedidos
+      cargarContadores();
       cargarPedidos(true);
     });
 
@@ -337,7 +375,7 @@ const MisPedidosScreen = () => {
       console.log('🔌 Desconectando WebSocket de MisPedidos...');
       socket.disconnect();
     };
-  }, [usuario?.id, cargarPedidos]);
+  }, [usuario?.id, cargarPedidos, cargarContadores]);
 
   const obtenerEstadoColor = (estado) => {
     switch (estado) {
@@ -484,15 +522,7 @@ const MisPedidosScreen = () => {
 
   // BÚSQUEDA AHORA SE HACE EN EL BACKEND
   // La búsqueda se hace automáticamente cuando el usuario escribe (ver useEffect con debounce)
-
-  // Función para ordenar pedidos del más nuevo al más antiguo
-  const ordenarPedidosPorFecha = (pedidos) => {
-    return pedidos.sort((a, b) => {
-      const fechaA = a.fechaHoraReserva ? new Date(a.fechaHoraReserva) : new Date(a.fecha);
-      const fechaB = b.fechaHoraReserva ? new Date(b.fechaHoraReserva) : new Date(b.fecha);
-      return fechaB - fechaA; // Más nuevo primero
-    });
-  };
+  // Los pedidos ya vienen ordenados del backend (Pendientes ASC, Historial DESC)
 
   // Obtener contadores de resultados por tab
   const obtenerContadores = () => {
@@ -521,14 +551,15 @@ const MisPedidosScreen = () => {
 
   // Función para obtener pedidos filtrados por tab activo
   const obtenerPedidosFiltrados = () => {
-    // Si hay búsqueda, los pedidos ya están filtrados por estado
-    // Solo retornar el array correspondiente al tab activo
+    // Los pedidos ya vienen ordenados del backend
+    // Pendientes/Rechazados: ASC (más antiguo primero)
+    // Historial: DESC (más nuevo primero)
     if (tabActivo === 'pendientes') {
-      return ordenarPedidosPorFecha([...pedidosPendientes]);
+      return pedidosPendientes;
     } else if (tabActivo === 'rechazados') {
-      return ordenarPedidosPorFecha([...pedidosRechazadosPendientes]);
+      return pedidosRechazadosPendientes;
     } else if (tabActivo === 'historial') {
-      return ordenarPedidosPorFecha([...pedidosCompletados]);
+      return pedidosCompletados;
     }
     return [];
   };
