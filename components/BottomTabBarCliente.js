@@ -89,13 +89,13 @@ const BottomTabBarCliente = () => {
               <View style={styles.advertenciaIconoWrapper}>
                 <Ionicons name="cart" size={32} color="white" />
                 <View style={styles.advertenciaBadge}>
-                  <Text style={styles.advertenciaBadgeTexto}>{cantidadItems}</Text>
+                  <Text style={styles.advertenciaBadgeTexto}>{String(cantidadItems || 0)}</Text>
                 </View>
               </View>
               <View style={styles.advertenciaHeaderTextos}>
                 <Text style={styles.advertenciaTituloModerno}>¡Carrito Activo!</Text>
                 <Text style={styles.advertenciaSubtituloModerno}>
-                  {cantidadItems} {cantidadItems === 1 ? 'producto' : 'productos'} en tu carrito
+                  {String(cantidadItems || 0)} {cantidadItems === 1 ? 'producto' : 'productos'} en tu carrito
                 </Text>
               </View>
             </LinearGradient>

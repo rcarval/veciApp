@@ -521,38 +521,42 @@ const MisPedidosScreen = () => {
   const obtenerContadores = () => {
     // Si hay búsqueda, contar desde el array 'pedidos' por estado
     if (busqueda.trim()) {
-      const pendientes = pedidos.filter(p => 
+      const pendientes = Array.isArray(pedidos) ? pedidos.filter(p => 
         ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
         (p.estado === 'entregado' && !p.entrega_confirmada)
-      ).length;
+      ).length : 0;
       
-      const rechazados = pedidos.filter(p => 
+      const rechazados = Array.isArray(pedidos) ? pedidos.filter(p => 
         p.estado === 'rechazado' && !p.rechazo_confirmado
-      ).length;
+      ).length : 0;
       
-      const historial = pedidos.filter(p => 
+      const historial = Array.isArray(pedidos) ? pedidos.filter(p => 
         (p.estado === 'entregado' && p.entrega_confirmada) || 
         p.estado === 'cerrado' || 
         (p.estado === 'rechazado' && p.rechazo_confirmado) ||
         p.estado === 'cancelado'
-      ).length;
+      ).length : 0;
       
       return {
-        pendientes: `${pendientes}`,
-        rechazados: `${rechazados}`,
-        historial: `${historial}`,
+        pendientes: String(pendientes),
+        rechazados: String(rechazados),
+        historial: String(historial),
       };
     }
 
     // Sin búsqueda: mostrar "cargados de total" usando datos del backend
-    const totalPendientes = paginacionRef.current.pendientes.total;
-    const totalRechazados = paginacionRef.current.rechazados.total;
-    const totalHistorial = paginacionRef.current.historial.total;
+    const totalPendientes = paginacionRef.current.pendientes.total || 0;
+    const totalRechazados = paginacionRef.current.rechazados.total || 0;
+    const totalHistorial = paginacionRef.current.historial.total || 0;
+    
+    const cargadosPendientes = Array.isArray(pedidosPendientes) ? pedidosPendientes.length : 0;
+    const cargadosRechazados = Array.isArray(pedidosRechazadosPendientes) ? pedidosRechazadosPendientes.length : 0;
+    const cargadosHistorial = Array.isArray(pedidosCompletados) ? pedidosCompletados.length : 0;
 
     return {
-      pendientes: totalPendientes > 0 ? `${pedidosPendientes.length}/${totalPendientes}` : `${pedidosPendientes.length}`,
-      rechazados: totalRechazados > 0 ? `${pedidosRechazadosPendientes.length}/${totalRechazados}` : `${pedidosRechazadosPendientes.length}`,
-      historial: totalHistorial > 0 ? `${pedidosCompletados.length}/${totalHistorial}` : `${pedidosCompletados.length}`,
+      pendientes: totalPendientes > 0 ? `${cargadosPendientes}/${totalPendientes}` : String(cargadosPendientes),
+      rechazados: totalRechazados > 0 ? `${cargadosRechazados}/${totalRechazados}` : String(cargadosRechazados),
+      historial: totalHistorial > 0 ? `${cargadosHistorial}/${totalHistorial}` : String(cargadosHistorial),
     };
   };
 

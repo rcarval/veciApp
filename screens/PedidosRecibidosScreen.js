@@ -295,6 +295,12 @@ const PedidosRecibidosScreen = () => {
   
   // Resetear y recargar cuando cambia el tab
   useEffect(() => {
+    // Si hay búsqueda activa, NO recargar (ya tenemos todos los resultados)
+    if (busqueda.trim()) {
+      console.log(`🔄 Cambió tab a: ${tabActivo}, pero hay búsqueda activa - NO recargar`);
+      return;
+    }
+    
     const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
     
     console.log(`🔄 Cambió tab a: ${tabKey}, reseteando paginación`);
@@ -306,7 +312,7 @@ const PedidosRecibidosScreen = () => {
     // Limpiar pedidos y cargar desde página 1
     setPedidosRecibidos([]);
     cargarPedidosRecibidos(true);
-  }, [tabActivo, cargarPedidosRecibidos]);
+  }, [tabActivo, cargarPedidosRecibidos, busqueda]);
 
   // Escuchar eventos WebSocket para nuevos pedidos
   useEffect(() => {
@@ -836,50 +842,76 @@ const PedidosRecibidosScreen = () => {
 
   // Obtener contadores de resultados por tab (considerando búsqueda)
   const obtenerContadores = () => {
-    // Si hay búsqueda, el backend ya devolvió resultados filtrados
-    // Solo mostramos la cantidad total de resultados encontrados
+    // Si hay búsqueda, contar resultados por estado
     if (busqueda.trim()) {
-      // Los pedidos ya vienen filtrados del backend, solo contamos
-      const totalResultados = pedidosRecibidos.length;
+      const pendientes = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => 
+        ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
+      ).length : 0;
+      
+      const cancelados = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => 
+        p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
+      ).length : 0;
+      
+      const historial = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => {
+        if (p.estado === 'entregado') return true;
+        if (p.estado === 'rechazado') return true;
+        if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
+        return false;
+      }).length : 0;
       
       return {
-        pendientes: `${totalResultados}`,
-        cancelados: `${totalResultados}`,
-        historial: `${totalResultados}`,
+        pendientes: String(pendientes),
+        cancelados: String(cancelados),
+        historial: String(historial),
       };
     }
 
     // Sin búsqueda: mostrar "cargados de total" usando datos del backend
-    const totalPendientes = paginacionRef.current.pendientes.total;
-    const totalCancelados = paginacionRef.current.cancelados.total;
-    const totalHistorial = paginacionRef.current.historial.total;
+    const totalPendientes = paginacionRef.current.pendientes.total || 0;
+    const totalCancelados = paginacionRef.current.cancelados.total || 0;
+    const totalHistorial = paginacionRef.current.historial.total || 0;
 
-    const cargadosPendientes = pedidosRecibidos.filter(p => 
+    const cargadosPendientes = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => 
       ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
-    ).length;
-    const cargadosCancelados = pedidosRecibidos.filter(p => 
+    ).length : 0;
+    const cargadosCancelados = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => 
       p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
-    ).length;
-    const cargadosHistorial = pedidosRecibidos.filter(p => {
+    ).length : 0;
+    const cargadosHistorial = Array.isArray(pedidosRecibidos) ? pedidosRecibidos.filter(p => {
       if (p.estado === 'entregado') return true;
       if (p.estado === 'rechazado') return true;
       if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
       return false;
-    }).length;
+    }).length : 0;
 
     return {
-      pendientes: totalPendientes > 0 ? `${cargadosPendientes}/${totalPendientes}` : `${cargadosPendientes}`,
-      cancelados: totalCancelados > 0 ? `${cargadosCancelados}/${totalCancelados}` : `${cargadosCancelados}`,
-      historial: totalHistorial > 0 ? `${cargadosHistorial}/${totalHistorial}` : `${cargadosHistorial}`,
+      pendientes: totalPendientes > 0 ? `${cargadosPendientes}/${totalPendientes}` : String(cargadosPendientes),
+      cancelados: totalCancelados > 0 ? `${cargadosCancelados}/${totalCancelados}` : String(cargadosCancelados),
+      historial: totalHistorial > 0 ? `${cargadosHistorial}/${totalHistorial}` : String(cargadosHistorial),
     };
   };
 
   const contadores = obtenerContadores();
 
   const obtenerPedidosFiltrados = () => {
-    // Los pedidos ya vienen filtrados y ordenados del backend según el tab
-    // Si hay búsqueda activa, el backend ya devolvió solo los resultados coincidentes
-    // NO necesitamos filtrar localmente
+    // Si hay búsqueda, el backend devolvió TODOS los pedidos que coinciden
+    // Necesitamos filtrar localmente por el tab activo
+    if (busqueda.trim()) {
+      return pedidosRecibidos.filter(pedido => {
+        if (tabActivo === 'pendientes') {
+          return ['pendiente', 'confirmado', 'preparando', 'listo'].includes(pedido.estado);
+        } else if (tabActivo === 'cancelados') {
+          return pedido.estado === 'cancelado' && pedido.motivoCancelacion && !pedido.cancelacion_confirmada;
+        } else if (tabActivo === 'historial') {
+          return pedido.estado === 'entregado' || 
+                 pedido.estado === 'rechazado' || 
+                 (pedido.estado === 'cancelado' && pedido.cancelacion_confirmada);
+        }
+        return false;
+      });
+    }
+    
+    // Sin búsqueda: los pedidos ya vienen filtrados del backend
     return pedidosRecibidos;
   };
 

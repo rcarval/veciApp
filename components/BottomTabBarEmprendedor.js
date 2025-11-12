@@ -36,11 +36,18 @@ const BottomTabBarEmprendedor = () => {
           ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
         ).length;
         
-        setPedidosPendientes(pendientes);
-        console.log(`✅ Badge actualizado - Pedidos pendientes: ${pendientes}`);
+        // Asegurar que siempre sea un número válido
+        const contador = Number.isFinite(pendientes) ? pendientes : 0;
+        setPedidosPendientes(contador);
+        console.log(`✅ Badge actualizado - Pedidos pendientes: ${contador}`);
+      } else {
+        // Si no hay respuesta válida, resetear a 0
+        setPedidosPendientes(0);
       }
     } catch (error) {
       console.error('❌ Error al contar pedidos pendientes:', error);
+      // En caso de error, resetear a 0 para evitar valores inválidos
+      setPedidosPendientes(0);
     }
   };
 
@@ -157,7 +164,7 @@ const BottomTabBarEmprendedor = () => {
           {pedidosPendientes > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>
-                {pedidosPendientes > 99 ? '99+' : pedidosPendientes}
+                {pedidosPendientes > 99 ? '99+' : String(pedidosPendientes || 0)}
               </Text>
             </View>
           )}
