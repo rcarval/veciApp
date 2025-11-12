@@ -59,11 +59,17 @@ class PedidoService {
    * @param {number} page - Página a cargar (default: 1)
    * @param {number} limit - Cantidad de registros por página (default: 10)
    * @param {string} tab - Tab activo ('pendientes', 'cancelados', 'historial')
+   * @param {string} search - Término de búsqueda (opcional)
    */
-  async obtenerPedidosRecibidos(page = 1, limit = 10, tab = 'pendientes') {
+  async obtenerPedidosRecibidos(page = 1, limit = 10, tab = 'pendientes', search = '') {
     try {
       const token = await this.getAuthToken();
-      const url = `${API_ENDPOINTS.PEDIDOS_RECIBIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
+      let url = `${API_ENDPOINTS.PEDIDOS_RECIBIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
+      
+      // Agregar búsqueda si existe
+      if (search && search.trim()) {
+        url += `&search=${encodeURIComponent(search.trim())}`;
+      }
       
       console.log('[Pedidos] GET', url);
       

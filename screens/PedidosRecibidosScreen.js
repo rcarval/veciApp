@@ -154,13 +154,14 @@ const PedidosRecibidosScreen = () => {
   };
 
   // Función para cargar pedidos recibidos del backend con paginación
-  const cargarPedidosRecibidos = useCallback(async (refresh = false) => {
+  const cargarPedidosRecibidos = useCallback(async (refresh = false, searchTerm = '') => {
     try {
       const tabKey = tabActivo === 'cancelados' ? 'cancelados' : tabActivo === 'historial' ? 'historial' : 'pendientes';
       const estadoPaginacion = paginacionRef.current[tabKey];
       
-      // Si ya estamos cargando o no hay más datos, no hacer nada
-      if (estadoPaginacion.loading || (!refresh && !estadoPaginacion.hasMore)) {
+      // Si hay búsqueda, siempre hacer la petición (ignorar hasMore)
+      // Si no hay búsqueda, validar hasMore
+      if (!searchTerm && (estadoPaginacion.loading || (!refresh && !estadoPaginacion.hasMore))) {
         console.log(`⏭️ Saltando carga - loading: ${estadoPaginacion.loading}, hasMore: ${estadoPaginacion.hasMore}, refresh: ${refresh}`);
         return;
       }
@@ -178,8 +179,8 @@ const PedidosRecibidosScreen = () => {
       
       const page = refresh ? 1 : estadoPaginacion.page;
       
-      console.log(`📥 Cargando pedidos tab: ${tabKey}, page: ${page}, refresh: ${refresh}`);
-      const response = await pedidoService.obtenerPedidosRecibidos(page, 10, tabKey);
+      console.log(`📥 Cargando pedidos tab: ${tabKey}, page: ${page}, refresh: ${refresh}, search: "${searchTerm}"`);
+      const response = await pedidoService.obtenerPedidosRecibidos(page, 10, tabKey, searchTerm);
       
       if (response.ok && response.pedidos) {
         console.log(`✅ Pedidos cargados: ${response.pedidos.length}, total: ${response.pagination.total}, hasMore: ${response.pagination.hasMore}`);
@@ -272,6 +273,25 @@ const PedidosRecibidosScreen = () => {
     cargarPedidosRecibidos(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // useEffect para búsqueda con debounce
+  useEffect(() => {
+    // Si hay búsqueda, esperar 500ms antes de buscar
+    const timeoutId = setTimeout(() => {
+      if (busqueda.trim()) {
+        console.log(`🔍 Buscando en backend: "${busqueda}"`);
+        setPedidosRecibidos([]); // Limpiar lista
+        cargarPedidosRecibidos(true, busqueda.trim());
+      } else {
+        // Si se limpia la búsqueda, recargar lista normal
+        console.log(`🔄 Búsqueda limpiada, recargando lista normal`);
+        setPedidosRecibidos([]);
+        cargarPedidosRecibidos(true);
+      }
+    }, 500); // 500ms de debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [busqueda, cargarPedidosRecibidos]);
   
   // Resetear y recargar cuando cambia el tab
   useEffect(() => {
@@ -811,39 +831,21 @@ const PedidosRecibidosScreen = () => {
     return `#P-${String(id).padStart(6, '0')}`;
   };
 
-  // Función para filtrar pedidos por búsqueda (solo números)
-  const filtrarPedidosPorBusqueda = (pedidos) => {
-    if (!busqueda.trim()) return pedidos;
-    
-    const busquedaNumeros = busqueda.trim();
-    return pedidos.filter(pedido => {
-      // Extraer solo la parte numérica del ID (000001, 000020, etc)
-      const idNumerico = String(pedido.id).padStart(6, '0');
-      return idNumerico.includes(busquedaNumeros);
-    });
-  };
+  // BÚSQUEDA AHORA SE HACE EN EL BACKEND
+  // La búsqueda se hace automáticamente cuando el usuario escribe (ver useEffect con debounce)
 
   // Obtener contadores de resultados por tab (considerando búsqueda)
   const obtenerContadores = () => {
-    // Si hay búsqueda, mostrar solo resultados filtrados
+    // Si hay búsqueda, el backend ya devolvió resultados filtrados
+    // Solo mostramos la cantidad total de resultados encontrados
     if (busqueda.trim()) {
-      const pendientes = pedidosRecibidos.filter(p => 
-        ['pendiente', 'confirmado', 'preparando', 'listo'].includes(p.estado)
-      );
-      const cancelados = pedidosRecibidos.filter(p => 
-        p.estado === 'cancelado' && p.motivoCancelacion && !p.cancelacion_confirmada
-      );
-      const historial = pedidosRecibidos.filter(p => {
-        if (p.estado === 'entregado') return true;
-        if (p.estado === 'rechazado') return true;
-        if (p.estado === 'cancelado' && p.cancelacion_confirmada) return true;
-        return false;
-      });
-
+      // Los pedidos ya vienen filtrados del backend, solo contamos
+      const totalResultados = pedidosRecibidos.length;
+      
       return {
-        pendientes: `${filtrarPedidosPorBusqueda(pendientes).length}`,
-        cancelados: `${filtrarPedidosPorBusqueda(cancelados).length}`,
-        historial: `${filtrarPedidosPorBusqueda(historial).length}`,
+        pendientes: `${totalResultados}`,
+        cancelados: `${totalResultados}`,
+        historial: `${totalResultados}`,
       };
     }
 
@@ -876,16 +878,9 @@ const PedidosRecibidosScreen = () => {
 
   const obtenerPedidosFiltrados = () => {
     // Los pedidos ya vienen filtrados y ordenados del backend según el tab
-    // Solo aplicar filtro de búsqueda si hay búsqueda activa
-    let pedidosFiltrados = pedidosRecibidos;
-    
-    // Aplicar filtro de búsqueda si existe
-    if (busqueda.trim()) {
-      pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosFiltrados);
-    }
-    
-    // NO reordenar - el backend ya lo hizo correctamente
-    return pedidosFiltrados;
+    // Si hay búsqueda activa, el backend ya devolvió solo los resultados coincidentes
+    // NO necesitamos filtrar localmente
+    return pedidosRecibidos;
   };
 
   const renderPedido = (pedido) => {
