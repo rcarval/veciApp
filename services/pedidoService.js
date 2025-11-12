@@ -24,10 +24,15 @@ class PedidoService {
    * @param {number} limit - Cantidad de registros por página (default: 10)
    * @param {string} tab - Tab activo ('pendientes', 'rechazados', 'historial')
    */
-  async obtenerPedidos(page = 1, limit = 10, tab = 'pendientes') {
+  async obtenerPedidos(page = 1, limit = 10, tab = 'pendientes', search = '') {
     try {
       const token = await this.getAuthToken();
-      const url = `${API_ENDPOINTS.MIS_PEDIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
+      let url = `${API_ENDPOINTS.MIS_PEDIDOS}?page=${page}&limit=${limit}&tab=${tab}`;
+      
+      // Agregar búsqueda si existe
+      if (search && search.trim()) {
+        url += `&search=${encodeURIComponent(search.trim())}`;
+      }
       
       console.log('[Pedidos] GET', url);
       

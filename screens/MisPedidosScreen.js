@@ -31,7 +31,7 @@ const MisPedidosScreen = () => {
   // Toast para notificaciones
   const toast = useToast();
   
-  const [pedidos, setPedidos] = useState([]);
+  const [pedidos, setPedidos] = useState([]); // Usado solo para búsqueda
   const [pedidosPendientes, setPedidosPendientes] = useState([]);
   const [pedidosCompletados, setPedidosCompletados] = useState([]);
   const [pedidosRechazadosPendientes, setPedidosRechazadosPendientes] = useState([]);
@@ -72,11 +72,11 @@ const MisPedidosScreen = () => {
   };
 
   // Función para cargar pedidos del backend
-  const cargarPedidos = useCallback(async () => {
+  const cargarPedidos = useCallback(async (searchTerm = '') => {
     try {
-      console.log('🔍 DEBUG - Cargando pedidos desde el backend...');
+      console.log(`🔍 DEBUG - Cargando pedidos desde el backend... search: "${searchTerm}"`);
       
-      const response = await pedidoService.obtenerPedidos();
+      const response = await pedidoService.obtenerPedidos(1, 100, 'pendientes', searchTerm);
       
       if (response.ok && response.pedidos) {
         console.log(`✅ Pedidos cargados: ${response.pedidos.length}`);
@@ -106,31 +106,59 @@ const MisPedidosScreen = () => {
           descuento_cupon: pedido.descuento_cupon ? parseFloat(pedido.descuento_cupon) : 0,
         }));
         
-        // Separar pedidos por estado
-        // Pendientes: estados activos + entregados SIN confirmar
-        const pendientes = pedidosMapeados.filter(p => 
-          ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
-          (p.estado === 'entregado' && !p.entrega_confirmada)
-        );
-        
-        // ✅ RECHAZADOS: Solo pedidos que el EMPRENDEDOR rechazó (y cliente NO ha confirmado)
-        const rechazadosPendientes = pedidosMapeados.filter(p => 
-          p.estado === 'rechazado' && !p.rechazo_confirmado
-        );
-        
-        // ✅ HISTORIAL: Entregados confirmados, cerrados, rechazados confirmados, y TODAS las cancelaciones del cliente
-        const completados = pedidosMapeados.filter(p => 
-          (p.estado === 'entregado' && p.entrega_confirmada) || 
-          p.estado === 'cerrado' || 
-          (p.estado === 'rechazado' && p.rechazo_confirmado) ||
-          p.estado === 'cancelado' // ← Cliente cancela = directo a historial
-        );
-        
-        console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
-        
-        setPedidosPendientes(pendientes);
-        setPedidosCompletados(completados);
-        setPedidosRechazadosPendientes(rechazadosPendientes);
+        // Si hay búsqueda, guardar TODOS los resultados en el estado 'pedidos'
+        // y separar también en los 3 estados para los contadores
+        if (searchTerm) {
+          console.log(`🔍 Búsqueda activa: ${pedidosMapeados.length} resultados totales`);
+          
+          // Separar por estado para contadores
+          const pendientes = pedidosMapeados.filter(p => 
+            ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
+            (p.estado === 'entregado' && !p.entrega_confirmada)
+          );
+          
+          const rechazadosPendientes = pedidosMapeados.filter(p => 
+            p.estado === 'rechazado' && !p.rechazo_confirmado
+          );
+          
+          const completados = pedidosMapeados.filter(p => 
+            (p.estado === 'entregado' && p.entrega_confirmada) || 
+            p.estado === 'cerrado' || 
+            (p.estado === 'rechazado' && p.rechazo_confirmado) ||
+            p.estado === 'cancelado'
+          );
+          
+          console.log(`📊 Contadores búsqueda - Pendientes: ${pendientes.length}, Rechazados: ${rechazadosPendientes.length}, Historial: ${completados.length}`);
+          
+          setPedidos(pedidosMapeados); // Guardar TODOS
+          setPedidosPendientes(pendientes);
+          setPedidosRechazadosPendientes(rechazadosPendientes);
+          setPedidosCompletados(completados);
+        } else {
+          // Sin búsqueda: separar normalmente
+          const pendientes = pedidosMapeados.filter(p => 
+            ['pendiente', 'confirmado', 'preparando', 'listo', 'en_camino'].includes(p.estado) || 
+            (p.estado === 'entregado' && !p.entrega_confirmada)
+          );
+          
+          const rechazadosPendientes = pedidosMapeados.filter(p => 
+            p.estado === 'rechazado' && !p.rechazo_confirmado
+          );
+          
+          const completados = pedidosMapeados.filter(p => 
+            (p.estado === 'entregado' && p.entrega_confirmada) || 
+            p.estado === 'cerrado' || 
+            (p.estado === 'rechazado' && p.rechazo_confirmado) ||
+            p.estado === 'cancelado'
+          );
+          
+          console.log(`📦 Pendientes: ${pendientes.length}, Completados: ${completados.length}, Rechazados pendientes: ${rechazadosPendientes.length}`);
+          
+          setPedidos([]);
+          setPedidosPendientes(pendientes);
+          setPedidosCompletados(completados);
+          setPedidosRechazadosPendientes(rechazadosPendientes);
+        }
       } else {
         console.log('⚠️ No se pudieron cargar pedidos');
         setPedidosPendientes([]);
@@ -149,6 +177,23 @@ const MisPedidosScreen = () => {
   useEffect(() => {
     cargarPedidos();
   }, [cargarPedidos]);
+
+  // useEffect para búsqueda con debounce
+  useEffect(() => {
+    // Si hay búsqueda, esperar 500ms antes de buscar
+    const timeoutId = setTimeout(() => {
+      if (busqueda.trim()) {
+        console.log(`🔍 Buscando en backend: "${busqueda}"`);
+        cargarPedidos(busqueda.trim());
+      } else {
+        // Si se limpia la búsqueda, recargar lista normal
+        console.log(`🔄 Búsqueda limpiada, recargando lista normal`);
+        cargarPedidos();
+      }
+    }, 500); // 500ms de debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [busqueda, cargarPedidos]);
 
   // Recargar datos cuando la pantalla reciba el foco
   useFocusEffect(
@@ -332,17 +377,8 @@ const MisPedidosScreen = () => {
     return `#P-${String(id).padStart(6, '0')}`;
   };
 
-  // Función para filtrar pedidos por búsqueda (solo números)
-  const filtrarPedidosPorBusqueda = (pedidos) => {
-    if (!busqueda.trim()) return pedidos;
-    
-    const busquedaNumeros = busqueda.trim();
-    return pedidos.filter(pedido => {
-      // Extraer solo la parte numérica del ID (000001, 000020, etc)
-      const idNumerico = String(pedido.id).padStart(6, '0');
-      return idNumerico.includes(busquedaNumeros);
-    });
-  };
+  // BÚSQUEDA AHORA SE HACE EN EL BACKEND
+  // La búsqueda se hace automáticamente cuando el usuario escribe (ver useEffect con debounce)
 
   // Función para ordenar pedidos del más nuevo al más antiguo
   const ordenarPedidosPorFecha = (pedidos) => {
@@ -353,12 +389,21 @@ const MisPedidosScreen = () => {
     });
   };
 
-  // Obtener contadores de resultados por tab (considerando búsqueda)
+  // Función para filtrar pedidos localmente por tab cuando hay búsqueda
+  const obtenerPedidosFiltrados = (listaPedidos) => {
+    // Si hay búsqueda, el backend devolvió TODOS los pedidos que coinciden
+    // NO necesitamos filtrar localmente
+    return listaPedidos;
+  };
+
+  // Obtener contadores de resultados por tab
   const obtenerContadores = () => {
+    // Los pedidos ya están separados correctamente por estado en cargarPedidos
+    // Solo necesitamos contar cada array
     return {
-      pendientes: filtrarPedidosPorBusqueda(pedidosPendientes).length,
-      rechazados: filtrarPedidosPorBusqueda(pedidosRechazadosPendientes).length,
-      historial: filtrarPedidosPorBusqueda(pedidosCompletados).length,
+      pendientes: pedidosPendientes.length,
+      rechazados: pedidosRechazadosPendientes.length,
+      historial: pedidosCompletados.length,
     };
   };
 
@@ -1117,43 +1162,40 @@ const MisPedidosScreen = () => {
         
         {tabActivo === 'pendientes' ? (
           (() => {
-            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosPendientes);
-            return pedidosFiltrados.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedido)
+            return pedidosPendientes.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosPendientes]).map(renderPedido)
             ) : (
               <View style={styles.emptyState}>
                 <FontAwesome name={busqueda ? "search" : "shopping-cart"} size={48} color={currentTheme.textSecondary} />
                 <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos pendientes'}
+                  {busqueda ? 'No se encontraron pedidos pendientes con ese número' : 'No tienes pedidos pendientes'}
                 </Text>
               </View>
             );
           })()
         ) : tabActivo === 'rechazados' ? (
           (() => {
-            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosRechazadosPendientes);
-            console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosFiltrados.length, 'pedidos');
-            return pedidosFiltrados.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedidoRechazado)
+            console.log('🔍 DEBUG - Renderizando tab rechazados:', pedidosRechazadosPendientes.length, 'pedidos');
+            return pedidosRechazadosPendientes.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosRechazadosPendientes]).map(renderPedidoRechazado)
             ) : (
               <View style={styles.emptyState}>
                 <FontAwesome name={busqueda ? "search" : "check-circle"} size={48} color={currentTheme.primary} />
                 <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos rechazados pendientes'}
+                  {busqueda ? 'No se encontraron pedidos rechazados con ese número' : 'No tienes pedidos rechazados pendientes'}
                 </Text>
               </View>
             );
           })()
         ) : (
           (() => {
-            const pedidosFiltrados = filtrarPedidosPorBusqueda(pedidosCompletados);
-            return pedidosFiltrados.length > 0 ? (
-              ordenarPedidosPorFecha([...pedidosFiltrados]).map(renderPedido)
+            return pedidosCompletados.length > 0 ? (
+              ordenarPedidosPorFecha([...pedidosCompletados]).map(renderPedido)
             ) : (
               <View style={styles.emptyState}>
                 <FontAwesome name={busqueda ? "search" : "history"} size={48} color={currentTheme.textSecondary} />
                 <Text style={[styles.emptyStateTexto, { color: currentTheme.textSecondary }]}>
-                  {busqueda ? 'No se encontraron pedidos con ese número' : 'No tienes pedidos en el historial'}
+                  {busqueda ? 'No se encontraron pedidos en el historial con ese número' : 'No tienes pedidos en el historial'}
                 </Text>
               </View>
             );
