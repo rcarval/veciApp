@@ -13,6 +13,13 @@ const BottomTabBarCliente = () => {
   const { currentTheme } = useTheme();
   const { direcciones, usuario } = useUser();
   const { carritoActivo, cantidadItems, limpiarCarrito } = useCarrito();
+  
+  // Validar que los contextos estén cargados
+  if (!currentTheme) {
+    console.log('⚠️ BottomTabBarCliente: currentTheme no disponible');
+    return null;
+  }
+  
   // Estados del modal deshabilitados (el modal ahora lo maneja PedidoDetalleScreen)
   // const [advertenciaVisible, setAdvertenciaVisible] = useState(false);
   // const [pantallaPendiente, setPantallaPendiente] = useState(null);
@@ -42,7 +49,8 @@ const BottomTabBarCliente = () => {
     const esCliente = usuario?.tipo_usuario === 'cliente';
     
     // Si es cliente, no hay direcciones y no va a MisDirecciones, bloquear
-    if (esCliente && direcciones.length === 0 && nombrePantalla !== 'MisDirecciones') {
+    const tieneDirecciones = Array.isArray(direcciones) && direcciones.length > 0;
+    if (esCliente && !tieneDirecciones && nombrePantalla !== 'MisDirecciones') {
       Alert.alert(
         "⚠️ Dirección requerida",
         "Debes agregar al menos una dirección antes de continuar. Esto es necesario para poder recibir pedidos y servicios.",

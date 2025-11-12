@@ -55,9 +55,9 @@ const AppWithBottomBar = ({ children }) => {
       <View style={styles.content}>
         {children}
       </View>
-      {showBottomBar && (
+      {showBottomBar && usuario && (
         <View style={styles.bottomBarContainer}>
-          <BottomTabBar isEmprendedor={isEmprendedor} />
+          <BottomTabBar isEmprendedor={Boolean(isEmprendedor)} />
         </View>
       )}
     </View>

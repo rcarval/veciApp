@@ -14,6 +14,13 @@ const BottomTabBarEmprendedor = () => {
   const navigation = useNavigation();
   const { currentTheme } = useTheme();
   const { usuario } = useUser(); // ✅ Usar contexto en lugar de AsyncStorage
+  
+  // Validar que los contextos estén cargados
+  if (!currentTheme) {
+    console.log('⚠️ BottomTabBarEmprendedor: currentTheme no disponible');
+    return null;
+  }
+  
   const styles = BottomTabBarEmprendedorStyles(currentTheme);
   const [pedidosPendientes, setPedidosPendientes] = useState(0);
   const socketRef = useRef(null);
